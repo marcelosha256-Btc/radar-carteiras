@@ -1,0 +1,795 @@
+<title>Radar de Carteiras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: painel operacional — faixa de status no topo, abas, e cada aba abre com o resumo antes do detalhe */
+:root {
+  --bg: #f2f4f7; --surface: #ffffff; --surface-2: #eceff4; --line: #dbe0e8;
+  --fg: #131923; --muted: #5a6575; --faint: #8a94a3;
+  --accent: #2c56c9; --accent-soft: #e3e9fa;
+  --up: #12804a; --up-soft: #dff2e8; --down: #c03636; --down-soft: #f8e1e1;
+  --warn: #9a6200; --warn-soft: #f7ecd6; --flat: #5f6b7c; --flat-soft: #e6e9ee;
+  --btc: #e08a1e; --eth: #6f7fea; --sol: #9b5df5; --xrp: #8c96a2; --hype: #1fb39d; --near: #d9527c;
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1219; --surface: #141b25; --surface-2: #1a2330; --line: #253042;
+  --fg: #e5eaf1; --muted: #98a3b4; --faint: #6c788a;
+  --accent: #86a2ff; --accent-soft: #1f2a45;
+  --up: #3fcf88; --up-soft: #15302a; --down: #ff7272; --down-soft: #3a1f24;
+  --warn: #e8ad45; --warn-soft: #3a2e17; --flat: #a3adbb; --flat-soft: #222c3a;
+  --btc: #f0a040; --eth: #8f9cff; --sol: #b58aff; --xrp: #aab3bd; --hype: #3fd6be; --near: #f07ba0;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0d1219; --surface: #141b25; --surface-2: #1a2330; --line: #253042;
+  --fg: #e5eaf1; --muted: #98a3b4; --faint: #6c788a;
+  --accent: #86a2ff; --accent-soft: #1f2a45;
+  --up: #3fcf88; --up-soft: #15302a; --down: #ff7272; --down-soft: #3a1f24;
+  --warn: #e8ad45; --warn-soft: #3a2e17; --flat: #a3adbb; --flat-soft: #222c3a;
+  --btc: #f0a040; --eth: #8f9cff; --sol: #b58aff; --xrp: #aab3bd; --hype: #3fd6be; --near: #f07ba0;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 16px; }
+.num, td.n, .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 26px; font-weight: 800; }
+h2 { font-size: 18px; font-weight: 700; }
+h3 { font-size: 15px; font-weight: 700; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+
+/* topo */
+.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; }
+.top .sub { color: var(--muted); font-size: 13px; }
+.fresh { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--up); }
+.chip.stale .dot { background: var(--warn); }
+.chip.up { background: var(--up-soft); color: var(--up); }
+.chip.down { background: var(--down-soft); color: var(--down); }
+.chip.flat { background: var(--flat-soft); color: var(--flat); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.acc { background: var(--accent-soft); color: var(--accent); }
+.demo { font-size: 12.5px; color: var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 8px 12px; }
+
+.info { font-size: 12.5px; color: var(--fg); background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; }
+.tab .ex { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--warn); margin-left: 5px; }
+a.addr { text-decoration: none; } a.addr:hover { text-decoration: underline; }
+.alert time { line-height: 1.3; }
+
+/* abas */
+.tabs-scroll { overflow-x: auto; overflow-y: hidden; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 4px; min-width: max-content; }
+.tab { font: 500 14px var(--f-body); color: var(--muted); background: none; border: 0; padding: 10px 12px; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+.tab:hover { color: var(--fg); }
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+.tab:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.tab .new { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin-left: 4px; }
+
+.panel { display: grid; gap: 16px; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.box-head { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; align-items: baseline; }
+.box-head p { color: var(--muted); font-size: 13px; max-width: 70ch; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 2px; }
+.kpi .lab { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.kpi .val { font: 600 22px var(--f-mono); font-variant-numeric: tabular-nums; }
+.kpi .note { font-size: 12px; color: var(--muted); }
+.why { font-size: 12px; color: var(--accent); }
+
+/* resumo: linhas de ativo */
+.assets { display: grid; gap: 10px; }
+.asset { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; display: grid; grid-template-columns: 150px 170px minmax(0, 1fr); gap: 12px 20px; align-items: center; }
+.asset .name { display: grid; gap: 2px; }
+.asset .tick { font: 700 18px var(--f-display); display: flex; align-items: center; gap: 8px; }
+.asset .sw { width: 10px; height: 10px; border-radius: 3px; }
+.asset .px { font: 500 14px var(--f-mono); color: var(--muted); }
+.trend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.trend .t { border-radius: 8px; padding: 6px 8px; text-align: center; display: grid; }
+.trend .t b { font: 700 12.5px var(--f-display); letter-spacing: .04em; }
+.trend .t span { font-size: 10.5px; opacity: .85; }
+.t.up { background: var(--up-soft); color: var(--up); }
+.t.flat { background: var(--flat-soft); color: var(--flat); }
+.t.down { background: var(--down-soft); color: var(--down); }
+.read { display: grid; gap: 8px; min-width: 0; }
+.read .line1 { font-weight: 600; }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--muted); }
+.facts b { color: var(--fg); font-family: var(--f-mono); font-weight: 500; }
+.range { position: relative; height: 6px; border-radius: 3px; background: var(--surface-2); margin-block: 4px; max-width: 420px; }
+.range i { position: absolute; top: -4px; width: 3px; height: 14px; border-radius: 2px; background: var(--fg); }
+.range .lo, .range .hi { position: absolute; top: 9px; font: 11px var(--f-mono); color: var(--faint); }
+.range .hi { right: 0; }
+@media (max-width: 760px) { .asset { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .asset .read { grid-column: 1 / -1; } }
+.facts .chip, .alert .chip, .box-head .chip, .fresh .chip { white-space: normal; max-width: 100%; }
+.wrap > * { min-width: 0; }
+
+/* tabelas */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.n, th.n { text-align: right; }
+.pos { color: var(--up); } .neg { color: var(--down); }
+.addr { font-family: var(--f-mono); color: var(--accent); }
+.grp { font-size: 11.5px; color: var(--muted); }
+
+/* barras de consenso / fluxo */
+.bars { display: grid; gap: 8px; }
+.bar-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 150px; gap: 10px; align-items: center; font-size: 12.5px; }
+.bar-row .lbl { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--surface-2); }
+.split .l { background: var(--up); } .split .s { background: var(--down); }
+.bar-row .r { text-align: right; font-family: var(--f-mono); color: var(--muted); }
+@media (max-width: 520px) { .bar-row { grid-template-columns: 52px minmax(0, 1fr); } .bar-row .r { grid-column: 2; text-align: left; } }
+
+.alerts { display: grid; gap: 0; }
+.alert { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: baseline; font-size: 13px; }
+.alert:last-child { border-bottom: 0; }
+.alert time { font-family: var(--f-mono); color: var(--faint); font-size: 12px; }
+
+/* svg */
+svg { display: block; width: 100%; height: auto; max-width: 100%; }
+.ax { fill: var(--faint); font: 11px var(--f-mono); }
+.ax-l { fill: var(--muted); font: 11.5px var(--f-body); }
+.grid-ln { stroke: var(--line); stroke-width: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 4px; border-radius: 2px; display: inline-block; }
+
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg button { font: 500 12.5px var(--f-body); border: 0; background: none; color: var(--muted); padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+
+/* swing */
+.swing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.scard { text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; cursor: pointer; align-content: start; }
+.scard:hover { border-color: var(--faint); }
+.scard[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.scard .hd { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.scard .tick { font: 700 16px var(--f-display); display: flex; align-items: center; gap: 8px; }
+.scard .sw { width: 10px; height: 10px; border-radius: 3px; }
+.scard p { font-size: 13px; color: var(--muted); }
+.scard p b { color: var(--fg); }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stats div { background: var(--surface-2); border-radius: 6px; padding: 5px 8px; display: grid; }
+.stats span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.stats b { font: 500 13.5px var(--f-mono); }
+.plan-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 820px) { .plan-grid { grid-template-columns: 1fr; } }
+.sizer { background: var(--surface-2); border-radius: 8px; padding: 14px; display: grid; gap: 10px; align-content: start; }
+.sizer label { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.sizer input { font: 500 14px var(--f-mono); padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); width: 100%; }
+.sizer .out { display: grid; gap: 4px; font-size: 13px; }
+.sizer .out div { display: flex; justify-content: space-between; gap: 8px; }
+.sizer .out b { font-family: var(--f-mono); font-weight: 500; }
+tr.avoid td { color: var(--muted); }
+
+/* suportes e resistências */
+.prob { display: grid; grid-template-columns: 64px minmax(0, 1fr) 44px; gap: 10px; align-items: center; font-size: 13px; }
+.prob .track { height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
+.prob .track i { display: block; height: 100%; border-radius: 5px; }
+.prob b { text-align: right; font-family: var(--f-mono); font-weight: 500; }
+.factor { display: grid; grid-template-columns: minmax(0, 170px) minmax(0, 1fr) 54px; gap: 10px; align-items: center; font-size: 12.5px; }
+.factor .axis { position: relative; height: 12px; }
+.factor .axis::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--faint); }
+.factor .axis i { position: absolute; top: 1px; height: 10px; border-radius: 3px; }
+.factor b { text-align: right; font-family: var(--f-mono); font-weight: 500; }
+.forca { display: inline-block; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 8px; }
+.srcs { display: flex; flex-wrap: wrap; gap: 4px; white-space: normal; min-width: 260px; }
+.srcs .chip { font-size: 11px; }
+
+.callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; font-size: 13px; color: var(--muted); }
+.callout b { color: var(--fg); }
+@media (prefers-reduced-motion: no-preference) { .panel { animation: fade .18s ease-out; } @keyframes fade { from { opacity: .4; } to { opacity: 1; } } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Radar de Carteiras</h1>
+      <p class="sub" id="sub">Hyperliquid · BTC, ETH, SOL, XRP, HYPE, NEAR</p>
+    </div>
+    <div class="fresh" id="fresh"></div>
+  </header>
+
+  <div class="info" id="info">Dados reais da Hyperliquid e da Coinbase. As abas marcadas como exemplo (swing trade e SOPR) ainda usam dados ilustrativos e ganham dados reais nas fases 3 e 4.</div>
+
+  <div class="tabs-scroll">
+    <nav class="tabs" role="tablist" aria-label="Seções do radar">
+      <button class="tab" role="tab" data-tab="resumo">Resumo</button>
+      <button class="tab" role="tab" data-tab="carteiras">Carteiras</button>
+      <button class="tab" role="tab" data-tab="fluxo">Fluxo e alertas</button>
+      <button class="tab" role="tab" data-tab="liquidez">Stops e liquidações</button>
+      <button class="tab" role="tab" data-tab="sr">Suportes e resistências</button>
+      <button class="tab" role="tab" data-tab="diario">Diário de sinais</button>
+      <button class="tab" role="tab" data-tab="swing">Swing trade<span class="ex">exemplo</span></button>
+      <button class="tab" role="tab" data-tab="sopr">SOPR do BTC<span class="ex">exemplo</span></button>
+    </nav>
+  </div>
+
+  <!-- RESUMO -->
+  <section class="panel" id="p-resumo" role="tabpanel">
+    <div class="kpis" id="resumoKpis"></div>
+    <div class="box-head"><h2>Leitura rápida</h2><p>Diário mostra a tendência dos próximos dias. 4h mostra o que está acontecendo agora. A barra mostra onde o preço está dentro da faixa dos últimos 3 dias.</p></div>
+    <div class="assets" id="assets"></div>
+  </section>
+
+  <!-- CARTEIRAS -->
+  <section class="panel" id="p-carteiras" role="tabpanel" hidden>
+    <div class="box">
+      <div class="box-head">
+        <h2>Consenso das carteiras confiáveis agora</h2>
+        <p id="consNota"></p>
+      </div>
+      <div class="bars" id="consensus"></div>
+    </div>
+    <div class="box">
+      <div class="box-head">
+        <h2>Ranking</h2>
+        <div class="seg" id="filtroCarteiras" role="group" aria-label="Filtrar carteiras">
+          <button aria-pressed="true" data-f="conf">Confiáveis</button>
+          <button aria-pressed="false" data-f="todas">Top 80</button>
+        </div>
+      </div>
+      <p class="small muted" id="rankNota"></p>
+      <div class="tbl-wrap"><table id="wallets"></table></div>
+      <p class="callout"><b>Como ler:</b> retornos por operação, sem alavancagem e já com taxas. "Copiando" refaz cada operação entrando e saindo 1 h depois da carteira. "Mínimo" é a pior taxa de acerto plausível com 95% de confiança (limite de Wilson): com poucas operações ele fica baixo mesmo com 100% de acerto.</p>
+    </div>
+  </section>
+
+  <!-- FLUXO -->
+  <section class="panel" id="p-fluxo" role="tabpanel" hidden>
+    <div class="grid-2">
+      <div class="box">
+        <div class="box-head"><h2>Fluxo das carteiras rastreadas em 7 dias</h2><p>Valor comprado e vendido em perpétuos, em US$ milhões. Atualiza junto com o ranking diário.</p></div>
+        <div class="bars" id="flow"></div>
+        <div class="legend"><span><i style="background:var(--up)"></i>comprado</span><span><i style="background:var(--down)"></i>vendido</span></div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Alertas das últimas 48 h</h2><span class="chip acc">só carteiras confiáveis</span></div>
+        <p class="small muted" id="alertNota"></p>
+        <div class="alerts" id="alerts"></div>
+      </div>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Funding na Hyperliquid agora</h2><p>A Hyperliquid cobra um piso fixo de juros (cerca de 11% ao ano). Igual ao piso não diz nada; acima dele, os comprados pagam caro para ficar na posição; abaixo de zero, são os vendidos que pagam.</p></div>
+      <svg id="funding" viewBox="0 0 720 210" role="img" aria-label="Funding anualizado por ativo comparado ao piso de 11%"></svg>
+    </div>
+  </section>
+
+  <!-- DIÁRIO -->
+  <section class="panel" id="p-diario" role="tabpanel" hidden>
+    <div class="kpis" id="diarioKpis"></div>
+    <div class="box">
+      <div class="box-head"><h2>Cópia das carteiras confiáveis</h2><p>Quando uma carteira confiável abre posição, o radar registra a entrada no preço daquele momento, até 1 h depois dela, que é o atraso real de quem copia. Fecha quando ela fecha. Nada é apagado nem recalculado.</p></div>
+      <div class="tbl-wrap"><table id="signals"></table></div>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Calibração do regime</h2><span class="chip warn">exemplo · entra na fase 4</span></div>
+      <p class="small muted">Quando o radar disser "70% de chance de lateral", o mercado terá ficado lateral 70% das vezes? Pontos sobre a diagonal significam que a porcentagem é confiável.</p>
+      <svg id="calib" viewBox="0 0 720 300" role="img" aria-label="Probabilidade prevista contra frequência observada do regime"></svg>
+    </div>
+  </section>
+
+  <!-- SWING -->
+  <section class="panel" id="p-swing" role="tabpanel" hidden>
+    <div class="demo">Exemplo com dados ilustrativos. Esta aba ganha dados reais na fase 4 (setups com backtest).</div>
+    <div class="box-head">
+      <h2>Swing trade</h2>
+      <p>Só opere quando um setup testado estiver ativo e passar no filtro: 30+ ocorrências independentes, acerto mínimo de 55% e mediana acima de +0,15R. Clique num ativo para ver o plano.</p>
+    </div>
+    <div class="swing-grid" id="swingCards"></div>
+    <div class="box" id="plan"></div>
+  </section>
+
+  <!-- SUPORTES E RESISTÊNCIAS -->
+  <section class="panel" id="p-sr" role="tabpanel" hidden>
+    <div class="box-head">
+      <div class="seg" id="srAssets" role="group" aria-label="Escolher ativo"></div>
+      <span class="small muted" id="srMeta"></span>
+    </div>
+    <div class="grid-2">
+      <div class="box" id="srRegime"></div>
+      <div class="box" id="srFactors"></div>
+    </div>
+    <div class="box">
+      <div class="box-head">
+        <h2>Zonas de suporte e resistência</h2>
+        <p>As 5 faixas mais fortes acima e abaixo do preço, até ±15%. Força = livro de ofertas da Hyperliquid e da Coinbase + ordens limite e take profits das carteiras rastreadas. "No livro há" separa paredes firmes das que aparecem e somem.</p>
+      </div>
+      <div class="tbl-wrap"><table id="srZones"></table></div>
+    </div>
+  </section>
+
+  <!-- LIQUIDEZ -->
+  <section class="panel" id="p-liquidez" role="tabpanel" hidden>
+    <div class="box-head">
+      <div class="seg" id="liqAssets" role="group" aria-label="Escolher ativo"></div>
+      <span class="small muted" id="liqMeta"></span>
+    </div>
+    <div class="kpis" id="liqKpis"></div>
+    <div class="box">
+      <div class="box-head">
+        <h2 id="liqTitulo">Stops e liquidações por faixa de preço</h2>
+        <span class="chip warn">só carteiras rastreadas na Hyperliquid: use como mapa, não como alvo</span>
+      </div>
+      <p class="small muted">Abaixo do preço: stops de quem está comprado e liquidações de long, que viram venda a mercado se o preço cair. Acima: stops de quem está vendido e liquidações de short, que viram compra a mercado se o preço subir. Os maiores aglomerados atraem o preço, principalmente em lateralidade.</p>
+      <div class="legend">
+        <span><i style="background:var(--down)"></i>stops de long</span>
+        <span><i style="background:var(--down);opacity:.5"></i>liquidações de long</span>
+        <span><i style="background:var(--up)"></i>stops de short</span>
+        <span><i style="background:var(--up);opacity:.5"></i>liquidações de short</span>
+        <span><i style="background:var(--surface-2);border:1px dashed var(--faint)"></i>vácuo no livro de ofertas</span>
+      </div>
+      <svg id="liq" viewBox="0 0 720 470" role="img" aria-label="Volume de stops e liquidações por faixa de preço"></svg>
+    </div>
+  </section>
+
+  <!-- SOPR -->
+  <section class="panel" id="p-sopr" role="tabpanel" hidden>
+    <div class="demo">Exemplo com dados ilustrativos. Esta aba ganha dados reais na fase 3 (SOPR on-chain do BTC).</div>
+    <div class="kpis">
+      <div class="kpi"><span class="lab">SOPR 7 dias</span><span class="val">1,010</span><span class="note">Vendendo com lucro leve</span></div>
+      <div class="kpi"><span class="lab">Custo do curto prazo</span><span class="val">73.616</span><span class="note">Preço 16,4% acima · dado on-chain</span></div>
+      <div class="kpi"><span class="lab">Desespero abaixo de</span><span class="val neg">74.071</span><span class="note">SOPR nas mínimas de 3 anos</span></div>
+      <div class="kpi"><span class="lab">Lucro extremo acima de</span><span class="val pos">93.026</span><span class="note">SOPR nas máximas de 3 anos</span></div>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Preço × custo médio de quem comprou nos últimos ~5 meses</h2><span class="chip">BTC usa o dado on-chain real; as outras moedas usarão uma estimativa marcada como tal</span></div>
+      <div class="legend"><span><i style="background:var(--btc)"></i>preço</span><span><i style="background:var(--accent)"></i>custo do curto prazo</span><span><i style="background:var(--down);width:8px;height:8px;border-radius:50%"></i>capitulação</span></div>
+      <svg id="soprChart" viewBox="0 0 720 280" role="img" aria-label="Preço do BTC e custo médio do curto prazo nos últimos 180 dias"></svg>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>O que aconteceu depois dos dias-chave</h2><p>Dias seguidos do mesmo evento contam uma vez só. A mediana vem primeiro porque a média é puxada por poucos casos extremos.</p></div>
+      <div class="tbl-wrap"><table id="events"></table></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const fmt = (v, d = 0) => v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs, parent, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+/* ---------- dados reais (injetados por gerar_painel.py) ---------- */
+const INJETADO = /*DADOS*/null;
+const CORES = { BTC: '--btc', ETH: '--eth', SOL: '--sol', XRP: '--xrp', HYPE: '--hype', NEAR: '--near' };
+const casas = v => Math.abs(v) >= 1000 ? 0 : Math.abs(v) >= 10 ? 2 : Math.abs(v) >= 1 ? 3 : 4;
+const fmtPx = v => v == null ? '—' : fmt(v, casas(v));
+const pctTxt = (v, d = 2) => v == null ? '—' : (v >= 0 ? '+' : '') + fmt(v * 100, d) + '%';
+const quando = ms => { const d = new Date(ms); return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
+const ha = ms => { const m = Math.max(0, Math.round((Date.now() - ms) / 60000)); return m < 60 ? `há ${m} min` : m < 2880 ? `há ${Math.round(m / 60)} h` : `há ${Math.round(m / 1440)} dias`; };
+const curto = e => e.slice(0, 6) + '…' + e.slice(-4);
+const linkCarteira = e => `<a class="addr" href="https://app.hyperliquid.xyz/explorer/address/${e}" target="_blank" rel="noopener">${curto(e)}</a>`;
+const TL = { up: 'ALTA', flat: 'LATERAL', down: 'BAIXA' };
+const sinalCls = v => v == null ? 'muted' : v >= 0 ? 'pos' : 'neg';
+
+function renderReal(DADOS) {
+  const C = DADOS.coleta;
+  const velho = (ms, h) => Date.now() - ms > h * 3600000;
+  $('#sub').textContent = `Hyperliquid · ${fmt(C.rastreadas)} carteiras rastreadas · BTC, ETH, SOL, XRP, HYPE, NEAR`;
+  $('#fresh').innerHTML = [['Painel', DADOS.gerado, 2], ['Posições', C.ultima_foto, 2], ['Ranking', C.ranking, 30]]
+    .map(([n, ms, h]) => `<span class="chip ${velho(ms, h) ? 'stale' : ''}"><span class="dot"></span>${n} ${quando(ms)} · ${ha(ms)}</span>`).join('');
+
+  /* ---------- Resumo ---------- */
+  const sinais = DADOS.sinais, abertos = sinais.filter(s => s.fechado_em == null);
+  const fechados = sinais.filter(s => s.retorno != null).map(s => s.retorno);
+  const mediana = xs => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const acerto = fechados.length ? fechados.filter(r => r > 0).length / fechados.length : null;
+  const regimes = DADOS.ativos.reduce((o, a) => (o[a.H] = (o[a.H] || 0) + 1, o), {});
+  const regTop = Object.entries(regimes).sort((a, b) => b[1] - a[1])[0];
+  const kpi = (lab, val, note, cls = '') => `<div class="kpi"><span class="lab">${lab}</span><span class="val ${cls}">${val}</span><span class="note">${note}</span></div>`;
+  $('#resumoKpis').innerHTML =
+    kpi('Cópias abertas agora', abertos.length, 'posições das confiáveis registradas no Diário') +
+    kpi('Carteiras rastreadas', fmt(C.rastreadas), `${C.com_operacoes} com 10+ operações · ${C.confiaveis} confiáveis`) +
+    kpi('Acerto real das cópias', acerto == null ? '—' : fmt(acerto * 100) + '%', fechados.length ? `${fechados.length} fechadas · mediana ${pctTxt(mediana(fechados))}` : 'nenhuma cópia fechada ainda') +
+    kpi('Regime no 4h', TL[regTop[0]].toLowerCase().replace(/^./, c => c.toUpperCase()), `${regTop[1]} de ${DADOS.ativos.length} ativos`);
+
+  $('#assets').innerHTML = DADOS.ativos.map(a => {
+    const pos = Math.max(0, Math.min(100, (a.px - a.lo) / (a.hi - a.lo) * 100));
+    const piso = a.funding > 9 && a.funding < 13;
+    const fundTag = piso ? `<span class="chip flat">funding ${fmt(a.funding, 1)}% a.a. · piso, neutro</span>`
+      : a.funding >= 13 ? `<span class="chip warn">funding ${fmt(a.funding, 1)}% a.a. · comprados pagando caro</span>`
+      : `<span class="chip acc">funding ${fmt(a.funding, 1)}% a.a. · abaixo do piso</span>`;
+    const n = a.L + a.S;
+    const cons = n === 0 ? `<span class="chip">nenhuma confiável posicionada</span>`
+      : n < 5 ? `<span class="chip warn">confiáveis ${a.L} long · ${a.S} short · poucas</span>`
+      : `<span class="chip ${a.L > a.S * 2 ? 'up' : a.S > a.L * 2 ? 'down' : 'flat'}">confiáveis ${a.L} long · ${a.S} short</span>`;
+    const vol = a.vol == null ? '' : `<span class="chip ${a.vol < 10 ? 'acc' : ''}">volume 4h no ${a.vol}º percentil${a.vol < 10 ? ' · mercado parado' : ''}</span>`;
+    return `<article class="asset">
+      <div class="name"><span class="tick"><span class="sw" style="background:var(${CORES[a.t]})"></span>${a.t}</span>
+        <span class="px">${fmtPx(a.px)} <span class="${a.ch >= 0 ? 'pos' : 'neg'}">${a.ch >= 0 ? '+' : ''}${fmt(a.ch, 1)}%</span></span></div>
+      <div class="trend"><div class="t ${a.D}" title="${a.D_por_que}"><b>${TL[a.D]}</b><span>diário</span></div><div class="t ${a.H}"><b>${TL[a.H]}</b><span>4h</span></div></div>
+      <div class="read">
+        <p class="line1">${a.frase}</p>
+        <div class="range" aria-label="Posição na faixa"><i style="left:calc(${pos}% - 1px)"></i><span class="lo">${fmtPx(a.lo)}</span><span class="hi">${fmtPx(a.hi)}</span></div>
+        <div class="facts" style="margin-top:12px">${fundTag}${cons}${vol}<span>OI US$ ${fmt(a.oi / 1e9, 2)} bi</span></div>
+      </div></article>`;
+  }).join('');
+
+  /* ---------- Carteiras ---------- */
+  const SIT = { confiavel: ['up', 'confiável'], segura: ['down', 'segura prejuízo'], poucas: ['warn', 'amostra pequena'],
+    copia_perde: ['down', 'perde copiando'], giro: ['warn', 'giro rápido'], observar: ['flat', 'observar'] };
+  const crit = C.criterio;
+  $('#consNota').textContent = `Posições abertas agora das ${C.confiaveis} carteiras confiáveis: ${crit.operacoes}+ operações em ${C.dias} dias, mínimo estatístico de ${fmt(crit.minimo * 100)}%, lucro também copiando com ${C.atraso_min} min de atraso e ${crit.horas} h ou mais por operação. Cada grupo conta uma vez.`;
+  $('#consensus').innerHTML = DADOS.consenso.length ? DADOS.consenso.map(([t, l, s]) => `<div class="bar-row"><span class="lbl">${t}</span>
+    <div class="split" role="img" aria-label="${l} comprados, ${s} vendidos"><span class="l" style="width:${l / (l + s) * 100}%"></span><span class="s" style="width:${s / (l + s) * 100}%"></span></div>
+    <span class="r">${l} long · ${s} short${l + s < 5 ? ' · poucas' : ''}</span></div>`).join('')
+    : '<p class="muted">Nenhuma carteira confiável posicionada agora.</p>';
+  function renderCarteiras(filtro) {
+    const lista = DADOS.carteiras.filter(r => filtro === 'todas' || r.confiavel);
+    $('#rankNota').textContent = filtro === 'todas'
+      ? `As 80 com maior mínimo estatístico entre ${C.com_operacoes} carteiras com 10+ operações, mais todas as confiáveis.`
+      : `${lista.length} carteiras confiáveis, ordenadas pelo mínimo estatístico.`;
+    $('#wallets').innerHTML = `<thead><tr><th>Carteira</th><th class="n">Operações</th><th class="n">Acerto</th><th class="n">Mínimo</th><th class="n">Mediana / op.</th><th class="n">Copiando</th><th class="n">Segura</th><th class="n">Pior queda</th><th>Posições agora</th><th>Situação</th></tr></thead><tbody>` +
+      lista.map(r => {
+        const [cls, txt] = SIT[r.situacao];
+        const pos = r.posicoes.slice(0, 3).map(p => `<span class="chip ${p.lado === 'long' ? 'up' : 'down'}">${p.moeda} ${p.lado === 'long' ? 'L' : 'S'} ${fmt(p.alav)}x</span>`).join(' ')
+          + (r.posicoes.length > 3 ? ` <span class="muted small">+${r.posicoes.length - 3}</span>` : '') || '<span class="muted small">nenhuma</span>';
+        return `<tr><td>${linkCarteira(r.endereco)}<br><span class="grp">${r.grupo ? 'Grupo ' + r.grupo + ' · ' : ''}${r.moedas.join(', ')}</span></td>
+          <td class="n">${r.operacoes}</td><td class="n">${fmt(r.acerto * 100)}%</td><td class="n"><b>${fmt(r.minimo * 100)}%</b></td>
+          <td class="n ${sinalCls(r.mediana)}">${pctTxt(r.mediana)}</td><td class="n ${sinalCls(r.copia_mediana)}">${pctTxt(r.copia_mediana)}</td>
+          <td class="n">${fmt(r.horas_mediana, 1)} h</td><td class="n neg">${pctTxt(r.pior_queda, 1)}</td>
+          <td style="white-space:normal;min-width:180px">${pos}</td><td><span class="chip ${cls}">${txt}</span></td></tr>`;
+      }).join('') + '</tbody>';
+  }
+  document.querySelectorAll('#filtroCarteiras button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#filtroCarteiras button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    renderCarteiras(b.dataset.f);
+  }));
+  renderCarteiras('conf');
+
+  /* ---------- Fluxo e alertas ---------- */
+  const fmax = Math.max(1, ...DADOS.fluxo.map(f => f[1] + f[2]));
+  $('#flow').innerHTML = DADOS.fluxo.map(([t, b, s]) => `<div class="bar-row"><span class="lbl">${t}</span>
+    <div class="split" style="background:none"><span class="l" style="width:${b / fmax * 100}%"></span><span class="s" style="width:${s / fmax * 100}%"></span></div>
+    <span class="r"><span class="pos">+${fmt(b, 1)}</span> / <span class="neg">−${fmt(s, 1)}</span> mi</span></div>`).join('');
+  const EV = { abriu: l => l === 'long' ? 'up' : 'down', fechou: () => 'flat', aumentou: () => 'acc', reduziu: () => 'flat', virou: () => 'warn' };
+  $('#alertNota').textContent = `${fmt(C.alertas_24h)} alertas de todas as carteiras rastreadas nas últimas 24 h; aqui só os das confiáveis.`;
+  $('#alerts').innerHTML = DADOS.alertas.length ? DADOS.alertas.map(a => `<div class="alert"><time>${quando(a.tempo).slice(6)}<br>${quando(a.tempo).slice(0, 5)}</time>
+    <span>${linkCarteira(a.endereco)} <span class="chip ${EV[a.evento](a.lado)}">${a.evento} ${a.lado.toUpperCase()} ${a.moeda}</span></span>
+    <span class="mono muted">${fmtPx(a.preco)}${a.alavancagem ? ' · ' + fmt(a.alavancagem) + 'x' : ''}</span></div>`).join('')
+    : '<p class="muted">Nenhum alerta das confiáveis nas últimas 48 h.</p>';
+
+  (function funding() {
+    const s = $('#funding'), F = DADOS.ativos.map(a => [a.t, a.funding]);
+    const lo = Math.min(0, Math.floor(Math.min(...F.map(f => f[1])) / 10) * 10), hi = Math.max(30, Math.ceil(Math.max(...F.map(f => f[1])) / 10) * 10);
+    const x0 = 60, x1 = 700, y0 = 20, y1 = 170, bw = (x1 - x0) / F.length;
+    const y = v => y1 - (v - lo) / (hi - lo) * (y1 - y0);
+    for (let v = lo; v <= hi; v += 10) { svgEl('line', { x1: x0, x2: x1, y1: y(v), y2: y(v), class: 'grid-ln' }, s); svgEl('text', { x: x0 - 8, y: y(v) + 4, 'text-anchor': 'end', class: 'ax' }, s, v + '%'); }
+    F.forEach(([t, v], i) => {
+      const cx = x0 + bw * i + bw / 2, top = Math.min(y(v), y(0)), h = Math.max(2, Math.abs(y(v) - y(0)));
+      svgEl('rect', { x: cx - 22, y: top, width: 44, height: h, rx: 4, fill: v >= 13 ? 'var(--warn)' : v < 0 ? 'var(--accent)' : 'var(--flat-soft)' }, s);
+      svgEl('text', { x: cx, y: (v >= 0 ? y(v) - 6 : y(v) + 14), 'text-anchor': 'middle', class: 'ax' }, s, fmt(v, 1) + '%');
+      svgEl('text', { x: cx, y: y1 + 18 + (lo < 0 ? 0 : 0), 'text-anchor': 'middle', class: 'ax-l' }, s, t);
+    });
+    svgEl('line', { x1: x0, x2: x1, y1: y(10.95), y2: y(10.95), stroke: 'var(--accent)', 'stroke-dasharray': '5 4', 'stroke-width': 1.5 }, s);
+    svgEl('text', { x: x1, y: y(10.95) - 6, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--accent)' }, s, 'piso fixo ≈ 10,95%');
+  })();
+
+  /* ---------- Diário ---------- */
+  const soma = fechados.reduce((a, b) => a + b, 0);
+  $('#diarioKpis').innerHTML =
+    kpi('Cópias registradas', sinais.length, `${abertos.length} abertas agora`) +
+    kpi('Acerto real', acerto == null ? '—' : fmt(acerto * 100) + '%', fechados.length ? `${fechados.length} fechadas` : 'aguardando a primeira cópia fechar') +
+    kpi('Mediana por cópia', fechados.length ? pctTxt(mediana(fechados)) : '—', 'sem alavancagem, com taxas', fechados.length ? sinalCls(mediana(fechados)) : '') +
+    kpi('Resultado somado', fechados.length ? pctTxt(soma, 1) : '—', 'soma simples dos retornos fechados', fechados.length ? sinalCls(soma) : '');
+  $('#signals').innerHTML = '<thead><tr><th>Aberta em</th><th>Ativo</th><th>Carteira</th><th class="n">Entrada</th><th>Fechada em</th><th class="n">Saída</th><th>Situação</th><th class="n">Resultado</th></tr></thead><tbody>' +
+    (sinais.length ? sinais.map(s => {
+      const aberto = s.fechado_em == null, r = aberto ? s.agora : s.retorno;
+      const sit = aberto ? '<span class="chip acc">aberta</span>' : r > 0 ? '<span class="chip up">ganho</span>' : '<span class="chip down">perda</span>';
+      return `<tr><td class="mono muted">${quando(s.aberto_em)}</td><td><b>${s.moeda}</b> <span class="chip ${s.lado === 'long' ? 'up' : 'down'}">${s.lado.toUpperCase()}</span></td>
+        <td>${linkCarteira(s.endereco)}</td><td class="n">${fmtPx(s.preco_abertura)}</td>
+        <td class="mono muted">${aberto ? '—' : quando(s.fechado_em)}</td><td class="n">${aberto ? '—' : fmtPx(s.preco_fechamento)}</td>
+        <td>${sit}</td><td class="n ${sinalCls(r)}">${pctTxt(r)}${aberto ? ' <span class="muted small">agora</span>' : ''}</td></tr>`;
+    }).join('') : '<tr><td colspan="8" class="muted">Nenhuma cópia registrada ainda.</td></tr>') + '</tbody>';
+
+  /* ---------- Stops e liquidações / Suportes e resistências (fase 2) ---------- */
+  const usd = v => v >= 1e9 ? `US$ ${fmt(v / 1e9, 2)} bi` : v >= 1e6 ? `US$ ${fmt(v / 1e6, 1)} mi` : v >= 1e3 ? `US$ ${fmt(v / 1e3, 0)} mil` : `US$ ${fmt(v, 0)}`;
+  const F2 = DADOS.fase2 || {};
+  const ativoPor = Object.fromEntries(DADOS.ativos.map(a => [a.t, a]));
+  const moedas2 = DADOS.ativos.map(a => a.t).filter(t => F2[t]);
+  let selLiq = moedas2[0], selSR = moedas2[0];
+  const botoes = (el, sel, fn) => {
+    el.innerHTML = moedas2.map(t => `<button aria-pressed="${t === sel}" data-t="${t}">${t}</button>`).join('');
+    el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => fn(b.dataset.t)));
+  };
+  const faixaTxt = (p, passo) => `${fmtPx(p)}–${fmtPx(p + passo)}`;
+
+  function renderLiq(t) {
+    selLiq = t;
+    botoes($('#liqAssets'), t, renderLiq);
+    const L = F2[t].liquidez, a = ativoPor[t], px = a.px, p = L.passo;
+    $('#liqMeta').textContent = `preço ${fmtPx(px)} · faixas de ${fmt(p, p >= 1 ? 0 : casas(p))} · ordens lidas ${C.ordens_em ? ha(C.ordens_em) : '—'}`;
+    const dist = v => v == null ? '' : ` (${pctTxt((v + p / 2) / px - 1, 1)})`;
+    const tot = L.acima + L.abaixo;
+    $('#liqKpis').innerHTML =
+      kpi('Acima · compra forçada', usd(L.acima), L.ima_acima != null ? `ímã mais próximo ${faixaTxt(L.ima_acima, p)}${dist(L.ima_acima)}` : 'nenhum aglomerado até +5%', 'pos') +
+      kpi('Abaixo · venda forçada', usd(L.abaixo), L.ima_abaixo != null ? `ímã mais próximo ${faixaTxt(L.ima_abaixo, p)}${dist(L.ima_abaixo)}` : 'nenhum aglomerado até −5%', 'neg') +
+      kpi('Lado mais carregado', tot ? (L.abaixo > L.acima ? 'Abaixo ↓' : 'Acima ↑') : '—', tot ? `${fmt(L.acima / tot * 100)}% acima · ${fmt(L.abaixo / tot * 100)}% abaixo` : 'sem dados') +
+      kpi('Cobertura da amostra', L.cobertura == null ? '—' : fmt(L.cobertura * 100, 1) + '%', `${L.carteiras} carteiras em ${t} · ${L.com_stop} com stop · OI ${usd(a.oi)}`);
+    $('#liqTitulo').textContent = `${t} · stops e liquidações por faixa de preço`;
+
+    const s = $('#liq'); s.innerHTML = '';
+    const lo = px * 0.9, hi = px * 1.1;
+    const fx = L.faixas.filter(f => f.preco >= lo && f.preco <= hi);
+    const linhas = []; for (let f = Math.floor(hi / p) * p; f >= lo; f -= p) linhas.push(Math.round(f / p) * p);
+    const porPreco = Object.fromEntries(fx.map(f => [Math.round(f.preco / p) * p, f]));
+    const rh = 11, x0 = 76, x1 = 700, y0 = 8, H = y0 + linhas.length * rh + 12;
+    s.setAttribute('viewBox', `0 0 720 ${H}`);
+    const total = f => f.stop_long + f.liq_long + f.stop_short + f.liq_short;
+    const max = Math.max(1, ...fx.map(total));
+    const yDe = preco => y0 + linhas.findIndex(l => l <= preco + 1e-9) * rh;
+    (F2[t].sr.vacuos || []).forEach(([va, vb]) => {
+      if (vb < lo || va > hi) return;
+      const ya = yDe(Math.min(vb, hi)), yb = yDe(Math.max(va, lo)) + rh;
+      svgEl('rect', { x: x0, y: ya, width: x1 - x0, height: Math.max(rh, yb - ya), fill: 'var(--surface-2)', stroke: 'var(--faint)', 'stroke-dasharray': '4 4', rx: 4 }, s);
+      svgEl('text', { x: x1 - 8, y: (ya + yb) / 2 + 4, 'text-anchor': 'end', class: 'ax' }, s, `vácuo ${fmtPx(va)}–${fmtPx(vb)}: preço tende a atravessar rápido`);
+    });
+    const top = [...fx].sort((a, b) => total(b) - total(a)).slice(0, 6).map(f => f.preco);
+    linhas.forEach((preco, i) => {
+      const y = y0 + i * rh, f = porPreco[preco];
+      if (i % 4 === 0) svgEl('text', { x: x0 - 8, y: y + 9, 'text-anchor': 'end', class: 'ax' }, s, fmtPx(preco));
+      if (!f) return;
+      let x = x0;
+      [['stop_short', 'var(--up)', 1], ['liq_short', 'var(--up)', .5], ['stop_long', 'var(--down)', 1], ['liq_long', 'var(--down)', .5]].forEach(([k, cor, op]) => {
+        if (!f[k]) return;
+        const w = Math.max(2, f[k] / max * (x1 - x0 - 90));
+        svgEl('rect', { x, y: y + 1, width: w, height: rh - 3, rx: 2, fill: cor, opacity: op }, s);
+        x += w;
+      });
+      if (top.includes(f.preco)) svgEl('text', { x: x + 6, y: y + 9, class: 'ax', style: 'fill:var(--fg)' }, s, usd(total(f)));
+    });
+    const iPx = linhas.findIndex(l => l <= px);
+    const py = y0 + iPx * rh + rh * (1 - (px - linhas[iPx]) / p);
+    svgEl('line', { x1: x0, x2: x1, y1: py, y2: py, stroke: 'var(--fg)', 'stroke-dasharray': '6 4', 'stroke-width': 1.2 }, s);
+    svgEl('text', { x: x1, y: py - 4, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--fg);font-weight:500' }, s, 'agora ' + fmtPx(px));
+  }
+
+  function renderSR(t) {
+    selSR = t;
+    botoes($('#srAssets'), t, renderSR);
+    const Z = F2[t].sr, R = F2[t].regime, a = ativoPor[t], px = a.px, p = Z.passo;
+    $('#srMeta').textContent = `preço ${fmtPx(px)} · faixas de ${fmt(p, p >= 1 ? 0 : casas(p))}`;
+    const nomes = ['Alta', 'Lateral', 'Baixa'], vals = [R.alta, R.lateral, R.baixa], cores = ['var(--up)', 'var(--flat)', 'var(--down)'];
+    const iTop = vals.indexOf(Math.max(...vals));
+    const [flo, fhi] = F2[t].faixa;
+    $('#srRegime').innerHTML = `<div class="box-head"><h2>Regime provável</h2><span class="chip warn">placar ainda não calibrado</span></div>
+      ${vals.map((v, i) => `<div class="prob"><span>${nomes[i]}</span><div class="track"><i style="width:${v * 100}%;background:${cores[i]}"></i></div><b>${fmt(v * 100)}%</b></div>`).join('')}
+      <p class="small"><b>Cenário mais provável: ${nomes[iTop].toLowerCase()}.</b> ${F2[t].amp != null ? `A amplitude dos últimos 3 dias está em ${fmt(F2[t].amp * 100)}% da normal. ` : ''}Faixa de trabalho: <b class="mono">${fmtPx(flo)}</b> a <b class="mono">${fmtPx(fhi)}</b>.</p>
+      ${Z.parede ? `<p class="small">Maior parede de venda até +3%: <b class="mono">${faixaTxt(Z.parede.preco, p)}</b> (${usd(Z.parede.forca)}, ${pctTxt(Z.parede.dist, 1)}).</p>` : ''}
+      ${Z.apoio ? `<p class="small">Maior apoio comprador até −3%: <b class="mono">${faixaTxt(Z.apoio.preco, p)}</b> (${usd(Z.apoio.forca)}, ${pctTxt(Z.apoio.dist, 1)}).</p>` : ''}
+      <p class="small muted">O placar é gravado a cada coleta. Vira "probabilidade" só quando o histórico mostrar que ele acerta na proporção que diz.</p>`;
+    const maxC = Math.max(0.05, ...R.fatores.map(([, w, v]) => Math.abs(w * v)));
+    $('#srFactors').innerHTML = `<div class="box-head"><h2>O que pesa no regime</h2><p>Cada fator vai de −1 (baixa) a +1 (alta). A barra é a contribuição: valor × peso.</p></div>
+      ${R.fatores.map(([nm, w, v]) => { const c = w * v, wpx = Math.min(50, Math.abs(c) / maxC * 50);
+        return `<div class="factor"><span>${nm} <span class="muted">· peso ${fmt(w * 100)}%</span></span>
+          <div class="axis"><i style="left:${c >= 0 ? 50 : 50 - wpx}%;width:${wpx}%;background:${c > 0.001 ? 'var(--up)' : c < -0.001 ? 'var(--down)' : 'var(--flat)'}"></i></div>
+          <b class="${c > 0.001 ? 'pos' : c < -0.001 ? 'neg' : 'muted'}">${Math.abs(c) < 0.001 ? '0' : (c > 0 ? '+' : '') + fmt(c, 2)}</b></div>`; }).join('')}
+      <p class="small muted">Funding no piso (~11% a.a.) entra como zero. O SOPR entra na fase 3.</p>`;
+    const maxF = Math.max(...Z.zonas.map(z => z.forca), 1);
+    const persist = z => z.presente == null ? '<span class="chip flat">só ordens</span>'
+      : z.coletas < 3 ? `<span class="chip">${z.presente} de ${z.coletas} coletas · pouco histórico</span>`
+      : z.presente >= 0.75 * z.coletas ? `<span class="chip up">${z.presente} de ${z.coletas} coletas · firme</span>`
+      : z.presente >= 0.33 * z.coletas ? `<span class="chip flat">${z.presente} de ${z.coletas} coletas</span>`
+      : `<span class="chip warn">${z.presente} de ${z.coletas} coletas · pode sumir</span>`;
+    $('#srZones').innerHTML = `<thead><tr><th>Faixa</th><th class="n">Distância</th><th>Tipo</th><th>Força</th><th>De onde vem</th><th>No livro há</th></tr></thead><tbody>` +
+      (Z.zonas.length ? Z.zonas.map(z => { const res = z.preco > px;
+        const fontes = Object.entries(z.fontes).map(([k, v]) => `<span class="chip">${k} ${usd(v)}</span>`).join('')
+          + (z.baleias ? `<span class="chip acc">${z.baleias} carteira${z.baleias > 1 ? 's' : ''}</span>` : '')
+          + (z.volume30d ? `<span class="chip">volume 30d ${usd(z.volume30d)}</span>` : '');
+        return `<tr><td class="mono"><b>${faixaTxt(z.preco, p)}</b></td><td class="n ${res ? 'pos' : 'neg'}">${pctTxt(z.dist, 1)}</td>
+          <td><span class="chip ${res ? 'down' : 'up'}">${res ? 'resistência' : 'suporte'}</span></td>
+          <td class="mono"><span class="forca" style="width:${Math.max(6, z.forca / maxF * 90)}px;background:${res ? 'var(--down)' : 'var(--up)'}"></span>${usd(z.forca)}</td>
+          <td><div class="srcs">${fontes}</div></td><td>${persist(z)}</td></tr>`; }).join('')
+        : '<tr><td colspan="6" class="muted">Sem zonas ainda: aguardando a primeira leitura do livro.</td></tr>') + '</tbody>';
+  }
+  if (moedas2.length) { renderLiq(selLiq); renderSR(selSR); }
+}
+
+/* ---------- SOPR ---------- */
+(function sopr() {
+  const s = $('#soprChart'), N = 180;
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5);
+  const price = [], cost = [];
+  let p = 61000;
+  for (let i = 0; i < N; i++) {
+    const tgt = i < 100 ? 62500 : i < 112 ? 62500 + (i - 100) * 1350 : i < 150 ? 79000 : 84000 + (i - 150) * 60;
+    p += (tgt - p) * (i >= 100 && i < 112 ? 0.6 : 0.12) + rnd() * 1800;
+    price.push(p);
+  }
+  price[N - 1] = 85690;
+  let c = 68800;
+  for (let i = 0; i < N; i++) { c += (price[i] - c) / 155 * (i > 100 ? 1.6 : 0.6); cost.push(c); }
+  const sc = 73616 / cost[N - 1]; for (let i = 0; i < N; i++) cost[i] = i > 100 ? cost[i] * (1 + (sc - 1) * (i - 100) / 79) : cost[i];
+  cost[N - 1] = 73616;
+  const x0 = 60, x1 = 700, y0 = 12, y1 = 245, lo = 56000, hi = 92000;
+  const X = i => x0 + i / (N - 1) * (x1 - x0), Y = v => y1 - (v - lo) / (hi - lo) * (y1 - y0);
+  [60000, 70000, 80000, 90000].forEach(v => { svgEl('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), class: 'grid-ln' }, s); svgEl('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'ax' }, s, fmt(v)); });
+  ['abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out'].forEach((m, k) => svgEl('text', { x: X(Math.min(N - 1, k * 30)), y: y1 + 20, 'text-anchor': 'middle', class: 'ax' }, s, m));
+  const path = arr => arr.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
+  svgEl('path', { d: path(price) + ` L${X(N - 1)} ${y1} L${x0} ${y1} Z`, fill: 'var(--btc)', opacity: 0.08 }, s);
+  svgEl('path', { d: path(cost), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 }, s);
+  svgEl('path', { d: path(price), fill: 'none', stroke: 'var(--btc)', 'stroke-width': 1.8 }, s);
+  [64, 88].forEach(i => svgEl('circle', { cx: X(i), cy: Y(price[i]), r: 4.5, fill: 'var(--down)', stroke: 'var(--surface)', 'stroke-width': 1.5 }, s));
+  svgEl('circle', { cx: X(N - 1), cy: Y(price[N - 1]), r: 4, fill: 'var(--btc)' }, s);
+  svgEl('text', { x: X(N - 1) - 6, y: Y(price[N - 1]) - 9, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--fg)' }, s, '85.690');
+  svgEl('text', { x: X(N - 1) - 6, y: Y(cost[N - 1]) + 16, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--accent)' }, s, '73.616');
+
+  const EV = [
+    ['Capitulação', 'down', 12, [['7 dias', 3.3, 4.4, 65], ['60 dias', 9.4, 13.7, 71], ['180 dias', 31.0, 52.6, 67], ['365 dias', 48.2, 71.5, 75]]],
+    ['Lucro extremo', 'up', 9, [['7 dias', -1.6, -1.0, 30], ['60 dias', 1.5, 24.1, 52], ['180 dias', 9.5, 21.3, 56], ['365 dias', 4.1, 38.0, 57]]],
+  ];
+  const t = $('#events');
+  t.innerHTML = '<thead><tr><th>Evento</th><th class="n">Eventos (n)</th><th>Depois de</th><th class="n">Mediana</th><th class="n">Média</th><th class="n">Subiu em</th></tr></thead><tbody>' +
+    EV.map(([nm, k, n, rows]) => rows.map((r, i) => `<tr>${i ? '<td></td><td></td>' : `<td><span class="chip ${k}">${nm}</span></td><td class="n">${n}${n < 15 ? ' <span class="chip warn">pouco</span>' : ''}</td>`}
+      <td>${r[0]}</td><td class="n ${r[1] >= 0 ? 'pos' : 'neg'}"><b>${r[1] >= 0 ? '+' : ''}${fmt(r[1], 1)}%</b></td>
+      <td class="n muted">${r[2] >= 0 ? '+' : ''}${fmt(r[2], 1)}%</td><td class="n">${r[3]}%</td></tr>`).join('')).join('') + '</tbody>';
+})();
+
+
+(function calib() {
+  const s = $('#calib'), B = [[12, 18, 14], [31, 29, 22], [52, 61, 30], [71, 58, 25], [88, 74, 9]];
+  const x0 = 60, x1 = 470, y0 = 14, y1 = 260;
+  const X = v => x0 + v / 100 * (x1 - x0), Y = v => y1 - v / 100 * (y1 - y0);
+  [0, 25, 50, 75, 100].forEach(v => {
+    svgEl('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), class: 'grid-ln' }, s);
+    svgEl('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'ax' }, s, v + '%');
+    svgEl('text', { x: X(v), y: y1 + 18, 'text-anchor': 'middle', class: 'ax' }, s, v + '%');
+  });
+  svgEl('line', { x1: X(0), y1: Y(0), x2: X(100), y2: Y(100), stroke: 'var(--faint)', 'stroke-dasharray': '5 4' }, s);
+  svgEl('path', { d: B.map((b, i) => (i ? 'L' : 'M') + X(b[0]) + ' ' + Y(b[1])).join(' '), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 }, s);
+  B.forEach(([p, o, n]) => {
+    svgEl('circle', { cx: X(p), cy: Y(o), r: 4 + Math.sqrt(n), fill: 'var(--accent)', opacity: 0.85 }, s);
+    svgEl('text', { x: X(p) + 10, y: Y(o) - 8, class: 'ax' }, s, 'n=' + n);
+  });
+  const tx = 500;
+  svgEl('text', { x: tx, y: 40, class: 'ax-l', style: 'fill:var(--fg);font-weight:600' }, s, 'Como ler');
+  ['Eixo de baixo: o que o radar previu.', 'Eixo da esquerda: o que aconteceu.', 'Acima de 60% o radar está', 'confiante demais: quando diz 88%,', 'acertou 74% das vezes.'].forEach((l, i) => svgEl('text', { x: tx, y: 64 + i * 19, class: 'ax-l' }, s, l));
+})();
+
+/* ---------- Swing trade ---------- */
+const SWING = [
+  { t: 'BTC', c: '--btc', d: 0, px: 85690, days: 22, wk: 6, top: -1.2, side: 'LONG', setup: 'Correção em tendência de alta (SOPR volta a 1)',
+    hit: 57, med: 0.28, n: 41, oos: '2 de 3', crsi: 78.2,
+    e: 80438, s: 74570, t1: [87000, 'aglomerado de stops de short (ímã de liquidez)'], t2: [89241, 'melhor alvo no histórico'], tight: [79250, 73] },
+  { t: 'ETH', c: '--eth', d: 0, px: 2706, days: 28, wk: 6, top: -2.7, side: 'SHORT', setup: 'Euforia: lucro extremo com preço esticado',
+    hit: 36, med: -0.20, n: 18, oos: '0 de 1', crsi: 61.1,
+    e: 2952, s: 3140, t1: [2760, 'parede de venda vira suporte'], t2: [2680, 'fundo da faixa atual'], tight: [3010, 78] },
+  { t: 'SOL', c: '--sol', d: 2, px: 119.69, days: 22, wk: 6, top: -1.0, side: 'LONG', setup: 'Capitulação do curto prazo',
+    hit: 47, med: 0.05, n: 14, oos: '1 de 1', crsi: 80.9,
+    e: 86.05, s: 78.90, t1: [95.81, 'custo médio do curto prazo'], t2: [104.20, 'melhor alvo no histórico'], tight: [84.10, 79] },
+  { t: 'XRP', c: '--xrp', d: 2, px: 1.50, days: 3, wk: 6, top: 0.0, side: 'SHORT', setup: 'Euforia: lucro extremo com preço esticado',
+    hit: 41, med: -0.08, n: 16, oos: '0 de 1', crsi: 66.4,
+    e: 1.69, s: 1.83, t1: [1.55, 'volta à faixa atual'], t2: [1.48, 'apoio comprador'], tight: [1.72, 75] },
+  { t: 'NEAR', c: '--near', d: 2, px: 5.01, days: 39, wk: 4, top: -7.6, side: 'LONG', setup: 'Correção em tendência de alta',
+    hit: 58, med: 0.22, n: 33, oos: 'nenhum ainda', crsi: 55.0,
+    e: 4.24, s: 3.86, t1: [4.71, 'aglomerado de stops de short'], t2: [4.95, 'melhor alvo no histórico'], tight: [4.15, 71] },
+  { t: 'HYPE', c: '--hype', d: 2, px: 92.95, days: 198, wk: 7, top: -6.9, side: 'LONG', setup: 'Correção em tendência de alta',
+    hit: 61, med: 0.31, n: 37, oos: '1 de 2', crsi: 71.3,
+    e: 84.96, s: 78.40, t1: [92.00, 'aglomerado de stops de short'], t2: [95.00, 'parede de venda das baleias'], tight: [83.30, 70] },
+];
+const passes = x => x.n >= 30 && x.hit >= 55 && x.med >= 0.15;
+const pct = (a, b) => (a / b - 1) * 100;
+const sign = v => (v >= 0 ? '+' : '') ;
+let swingSel = 'BTC';
+function renderSwing() {
+  $('#swingCards').innerHTML = SWING.map(x => {
+    const ok = passes(x), dist = pct(x.e, x.px);
+    return `<button class="scard" aria-pressed="${x.t === swingSel}" data-t="${x.t}">
+      <div class="hd"><span class="tick"><span class="sw" style="background:var(${x.c})"></span>${x.t}</span>
+        ${ok ? '<span class="chip acc">aguardar gatilho</span>' : '<span class="chip flat">não passa no filtro</span>'}</div>
+      <p>Tendência de alta há <b>${x.days} dias</b> · <b>${x.wk}</b> semanas fechando acima da média de 20 semanas · ${fmt(x.top, 1)}% do topo</p>
+      <p>Gatilho: <b class="${x.side === 'LONG' ? 'pos' : 'neg'}">${x.side}</b> se ${x.side === 'LONG' ? 'cair' : 'subir'} a <b class="mono">${fmt(x.e, x.d)}</b> (${sign(dist)}${fmt(dist, 1)}%) · ${x.setup}</p>
+      <div class="stats">
+        <div><span>Acerto</span><b class="${x.hit >= 55 ? '' : 'neg'}">${x.hit}%</b></div>
+        <div><span>Mediana</span><b class="${x.med >= 0.15 ? 'pos' : 'neg'}">${sign(x.med)}${fmt(x.med, 2)}R</b></div>
+        <div><span>Ocorrências</span><b class="${x.n >= 30 ? '' : 'neg'}">${x.n}</b></div>
+      </div>
+      <p class="small">Fora da amostra: ${x.oos} · CRSI ${fmt(x.crsi, 1)} (referência)</p>
+    </button>`;
+  }).join('');
+  document.querySelectorAll('.scard').forEach(b => b.addEventListener('click', () => { swingSel = b.dataset.t; renderSwing(); }));
+  renderPlan();
+}
+function renderPlan() {
+  const x = SWING.find(a => a.t === swingSel), long = x.side === 'LONG';
+  const risk = Math.abs(x.e - x.s), R = p => (long ? p - x.e : x.e - p) / risk;
+  const targets = [x.t1, x.t2].sort((a, b) => R(a[0]) - R(b[0]));
+  const row = (lab, p, note, cls = '') => `<tr class="${cls}"><td>${lab}</td><td class="n"><b>${fmt(p, x.d)}</b></td><td class="n ${p === x.e ? '' : (R(p) >= 0 ? 'pos' : 'neg')}">${p === x.e ? '—' : sign(R(p)) + fmt(R(p), 2) + 'R'}</td><td class="n muted">${sign(pct(p, x.e))}${fmt(pct(p, x.e), 1)}%</td><td class="muted" style="white-space:normal">${note}</td></tr>`;
+  const atr = (risk / 3 / x.e * 100);
+  $('#plan').innerHTML = `
+    <div class="box-head"><h2>Plano · ${x.t} ${x.side} · ${x.setup}</h2>
+      ${passes(x) ? '<span class="chip up">passa no filtro</span>' : '<span class="chip warn">não passa no filtro: só para estudo</span>'}</div>
+    <div class="plan-grid">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Nível</th><th class="n">Preço</th><th class="n">R</th><th class="n">Da entrada</th><th>Por quê</th></tr></thead><tbody>
+        ${row('Entrada (se chegar)', x.e, `${sign(pct(x.e, x.px))}${fmt(pct(x.e, x.px), 1)}% do preço atual`)}
+        ${row('Stop', x.s, `3 × ATR14 (${fmt(atr, 2)}% cada), além do aglomerado de stops do varejo`)}
+        ${row('Alvo 1', targets[0][0], targets[0][1])}
+        ${row('Alvo 2', targets[1][0], targets[1][1])}
+        ${row('Stop curto (evitar)', x.tight[0], `abaixo da barra diária: no histórico foi pego ${x.tight[1]}% das vezes`, 'avoid')}
+        </tbody></table></div>
+      <div class="sizer">
+        <h3>Tamanho da posição</h3>
+        <label for="banca">Banca (US$)<input id="banca" type="number" min="0" step="100" value="10000"></label>
+        <label for="risco">Risco por operação (% da banca)<input id="risco" type="number" min="0.1" max="5" step="0.1" value="1"></label>
+        <div class="out" id="sizeOut"></div>
+      </div>
+    </div>`;
+  const calc = () => {
+    const banca = +$('#banca').value || 0, r = (+$('#risco').value || 0) / 100;
+    const perda = banca * r, stopPct = risk / x.e, notional = perda / stopPct, lev = banca ? notional / banca : 0;
+    $('#sizeOut').innerHTML = `<div><span>Perda se bater o stop</span><b>US$ ${fmt(perda, 0)}</b></div>
+      <div><span>Tamanho da posição</span><b>US$ ${fmt(notional, 0)}</b></div>
+      <div><span>Quantidade</span><b>${fmt(notional / x.e, x.e > 1000 ? 4 : 2)} ${x.t}</b></div>
+      <div><span>Alavancagem necessária</span><b class="${lev > 5 ? 'neg' : ''}">${fmt(lev, 1)}x</b></div>
+      <div><span>Ganho no alvo 1</span><b class="pos">US$ ${fmt(perda * R(targets[0][0]), 0)}</b></div>`;
+  };
+  $('#banca').addEventListener('input', calc); $('#risco').addEventListener('input', calc); calc();
+}
+renderSwing();
+
+/* ---------- abas ---------- */
+const tabs = [...document.querySelectorAll('.tab')];
+function show(id) {
+  if (!document.getElementById('p-' + id)) id = 'resumo';
+  tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === id)));
+  document.querySelectorAll('.panel').forEach(p => { p.hidden = p.id !== 'p-' + id; });
+  try { localStorage.setItem('radar-tab', id); } catch (e) {}
+}
+tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab)));
+let start = location.hash.slice(1);
+if (!start) { try { start = localStorage.getItem('radar-tab') || 'resumo'; } catch (e) { start = 'resumo'; } }
+show(start);
+
+/* ---------- dados: injetados (painel.html local) ou buscados no site (com senha) ---------- */
+function aviso(msg) { $('#info').className = 'demo'; $('#info').textContent = msg; }
+function pedirSenha(erro) {
+  $('#info').className = 'demo';
+  $('#info').innerHTML = `<form id="fSenha" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+    <label for="senha">Senha do radar</label>
+    <input id="senha" type="password" autocomplete="current-password" style="font:inherit;padding:5px 8px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--fg)">
+    <button style="font:inherit;padding:5px 12px;border-radius:6px;border:0;background:var(--accent);color:var(--bg);cursor:pointer">Entrar</button>
+    <span>${erro}</span></form>`;
+  $('#fSenha').addEventListener('submit', e => {
+    e.preventDefault();
+    try { localStorage.setItem('radar-senha', $('#senha').value); } catch (err) {}
+    carregar($('#senha').value);
+  });
+  $('#senha').focus();
+}
+async function carregar(senhaDigitada) {
+  let senha = senhaDigitada || '';
+  if (!senha) { try { senha = localStorage.getItem('radar-senha') || ''; } catch (e) {} }
+  let r = null;
+  try { r = await fetch('api/dados', { headers: { 'x-senha': senha } }); } catch (e) {}
+  if (r && r.ok) {
+    const d = await r.json();
+    if (!d) return aviso('O banco ainda não tem dados: aguarde a primeira coleta.');
+    $('#info').className = 'info';
+    $('#info').textContent = 'Dados reais da Hyperliquid e da Coinbase. As abas marcadas como exemplo (swing trade e SOPR) ainda usam dados ilustrativos e ganham dados reais nas fases 3 e 4.';
+    return renderReal(d);
+  }
+  if (r && r.status === 401) return pedirSenha(senha ? 'Senha incorreta.' : '');
+  if (!r || r.status === 404) return aviso('Este é o modelo do painel, sem dados. Rode gerar_painel.py para gerar o painel.html com os dados reais.');
+  aviso(`Não consegui buscar os dados (erro ${r.status}). Tente de novo em alguns minutos.`);
+}
+if (INJETADO) renderReal(INJETADO); else carregar();
+</script>

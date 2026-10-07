@@ -1,0 +1,15 @@
+# Radar de Carteiras
+
+Rastreia carteiras da Hyperliquid, mede quais valem a pena copiar (com atraso de 1 h) e mostra
+stops, liquidações, suportes e resistências dos 6 ativos (BTC, ETH, SOL, XRP, HYPE, NEAR).
+
+- `coletor/` — Python. `coleta_hora.py` (a cada 2 h: posições, alertas, Diário, livro, ordens, painel)
+  e `ranking_diario.py` (1x por dia: trades novos → operações → cópia simulada → ranking).
+- `web/` — site na Vercel: `index.html` (painel) + `api/dados.js` (lê o painel do Supabase, pede senha).
+- `.github/workflows/` — agenda as duas coletas no GitHub Actions.
+
+Banco: Supabase (variável `DATABASE_URL`). Sem ela, o coletor usa SQLite local em `data/radar2.db`.
+
+Configuração:
+- GitHub → Settings → Secrets and variables → Actions: `DATABASE_URL`
+- Vercel (Root Directory `web`): `DATABASE_URL` e `PAINEL_SENHA`

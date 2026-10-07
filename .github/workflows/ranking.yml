@@ -1,0 +1,26 @@
+name: Ranking diário
+
+on:
+  schedule:
+    - cron: "23 6 * * *"   # 03:23 em Brasília
+  workflow_dispatch:
+
+concurrency:
+  group: radar
+  cancel-in-progress: false
+
+jobs:
+  ranking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: coletor/requirements.txt
+      - run: pip install -r coletor/requirements.txt
+      - run: python coletor/ranking_diario.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
