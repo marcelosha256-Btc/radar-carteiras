@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS sinais (
   endereco TEXT, moeda TEXT, lado TEXT,
   aberto_em BIGINT, preco_abertura DOUBLE PRECISION,
   fechado_em BIGINT, preco_fechamento DOUBLE PRECISION,
-  retorno DOUBLE PRECISION         -- sem alavancagem, já com taxa de entrada e saída
+  retorno DOUBLE PRECISION,        -- sem alavancagem, já com taxa de entrada e saída
+  stop DOUBLE PRECISION, alvo DOUBLE PRECISION, r DOUBLE PRECISION   -- só nos sinais de swing
 );
 CREATE TABLE IF NOT EXISTS fotos (
   endereco TEXT PRIMARY KEY,       -- última foto das posições da carteira
@@ -141,11 +142,17 @@ class Banco:
             esquema = ESQUEMA.replace("{ID}", "BIGSERIAL PRIMARY KEY")
             with self.con.cursor() as cur:
                 cur.execute(esquema)
+                for col in ("stop", "alvo", "r"):   # bancos criados antes da fase 4
+                    cur.execute(f"ALTER TABLE sinais ADD COLUMN IF NOT EXISTS {col} DOUBLE PRECISION")
         else:
             CAMINHO.parent.mkdir(parents=True, exist_ok=True)
             self.con = sqlite3.connect(CAMINHO, timeout=60)
             self.con.row_factory = sqlite3.Row
             self.con.executescript(ESQUEMA.replace("{ID}", "INTEGER PRIMARY KEY AUTOINCREMENT"))
+            cols = {r[1] for r in self.con.execute("PRAGMA table_info(sinais)")}
+            for col in ("stop", "alvo", "r"):
+                if col not in cols:
+                    self.con.execute(f"ALTER TABLE sinais ADD COLUMN {col} DOUBLE PRECISION")
         self.con.commit()
 
     def _q(self, sql):

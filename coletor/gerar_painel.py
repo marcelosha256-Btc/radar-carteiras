@@ -13,6 +13,7 @@ from pathlib import Path
 import analise as an
 import fase2
 import fase3
+import fase4
 from db import RAIZ, conectar
 from hl import Hyperliquid
 
@@ -97,13 +98,16 @@ def mercado(hl, consenso, con):
         c = ctx[t]
         px, ontem = float(c["markPx"]), float(c["prevDayPx"])
         d, d_por_que = diarias[t]
-        h, lo, hi, vol, amp = leitura_4h(hl.velas(t, "4h", agora - 90 * DIA, agora))
+        velas4 = hl.velas(t, "4h", agora - 90 * DIA, agora)
+        h, lo, hi, vol, amp = leitura_4h(velas4)
+        de_hoje = [v for v in velas4 if v["t"] >= agora // DIA * DIA] or velas4[-1:]
+        lo_hoje, hi_hoje = min(float(v["l"]) for v in de_hoje), max(float(v["h"]) for v in de_hoje)
         frase = FRASES[(d, h)]
         if vol is not None and vol < 10:
             frase += " Volume seco: espere o rompimento."
         cons = consenso.get(t, {"long": 0, "short": 0})
         out.append({"t": t, "px": px, "ch": (px / ontem - 1) * 100, "D": d, "D_por_que": d_por_que, "H": h,
-                    "lo": lo, "hi": hi, "vol": vol, "amp": amp,
+                    "lo": lo, "hi": hi, "vol": vol, "amp": amp, "lo_hoje": lo_hoje, "hi_hoje": hi_hoje,
                     "funding": float(c["funding"]) * 24 * 365 * 100,
                     "oi": float(c["openInterest"]) * px, "L": cons["long"], "S": cons["short"], "frase": frase})
     return out
@@ -176,6 +180,8 @@ def gerar(hl=None, con=None):
 
     ultima_foto = con.execute("SELECT MAX(tempo) FROM fotos").fetchone()[0]
     ativos = mercado(hl, consenso, con)
+    f2 = fase2.calcular(hl, con, ativos, consenso, agora)
+    reg = con.execute("SELECT COUNT(*) AS n, MIN(tempo) AS desde FROM regime").fetchone()
     dados = {
         "gerado": agora,
         "coleta": {"ultima_foto": ultima_foto, "ranking": rk["gerado"], "dias": rk["dias"],
@@ -185,7 +191,9 @@ def gerar(hl=None, con=None):
                    "confiaveis": sum(1 for r in rk["carteiras"] if r["confiavel"]),
                    "alertas_24h": n_alertas_24h, "ordens_em": con.kv_ler("ordens_em")},
         "ativos": ativos,
-        "fase2": fase2.calcular(hl, con, ativos, consenso, agora),
+        "fase2": f2,
+        "swing": fase4.painel(con, ativos, f2),
+        "regime_log": {"n": reg["n"], "desde": reg["desde"]},
         "sopr": fase3.obter(con),
         "carteiras": carteiras,
         "consenso": sorted(([m, v["long"], v["short"]] for m, v in consenso.items()),

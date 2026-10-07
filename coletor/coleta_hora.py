@@ -18,6 +18,7 @@ if sys.stdout is None:   # pythonw: sem console, tudo vai para o log
     sys.stdout = sys.stderr = open(DADOS / "hora.log", "a", encoding="utf-8", buffering=1)
 
 import fase2  # noqa: E402
+import fase4  # noqa: E402
 import gerar_painel  # noqa: E402
 import ranking_diario  # noqa: E402
 from analise import TAXA_TAKER  # noqa: E402
@@ -137,6 +138,8 @@ def coletar(con):
             "SELECT DISTINCT endereco FROM posicoes WHERE moeda IN ('BTC','ETH','SOL','XRP','HYPE','NEAR')")]
         log(f"ordens: {fase2.coletar_ordens(hl, con, alvo, agora)} de {len(alvo)} carteiras")
         con.kv_gravar("ordens_em", agora)
+    novos, fechados = fase4.registrar_e_acompanhar(hl, con, precos, agora)
+    log(f"swing: {novos} sinais novos no Diário · {fechados} fechados")
     log(f"painel: {gerar_painel.gerar(hl, con)}")
     con.kv_gravar("ultima_coleta", {"tempo": agora, "origem": "github" if NA_NUVEM else "pc"})
 
