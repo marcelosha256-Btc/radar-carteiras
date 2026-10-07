@@ -1,15 +1,15 @@
-// Devolve os dados do painel (gravados pela coleta no Supabase), só com a senha certa.
+// Devolve os dados do painel (gravados pela coleta no banco), só com a senha certa.
 import pg from 'pg';
 
 const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: (process.env.DATABASE_URL || '').trim(),
   max: 1,
   ssl: { rejectUnauthorized: false },
 });
 
 export default async function handler(req, res) {
-  const senha = process.env.PAINEL_SENHA;
-  if (!senha || req.headers['x-senha'] !== senha) {
+  const senha = (process.env.PAINEL_SENHA || '').trim();
+  if (!senha || (req.headers['x-senha'] || '').trim() !== senha) {
     res.status(401).json({ erro: 'senha' });
     return;
   }
