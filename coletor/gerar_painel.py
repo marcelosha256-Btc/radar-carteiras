@@ -75,15 +75,27 @@ FRASES = {
 }
 
 
-def mercado(hl, consenso):
+def tendencias_diarias(hl, con, agora):
+    """Tendência do diário muda uma vez por dia: guarda no banco e só recalcula na virada do dia."""
+    hoje = time.strftime("%Y-%m-%d", time.gmtime(agora / 1000))
+    salvo = con.kv_ler("tendencia_diaria")
+    if salvo and salvo.get("dia") == hoje:
+        return salvo["ativos"]
+    ativos = {t: list(tendencia_diaria(hl.velas(t, "1d", agora - 320 * DIA, agora))) for t in ATIVOS}
+    con.kv_gravar("tendencia_diaria", {"dia": hoje, "ativos": ativos})
+    return ativos
+
+
+def mercado(hl, consenso, con):
     meta, ctxs = hl.info({"type": "metaAndAssetCtxs"})
     ctx = {u["name"]: c for u, c in zip(meta["universe"], ctxs)}
     agora = int(time.time() * 1000)
     out = []
+    diarias = tendencias_diarias(hl, con, agora)
     for t in ATIVOS:
         c = ctx[t]
         px, ontem = float(c["markPx"]), float(c["prevDayPx"])
-        d, d_por_que = tendencia_diaria(hl.velas(t, "1d", agora - 320 * DIA, agora))
+        d, d_por_que = diarias[t]
         h, lo, hi, vol, amp = leitura_4h(hl.velas(t, "4h", agora - 90 * DIA, agora))
         frase = FRASES[(d, h)]
         if vol is not None and vol < 10:
@@ -162,7 +174,7 @@ def gerar(hl=None, con=None):
         sinais.append(s)
 
     ultima_foto = con.execute("SELECT MAX(tempo) FROM fotos").fetchone()[0]
-    ativos = mercado(hl, consenso)
+    ativos = mercado(hl, consenso, con)
     dados = {
         "gerado": agora,
         "coleta": {"ultima_foto": ultima_foto, "ranking": rk["gerado"], "dias": rk["dias"],

@@ -35,18 +35,19 @@ def coletar_ordens(hl, con, enderecos, agora):
             return end, None
     with ThreadPoolExecutor(4) as ex:
         resultados = list(ex.map(uma, enderecos))
-    n = 0
-    for end, ordens in resultados:
-        if ordens is None:
-            continue
-        con.execute("DELETE FROM ordens WHERE endereco=?", (end,))
-        linhas = []
+    lidas = [(end, ordens) for end, ordens in resultados if ordens is not None]
+    linhas = []
+    for end, ordens in lidas:
         for o in ordens:
             gat = bool(o.get("isTrigger"))
             preco = float(o["triggerPx"] if gat else o["limitPx"])
             linhas.append((end, o["coin"], o["oid"], o.get("orderType") or "Limit", o["side"], preco,
                            float(o["sz"]), int(gat), int(bool(o.get("reduceOnly"))), agora))
-        n += con.executemany("INSERT INTO ordens VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (endereco, oid) DO NOTHING", linhas)
+    ends = [e for e, _ in lidas]
+    for i in range(0, len(ends), 200):
+        lote = ends[i:i + 200]
+        con.execute(f"DELETE FROM ordens WHERE endereco IN ({','.join('?' * len(lote))})", lote)
+    n = con.executemany("INSERT INTO ordens VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (endereco, oid) DO NOTHING", linhas)
     con.commit()
     return n
 
@@ -108,6 +109,17 @@ def perfil_volume(hl, moeda, px, p, agora):
         faixas = [f for f in _faixas_entre(lo, hi, p) if abs(f / px - 1) <= ALCANCE]
         for f in faixas:
             acc[f] += usd / max(1, len(faixas))
+    return acc
+
+
+def perfil_volume_guardado(con, hl, moeda, px, p, agora):
+    """O perfil de 30 dias quase não muda entre coletas: recalcula a cada 6 h."""
+    chave = f"perfil_volume_{moeda}"
+    salvo = con.kv_ler(chave)
+    if salvo and agora - salvo["tempo"] < 6 * HORA and salvo["passo"] == p:
+        return {float(k): v for k, v in salvo["faixas"].items()}
+    acc = perfil_volume(hl, moeda, px, p, agora)
+    con.kv_gravar(chave, {"tempo": agora, "passo": p, "faixas": {str(k): v for k, v in acc.items()}})
     return acc
 
 
@@ -173,7 +185,7 @@ def zonas(con, hl, m, px, agora):
             n_baleias[f].add(r["endereco"])
         elif "Take Profit" in r["tipo"]:
             alvos[f] += r["preco"] * r["tamanho"]
-    volume = perfil_volume(hl, m, px, p, agora)
+    volume = perfil_volume_guardado(con, hl, m, px, p, agora)
     corte_vol = sorted(volume.values(), reverse=True)[max(0, len(volume) // 10)] if volume else math.inf
 
     # persistência: em quantas coletas das últimas 24 h a faixa tinha pelo menos metade do valor de agora

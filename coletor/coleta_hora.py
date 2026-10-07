@@ -65,54 +65,58 @@ def comparar(antes, depois):
     return ev
 
 
-def fechar_sinais(con, end, moeda, agora, preco):
-    n = 0
-    for s in con.execute("SELECT id, lado, preco_abertura FROM sinais WHERE origem='copia' AND endereco=? "
-                         "AND moeda=? AND fechado_em IS NULL", (end, moeda)).fetchall():
-        sinal = 1 if s["lado"] == "long" else -1
-        ret = sinal * (preco / s["preco_abertura"] - 1) - 2 * TAXA_TAKER if preco else None
-        con.execute("UPDATE sinais SET fechado_em=?, preco_fechamento=?, retorno=? WHERE id=?",
-                    (agora, preco, ret, s["id"]))
-        n += 1
-    return n
-
-
 def foto(hl, con, carteiras, agora, precos):
+    """Tira a foto das posições e compara com a anterior. Lê e grava o banco em lote:
+    na nuvem o banco fica longe (EUA → São Paulo) e cada ida e volta custa ~0,15 s."""
     def uma(end):
         try:
             return end, posicoes_agora(hl, end)
         except RuntimeError:
             return end, None
     with ThreadPoolExecutor(8) as ex:
-        fotos = list(ex.map(uma, carteiras))
+        fotos = [(e, d) for e, d in ex.map(uma, carteiras) if d is not None]
     fotografadas = {r["endereco"] for r in con.execute("SELECT endereco FROM fotos")}
-    n_alertas = n_abertos = n_fechados = 0
+    antes_todas = {}
+    for r in con.execute("SELECT * FROM posicoes"):
+        antes_todas.setdefault(r["endereco"], {})[r["moeda"]] = dict(r)
+    abertos = {}
+    for s in con.execute("SELECT id, endereco, moeda, lado, preco_abertura FROM sinais "
+                         "WHERE origem='copia' AND fechado_em IS NULL"):
+        abertos.setdefault((s["endereco"], s["moeda"]), []).append(dict(s))
+
+    alertas, novos_sinais, fechamentos, posicoes = [], [], [], []
     for end, depois in fotos:
-        if depois is None:
-            continue
-        antes = {r["moeda"]: dict(r) for r in con.execute("SELECT * FROM posicoes WHERE endereco=?", (end,))}
+        antes = antes_todas.get(end, {})
         confiavel = bool(carteiras[end].get("confiavel"))
         if end in fotografadas:   # sem foto anterior não há com o que comparar
             for moeda, evento, lado, t_antes, t_depois in comparar(antes, depois):
                 preco = precos.get(moeda)
                 alav = (depois.get(moeda) or antes.get(moeda) or {}).get("alavancagem")
-                con.execute("INSERT INTO alertas VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
-                            (agora, end, moeda, evento, lado, t_antes, t_depois, preco, alav, int(confiavel)))
-                n_alertas += 1
+                alertas.append((agora, end, moeda, evento, lado, t_antes, t_depois, preco, alav, int(confiavel)))
                 if evento in ("fechou", "virou"):
-                    n_fechados += fechar_sinais(con, end, moeda, agora, preco)
+                    for s in abertos.pop((end, moeda), []):
+                        sinal = 1 if s["lado"] == "long" else -1
+                        ret = sinal * (preco / s["preco_abertura"] - 1) - 2 * TAXA_TAKER if preco else None
+                        fechamentos.append((agora, preco, ret, s["id"]))
                 if evento in ("abriu", "virou") and confiavel and preco:
-                    con.execute("INSERT INTO sinais (origem, endereco, moeda, lado, aberto_em, preco_abertura) "
-                                "VALUES ('copia',?,?,?,?,?)", (end, moeda, lado, agora, preco))
-                    n_abertos += 1
-        con.execute("DELETE FROM posicoes WHERE endereco=?", (end,))
-        con.executemany("INSERT INTO posicoes VALUES (?,?,?,?,?,?,?,?,?)", [
-            (end, m, p["lado"], p["tamanho"], p["preco_entrada"], p["alavancagem"], p["pnl_aberto"],
-             p["preco_liquidacao"], agora) for m, p in depois.items()])
-        con.execute("INSERT INTO fotos VALUES (?,?) ON CONFLICT (endereco) DO UPDATE SET tempo=excluded.tempo",
-                    (end, agora))
+                    novos_sinais.append((end, moeda, lado, agora, preco))
+        posicoes += [(end, m, p["lado"], p["tamanho"], p["preco_entrada"], p["alavancagem"], p["pnl_aberto"],
+                      p["preco_liquidacao"], agora) for m, p in depois.items()]
+
+    ends = [e for e, _ in fotos]
+    for i in range(0, len(ends), 200):
+        lote = ends[i:i + 200]
+        con.execute(f"DELETE FROM posicoes WHERE endereco IN ({','.join('?' * len(lote))})", lote)
+    con.executemany("INSERT INTO posicoes VALUES (?,?,?,?,?,?,?,?,?)", posicoes)
+    con.executemany("INSERT INTO alertas VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", alertas)
+    con.executemany("UPDATE sinais SET fechado_em=?, preco_fechamento=?, retorno=? WHERE id=?", fechamentos)
+    con.executemany("INSERT INTO sinais (origem, endereco, moeda, lado, aberto_em, preco_abertura) "
+                    "VALUES ('copia',?,?,?,?,?)", novos_sinais)
+    con.executemany("INSERT INTO fotos VALUES (?,?) ON CONFLICT (endereco) DO UPDATE SET tempo=excluded.tempo",
+                    [(e, agora) for e in ends])
     con.commit()
-    log(f"foto: {len(carteiras)} carteiras · {n_alertas} alertas · {n_abertos} cópias abertas · {n_fechados} fechadas")
+    log(f"foto: {len(fotos)} carteiras · {len(alertas)} alertas · {len(novos_sinais)} cópias abertas · "
+        f"{len(fechamentos)} fechadas")
 
 
 def coletar(con):
