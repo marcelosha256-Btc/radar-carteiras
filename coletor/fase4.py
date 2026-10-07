@@ -339,8 +339,10 @@ def base_do_dia(hl, con, precos):
 # ---------- Diário: registra e acompanha os sinais dos setups que passam ----------
 
 def registrar_e_acompanhar(hl, con, precos, agora):
+    """Registra no Diário os setups aprovados que dispararam e fecha os que bateram
+    stop, alvo ou tempo. Devolve (novos, fechados) como listas, para os avisos."""
     base = base_do_dia(hl, con, precos)
-    novos = 0
+    novos = []
     for m, a in base["ativos"].items():
         for s in a.get("setups", []):
             if not (s["passa"] and s["ativo_ontem"]):
@@ -353,12 +355,13 @@ def registrar_e_acompanhar(hl, con, precos, agora):
                 continue
             risco = STOP_ATR * a["contexto"]["atr"]
             long = s["lado"] == "long"
+            stop = px - risco if long else px + risco
+            alvo = px + ALVO_R * risco if long else px - ALVO_R * risco
             con.execute("INSERT INTO sinais (origem, endereco, moeda, lado, aberto_em, preco_abertura, stop, alvo) "
-                        "VALUES (?,?,?,?,?,?,?,?)", (s["id"], chave, m, s["lado"], agora, px,
-                                                     px - risco if long else px + risco,
-                                                     px + ALVO_R * risco if long else px - ALVO_R * risco))
-            novos += 1
-    fechados = 0
+                        "VALUES (?,?,?,?,?,?,?,?)", (s["id"], chave, m, s["lado"], agora, px, stop, alvo))
+            novos.append({"moeda": m, "lado": s["lado"], "nome": s["nome"], "entrada": px, "stop": stop, "alvo": alvo,
+                          "n": s["n"], "acerto": s["acerto"], "mediana": s["mediana"], "media_fora": s["media_fora"]})
+    fechados = []
     for s in con.execute("SELECT * FROM sinais WHERE origem<>'copia' AND fechado_em IS NULL").fetchall():
         long = s["lado"] == "long"
         risco = abs(s["preco_abertura"] - s["stop"])
@@ -380,7 +383,9 @@ def registrar_e_acompanhar(hl, con, precos, agora):
         ret = sinal * (saida / s["preco_abertura"] - 1) - CUSTO
         con.execute("UPDATE sinais SET fechado_em=?, preco_fechamento=?, retorno=?, r=? WHERE id=?",
                     (agora, saida, ret, r, s["id"]))
-        fechados += 1
+        motivo = "alvo" if saida == s["alvo"] else "stop" if saida == s["stop"] else "tempo (20 dias)"
+        fechados.append({"moeda": s["moeda"], "lado": s["lado"], "origem": s["origem"], "entrada": s["preco_abertura"],
+                         "saida": saida, "r": r, "retorno": ret, "motivo": motivo})
     con.commit()
     return novos, fechados
 

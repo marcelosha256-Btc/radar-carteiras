@@ -9,6 +9,10 @@ concurrency:
   group: radar
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  issues: write   # avisos por e-mail: o radar abre uma issue mencionando o dono
+
 jobs:
   coleta:
     runs-on: ubuntu-latest
@@ -24,3 +28,4 @@ jobs:
       - run: python coletor/coleta_hora.py
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

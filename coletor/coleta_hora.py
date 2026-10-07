@@ -19,6 +19,7 @@ if sys.stdout is None:   # pythonw: sem console, tudo vai para o log
 
 import fase2  # noqa: E402
 import fase4  # noqa: E402
+from avisos import avisar  # noqa: E402
 import gerar_painel  # noqa: E402
 import ranking_diario  # noqa: E402
 from analise import TAXA_TAKER  # noqa: E402
@@ -120,6 +121,34 @@ def foto(hl, con, carteiras, agora, precos):
         f"{len(fechamentos)} fechadas")
 
 
+def _px(v):
+    return f"{v:,.0f}".replace(",", ".") if v >= 1000 else f"{v:.4g}".replace(".", ",")
+
+
+def avisar_swing(novos, fechados):
+    pct = lambda v: "—" if v is None else f"{v * 100:.0f}%"
+    rr = lambda v: "—" if v is None else f"{v:+.2f}R".replace(".", ",")
+    for s in novos:
+        corpo = chr(10).join([
+            f"O setup **{s['nome']}** disparou no fechamento diário de **{s['moeda']}** e foi registrado no Diário.",
+            "",
+            "| | Preço |",
+            "|---|---|",
+            f"| Entrada (preço agora) | {_px(s['entrada'])} |",
+            f"| Stop (3 ATR) | {_px(s['stop'])} |",
+            f"| Alvo (1,5R) | {_px(s['alvo'])} |",
+            "",
+            f"No histórico: {s['n']} operações, acerto {pct(s['acerto'])}, mediana {rr(s['mediana'])}, "
+            f"fora da amostra {rr(s['media_fora'])}. Isto não é recomendação: o Diário existe para medir "
+            "se o setup funciona daqui para a frente.",
+        ])
+        avisar(f"Sinal de swing: {s['moeda']} {s['lado'].upper()} · {s['nome']}", corpo, rotulo="sinal")
+    for s in fechados:
+        avisar(f"Sinal encerrado: {s['moeda']} {s['lado'].upper()} por {s['motivo']} ({rr(s['r'])})",
+               f"Entrada {_px(s['entrada'])} · saída {_px(s['saida'])} · resultado {rr(s['r'])} "
+               f"({s['retorno'] * 100:+.1f}%".replace(".", ",") + " sem alavancagem, com custos).", rotulo="sinal")
+
+
 def coletar(con):
     hl = Hyperliquid()
     rk = con.kv_ler("ranking")
@@ -139,7 +168,8 @@ def coletar(con):
         log(f"ordens: {fase2.coletar_ordens(hl, con, alvo, agora)} de {len(alvo)} carteiras")
         con.kv_gravar("ordens_em", agora)
     novos, fechados = fase4.registrar_e_acompanhar(hl, con, precos, agora)
-    log(f"swing: {novos} sinais novos no Diário · {fechados} fechados")
+    log(f"swing: {len(novos)} sinais novos no Diário · {len(fechados)} fechados")
+    avisar_swing(novos, fechados)
     log(f"painel: {gerar_painel.gerar(hl, con)}")
     con.kv_gravar("ultima_coleta", {"tempo": agora, "origem": "github" if NA_NUVEM else "pc"})
 

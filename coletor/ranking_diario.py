@@ -14,6 +14,7 @@ from collections import defaultdict
 
 import analise as an
 from db import RAIZ, conectar
+from avisos import avisar
 from hl import Hyperliquid
 
 ARQUIVO_RANKING = RAIZ / "data" / "ranking.json"
@@ -210,8 +211,21 @@ def limpar(con):
     con.commit()
 
 
+def vigiar_coleta(con):
+    """Se a coleta de 2 em 2 h parou sem dar erro (agendamento desligado, por exemplo), avisa."""
+    u = con.kv_ler("ultima_coleta")
+    if not u:
+        return
+    horas = (agora_ms() - u["tempo"]) / 3_600_000
+    if horas > 6:
+        avisar(f"Coleta parada há {horas:.0f} h",
+               f"A última coleta do radar foi em {time.strftime('%d/%m %H:%M', time.gmtime(u['tempo'] / 1000))} UTC "
+               f"(origem: {u.get('origem')}). Confira a aba Actions do repositório.", rotulo="problema")
+
+
 def executar(amostra=600, dias=90, atraso_min=60, so_analise=False):
     con = conectar()
+    vigiar_coleta(con)
     hl = Hyperliquid()
     anterior = con.kv_ler("ranking") or {"carteiras": []}
     if not so_analise:
