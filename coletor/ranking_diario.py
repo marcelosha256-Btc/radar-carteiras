@@ -131,7 +131,15 @@ def coletar_velas(hl, con, ops_por, dias, confiaveis):
     moedas += sorted(extras - set(moedas))
     inicio = agora_ms() - (dias + 3) * DIA
     for m in moedas:
-        ult = con.execute("SELECT MAX(t) FROM velas WHERE moeda=?", (m,)).fetchone()[0]
+        r = con.execute("SELECT MIN(t) AS pri, MAX(t) AS ult FROM velas WHERE moeda=?", (m,)).fetchone()
+        pri, ult = r["pri"], r["ult"]
+        if pri is None or pri > inicio + 2 * 3_600_000:
+            # a API só guarda as 5 mil velas mais recentes: 15 min cobre ~52 dias, 1 h cobre ~208.
+            # O período mais antigo fica com velas de 1 h.
+            limite = pri or agora_ms()
+            antigas = [v for v in hl.velas(m, "1h", inicio, limite) if v["t"] + 3_600_000 <= limite]
+            con.executemany("INSERT INTO velas VALUES (?,?,?,?) ON CONFLICT (moeda, t) DO NOTHING",
+                            [(m, v["t"], float(v["o"]), float(v["c"])) for v in antigas])
         velas = hl.velas(m, "15m", max(inicio, (ult or 0) + 1), agora_ms())
         con.executemany("INSERT INTO velas VALUES (?,?,?,?) ON CONFLICT (moeda, t) DO UPDATE SET "
                         "abertura=excluded.abertura, fechamento=excluded.fechamento",

@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS livro (
   PRIMARY KEY (tempo, moeda, fonte, preco, lado)
 );
 CREATE TABLE IF NOT EXISTS regime (
-  tempo BIGINT, moeda TEXT, alta DOUBLE PRECISION, lateral DOUBLE PRECISION, baixa DOUBLE PRECISION,
+  tempo BIGINT, moeda TEXT, p_alta DOUBLE PRECISION, p_lateral DOUBLE PRECISION, p_baixa DOUBLE PRECISION,
   preco DOUBLE PRECISION, fatores TEXT,
   PRIMARY KEY (tempo, moeda)
 );
@@ -104,9 +104,21 @@ def _fabrica_linha(cursor):
     return lambda valores: Linha(zip(nomes, valores))
 
 
+def url_do_ambiente():
+    """DATABASE_URL do ambiente (GitHub Actions) ou do arquivo .env na raiz (PC)."""
+    if os.environ.get("DATABASE_URL"):
+        return os.environ["DATABASE_URL"]
+    env = RAIZ / ".env"
+    if env.exists():
+        for linha in env.read_text(encoding="utf-8").splitlines():
+            if linha.strip().startswith("DATABASE_URL="):
+                return linha.split("=", 1)[1].strip().strip('"').strip("'")
+    return None
+
+
 class Banco:
     def __init__(self, url=None):
-        url = url if url is not None else os.environ.get("DATABASE_URL")
+        url = url if url is not None else url_do_ambiente()
         self.pg = bool(url)
         if self.pg:
             import psycopg

@@ -7,6 +7,7 @@ from collections import defaultdict
 EPS = 1e-9
 TAXA_TAKER = 0.00045      # quem copia entra e sai a mercado
 VELA_MS = 15 * 60 * 1000
+VELA_1H_MS = 60 * 60 * 1000
 
 
 def eh_perp(moeda):
@@ -102,15 +103,19 @@ class Precos:
         self.t = {m: [x[0] for x in vs] for m, vs in velas_por_moeda.items()}
 
     def em(self, moeda, t):
-        """Preço aproximado no instante t: interpola dentro da vela de 15 min."""
+        """Preço aproximado no instante t: interpola dentro da vela. As velas são de
+        15 min nos últimos ~52 dias e de 1 h antes disso (a API só guarda 5 mil de cada)."""
         ts = self.t.get(moeda)
         if not ts:
             return None
         i = bisect.bisect_right(ts, t) - 1
-        if i < 0 or t - ts[i] >= VELA_MS:
+        if i < 0:
+            return None
+        dur = min(ts[i + 1] - ts[i], VELA_1H_MS) if i + 1 < len(ts) else VELA_MS
+        if t - ts[i] >= dur:
             return None
         _, a, c = self.v[moeda][i]
-        return a + (c - a) * (t - ts[i]) / VELA_MS
+        return a + (c - a) * (t - ts[i]) / dur
 
 
 def retorno_copiando(op, precos, atraso_ms):
