@@ -117,9 +117,19 @@ def url_do_ambiente():
     return None
 
 
+def limpar_url(url):
+    """Aceita a string colada com sobras (prefixo DATABASE_URL=, aspas, outras linhas do .env)."""
+    if not url or not url.strip():
+        return None
+    url = url.split()[0].strip().strip('"').strip("'")
+    if url.startswith("DATABASE_URL="):
+        url = url.split("=", 1)[1].strip('"').strip("'")
+    return url
+
+
 class Banco:
     def __init__(self, url=None):
-        url = url if url is not None else url_do_ambiente()
+        url = limpar_url(url if url is not None else url_do_ambiente())
         self.pg = bool(url)
         if self.pg:
             libs = RAIZ / "libs"   # no PC o psycopg fica instalado na pasta do projeto
