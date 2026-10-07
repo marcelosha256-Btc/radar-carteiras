@@ -12,6 +12,7 @@ from pathlib import Path
 
 import analise as an
 import fase2
+import fase3
 from db import RAIZ, conectar
 from hl import Hyperliquid
 
@@ -185,6 +186,7 @@ def gerar(hl=None, con=None):
                    "alertas_24h": n_alertas_24h, "ordens_em": con.kv_ler("ordens_em")},
         "ativos": ativos,
         "fase2": fase2.calcular(hl, con, ativos, consenso, agora),
+        "sopr": fase3.obter(con),
         "carteiras": carteiras,
         "consenso": sorted(([m, v["long"], v["short"]] for m, v in consenso.items()),
                            key=lambda x: -(x[1] + x[2]))[:10],
