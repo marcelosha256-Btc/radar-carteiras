@@ -6,6 +6,7 @@ bancos entendem; aqui só se troca o marcador para o Postgres.
 import json
 import os
 import sqlite3
+import sys
 import time
 from pathlib import Path
 
@@ -121,6 +122,9 @@ class Banco:
         url = url if url is not None else url_do_ambiente()
         self.pg = bool(url)
         if self.pg:
+            libs = RAIZ / "libs"   # no PC o psycopg fica instalado na pasta do projeto
+            if libs.exists() and str(libs) not in sys.path:
+                sys.path.insert(0, str(libs))
             import psycopg
             # prepare_threshold=None: o pooler do Supabase (pgbouncer) não aceita prepared statements
             self.con = psycopg.connect(url, prepare_threshold=None, connect_timeout=30)

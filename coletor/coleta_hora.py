@@ -146,7 +146,7 @@ def main():
     try:
         coletar(conectar())
     except Exception:
-        log("ERRO\n" + traceback.format_exc())
+        log("ERRO\n" + traceback.format_exc() + f"python: {sys.executable}\nsys.path: {sys.path}")
         if NA_NUVEM:
             raise
     finally:
