@@ -134,6 +134,7 @@ def coletar(con):
         log(f"ordens: {fase2.coletar_ordens(hl, con, alvo, agora)} de {len(alvo)} carteiras")
         con.kv_gravar("ordens_em", agora)
     log(f"painel: {gerar_painel.gerar(hl, con)}")
+    con.kv_gravar("ultima_coleta", {"tempo": agora, "origem": "github" if NA_NUVEM else "pc"})
 
 
 def main():
