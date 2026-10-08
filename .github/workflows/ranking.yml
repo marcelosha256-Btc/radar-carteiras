@@ -1,4 +1,4 @@
-name: Ranking diário
+name: Ranking diário (reserva)
 
 on:
   schedule:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: radar
+  group: radar-ranking
   cancel-in-progress: false
 
 permissions:

@@ -1,24 +1,25 @@
-name: Coleta (de hora em hora)
+name: Coleta (laço contínuo)
 
+# Uma execução roda a coleta de hora em hora por ~5h30 e dispara a próxima (coletor/laco_nuvem.py).
+# O agendamento abaixo é só rede de segurança: se a corrente parar, ele a reinicia.
 on:
   schedule:
-    # o GitHub atrasa e pula agendamentos; de hora em hora sobram coletas mesmo assim.
-    # quem chega menos de 50 min depois de uma coleta só registra e sai
-    - cron: "7 * * * *"
+    - cron: "7 */3 * * *"
   workflow_dispatch:
 
 concurrency:
-  group: radar
+  group: radar-coleta
   cancel-in-progress: false
 
 permissions:
   contents: read
-  issues: write   # avisos por e-mail: o radar abre uma issue mencionando o dono
+  issues: write    # avisos por e-mail: o radar abre uma issue mencionando o dono
+  actions: write   # para disparar a próxima execução do laço
 
 jobs:
   coleta:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,7 +28,7 @@ jobs:
           cache: pip
           cache-dependency-path: coletor/requirements.txt
       - run: pip install -r coletor/requirements.txt
-      - run: python coletor/coleta_hora.py
+      - run: python coletor/laco_nuvem.py
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

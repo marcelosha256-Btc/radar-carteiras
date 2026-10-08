@@ -260,9 +260,14 @@ def main():
     ap.add_argument("--dias", type=int, default=90)
     ap.add_argument("--atraso-min", type=int, default=60)
     ap.add_argument("--so-analise", action="store_true")
+    ap.add_argument("--se-velho", type=float, default=None,
+                    help="só refaz se o ranking atual tiver mais de N horas (usado pelo laço da nuvem)")
     a = ap.parse_args()
     con = conectar()
     rk = con.kv_ler("ranking")
+    if a.se_velho is not None and rk and agora_ms() - rk["gerado"] < a.se_velho * 3_600_000:
+        vigiar_coleta(con)
+        return
     # o workflow tem dois horários porque o GitHub às vezes pula um; o segundo só trabalha se o primeiro faltou
     if os.environ.get("GITHUB_ACTIONS") and not a.so_analise and rk and agora_ms() - rk["gerado"] < 20 * 3_600_000:
         log("ranking de hoje já existe; só confiro a coleta")
