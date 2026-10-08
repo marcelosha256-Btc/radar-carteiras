@@ -15,6 +15,7 @@ from collections import defaultdict
 
 import analise as an
 import contexto
+import varejo
 from db import RAIZ, conectar
 from avisos import avisar
 from hl import Hyperliquid
@@ -68,6 +69,7 @@ def descobrir(hl, con, amostra):
     con.commit()
     formadores = contexto.escolher_formadores(linhas)
     con.kv_gravar("formadores", formadores)
+    log(f"amostra de varejo: {varejo.escolher(con, linhas)} contas pequenas")
     log(f"leaderboard: {len(linhas)} carteiras, {len(cands)} passam no filtro, {len(escolhidas)} escolhidas, "
         f"{len(formadores)} formadores de mercado acompanhados")
     return list(escolhidas)

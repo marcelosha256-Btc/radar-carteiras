@@ -418,10 +418,11 @@ const TL = { up: 'ALTA', flat: 'LATERAL', down: 'BAIXA' };
 const sinalCls = v => v == null ? 'muted' : v >= 0 ? 'pos' : 'neg';
 
 function renderReal(DADOS) {
+  setTimeout(() => atualizarAoVivo(true), 0);
   const C = DADOS.coleta;
   const velho = (ms, h) => Date.now() - ms > h * 3600000;
   $('#sub').textContent = `Hyperliquid · ${fmt(C.rastreadas)} carteiras rastreadas · BTC, ETH, SOL, XRP, HYPE, NEAR`;
-  $('#fresh').innerHTML = [['Painel', DADOS.gerado, 2], ['Posições', C.ultima_foto, 2], ['Ranking', C.ranking, 30]]
+  $('#fresh').innerHTML = '<span class="chip" id="aoVivo"><span class="dot"></span>preço ao vivo: conectando…</span>' + [['Painel', DADOS.gerado, 2], ['Posições', C.ultima_foto, 2], ['Ranking', C.ranking, 30]]
     .map(([n, ms, h]) => `<span class="chip ${velho(ms, h) ? 'stale' : ''}"><span class="dot"></span>${n} ${quando(ms)} · ${ha(ms)}</span>`).join('');
 
   /* ---------- Resumo ---------- */
@@ -451,7 +452,7 @@ function renderReal(DADOS) {
     const vol = a.vol == null ? '' : `<span class="chip ${a.vol < 10 ? 'acc' : ''}">volume 4h no ${a.vol}º percentil${a.vol < 10 ? ' · mercado parado' : ''}</span>`;
     return `<article class="asset">
       <div class="name"><span class="tick"><span class="sw" style="background:var(${CORES[a.t]})"></span>${a.t}</span>
-        <span class="px">${fmtPx(a.px)} <span class="${a.ch >= 0 ? 'pos' : 'neg'}">${a.ch >= 0 ? '+' : ''}${fmt(a.ch, 1)}%</span></span></div>
+        <span class="px" data-vivo="${a.t}" data-ontem="${a.px / (1 + a.ch / 100)}">${fmtPx(a.px)} <span class="${a.ch >= 0 ? 'pos' : 'neg'}">${a.ch >= 0 ? '+' : ''}${fmt(a.ch, 1)}%</span></span></div>
       <div class="trend"><div class="t ${a.D}" title="${a.D_por_que}"><b>${TL[a.D]}</b><span>diário</span></div><div class="t ${a.H}"><b>${TL[a.H]}</b><span>4h</span></div></div>
       <div class="read">
         <p class="line1">${a.frase}</p>
@@ -666,14 +667,17 @@ function renderReal(DADOS) {
     selLiq = t;
     botoes($('#liqAssets'), t, renderLiq);
     const L = F2[t].liquidez, a = ativoPor[t], px = a.px, p = L.passo;
-    $('#liqMeta').textContent = `preço ${fmtPx(px)} · faixas de ${fmt(p, p >= 1 ? 0 : casas(p))} · ordens lidas ${C.ordens_em ? ha(C.ordens_em) : '—'}`;
+    const AM = F2._amostra || {};
+    $('#liqMeta').innerHTML = `foto de ${quando(AM.tempo || DADOS.gerado)} com preço ${fmtPx(px)} <span id="liqVivo"></span> · faixas de ${fmt(p, p >= 1 ? 0 : casas(p))}<br>amostra das últimas 24 h: ${fmt(AM.ranking || 0)} carteiras do ranking + ${fmt(AM.varejo_24h || 0)} de varejo (de ${fmt(AM.varejo_total || 0)} sorteadas, lidas em rodízio de ~600 por hora)`;
+    liqAtual = { t, px };
+    atualizarAoVivo();
     const dist = v => v == null ? '' : ` (${pctTxt((v + p / 2) / px - 1, 1)})`;
     const tot = L.acima + L.abaixo;
     $('#liqKpis').innerHTML =
       kpi('Acima · compra forçada', usd(L.acima), L.ima_acima != null ? `ímã mais próximo ${faixaTxt(L.ima_acima, p)}${dist(L.ima_acima)}` : 'nenhum aglomerado até +5%', 'pos') +
       kpi('Abaixo · venda forçada', usd(L.abaixo), L.ima_abaixo != null ? `ímã mais próximo ${faixaTxt(L.ima_abaixo, p)}${dist(L.ima_abaixo)}` : 'nenhum aglomerado até −5%', 'neg') +
       kpi('Lado mais carregado', tot ? (L.abaixo > L.acima ? 'Abaixo ↓' : 'Acima ↑') : '—', tot ? `${fmt(L.acima / tot * 100)}% acima · ${fmt(L.abaixo / tot * 100)}% abaixo` : 'sem dados') +
-      kpi('Cobertura da amostra', L.cobertura == null ? '—' : fmt(L.cobertura * 100, 1) + '%', `${L.carteiras} carteiras em ${t} · ${L.com_stop} com stop · OI ${usd(a.oi)}`);
+      kpi('Cobertura da amostra', L.cobertura == null ? '—' : fmt(L.cobertura * 100, 1) + '%', `${fmt(L.carteiras)} carteiras em ${t} (${fmt(L.longs || 0)} long / ${fmt(L.shorts || 0)} short) · ${fmt(L.com_stop)} com stop · OI ${usd(a.oi)}`);
     $('#liqTitulo').textContent = `${t} · stops e liquidações por faixa de preço`;
 
     const s = $('#liq'); s.innerHTML = '';
@@ -709,7 +713,7 @@ function renderReal(DADOS) {
     const iPx = linhas.findIndex(l => l <= px);
     const py = y0 + iPx * rh + rh * (1 - (px - linhas[iPx]) / p);
     svgEl('line', { x1: x0, x2: x1, y1: py, y2: py, stroke: 'var(--fg)', 'stroke-dasharray': '6 4', 'stroke-width': 1.2 }, s);
-    svgEl('text', { x: x1, y: py - 4, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--fg);font-weight:500' }, s, 'agora ' + fmtPx(px));
+    svgEl('text', { x: x1, y: py - 4, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--fg);font-weight:500' }, s, 'na foto ' + fmtPx(px));
   }
 
   function renderSR(t) {
@@ -928,5 +932,36 @@ async function carregar(senhaDigitada) {
   if (!r || r.status === 404) return aviso('Este é o modelo do painel, sem dados. Rode gerar_painel.py para gerar o painel.html com os dados reais.');
   aviso(`Não consegui buscar os dados (erro ${r.status}). Tente de novo em alguns minutos.`);
 }
+/* ---------- preço ao vivo, a cada 30 s, direto da Hyperliquid ---------- */
+let liqAtual = null, ultimosMids = null;
+async function atualizarAoVivo(buscar) {
+  if (buscar || !ultimosMids) {
+    try {
+      const r = await fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"type":"allMids"}' });
+      if (!r.ok) throw new Error(r.status);
+      ultimosMids = await r.json();
+      const chip = document.getElementById('aoVivo');
+      if (chip) chip.innerHTML = `<span class="dot"></span>preço ao vivo ${new Date().toLocaleTimeString('pt-BR')} · a cada 30 s`;
+    } catch (e) {
+      const chip = document.getElementById('aoVivo');
+      if (chip) { chip.classList.add('stale'); chip.innerHTML = '<span class="dot"></span>preço ao vivo indisponível'; }
+      return;
+    }
+  }
+  document.querySelectorAll('[data-vivo]').forEach(el => {
+    const v = +ultimosMids[el.dataset.vivo], ontem = +el.dataset.ontem;
+    if (!v) return;
+    const ch = (v / ontem - 1) * 100;
+    el.innerHTML = `${fmtPx(v)} <span class="${ch >= 0 ? 'pos' : 'neg'}">${ch >= 0 ? '+' : ''}${fmt(ch, 1)}%</span>`;
+  });
+  const lv = document.getElementById('liqVivo');
+  if (lv && liqAtual && ultimosMids[liqAtual.t]) {
+    const v = +ultimosMids[liqAtual.t], d = v / liqAtual.px - 1;
+    lv.innerHTML = `· <b>agora ${fmtPx(v)}</b> (${d >= 0 ? '+' : ''}${fmt(d * 100, 1)}% desde a foto)`;
+  }
+}
+setInterval(() => { if (!document.hidden) atualizarAoVivo(true); }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarAoVivo(true); });
+
 if (INJETADO) renderReal(INJETADO); else carregar();
 </script>

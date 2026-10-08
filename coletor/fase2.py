@@ -132,18 +132,27 @@ def _faixas_entre(lo, hi, p):
 
 # ---------- cálculo ----------
 
-def mapa_liquidez(con, m, px, oi_usd):
+def mapa_liquidez(con, m, px, oi_usd, agora):
+    """Stops e liquidações das carteiras do ranking + amostra de varejo lida nas últimas 24 h.
+    Uma carteira que está nas duas conta uma vez (vale a leitura do ranking, mais recente)."""
     p = passo(px)
     b = defaultdict(lambda: {"stop_long": 0.0, "liq_long": 0.0, "stop_short": 0.0, "liq_short": 0.0})
-    carteiras, notional = set(), 0.0
-    for r in con.execute("SELECT * FROM posicoes WHERE moeda=?", (m,)):
-        carteiras.add(r["endereco"])
+    posicoes = {r["endereco"]: dict(r) for r in con.execute(
+        "SELECT * FROM varejo_posicoes WHERE moeda=? AND coletado>=?", (m, agora - 24 * HORA))}
+    posicoes.update({r["endereco"]: dict(r) for r in con.execute("SELECT * FROM posicoes WHERE moeda=?", (m,))})
+    notional, longs = 0.0, 0
+    for end, r in posicoes.items():
         notional += r["tamanho"] * px
+        longs += r["lado"] == "long"
         liq = r["preco_liquidacao"]
         if liq and abs(liq / px - 1) <= ALCANCE:
             b[faixa(liq, p)]["liq_long" if r["lado"] == "long" else "liq_short"] += r["tamanho"] * liq
+    ordens = {(r["endereco"], r["oid"]): dict(r) for r in con.execute(
+        "SELECT * FROM varejo_ordens WHERE moeda=? AND gatilho=1 AND coletado>=?", (m, agora - 36 * HORA))}
+    ordens.update({(r["endereco"], r["oid"]): dict(r) for r in con.execute(
+        "SELECT * FROM ordens WHERE moeda=? AND gatilho=1", (m,))})
     com_stop = set()
-    for r in con.execute("SELECT * FROM ordens WHERE moeda=? AND gatilho=1", (m,)):
+    for r in ordens.values():
         if "Stop" not in r["tipo"] or abs(r["preco"] / px - 1) > ALCANCE:
             continue
         com_stop.add(r["endereco"])
@@ -161,8 +170,8 @@ def mapa_liquidez(con, m, px, oi_usd):
         return max(cand, key=chave)["preco"] if cand else None
 
     return {"passo": p, "faixas": faixas, "acima": acima, "abaixo": abaixo, "ima_acima": ima("acima"),
-            "ima_abaixo": ima("abaixo"), "carteiras": len(carteiras), "com_stop": len(com_stop),
-            "cobertura": notional / oi_usd if oi_usd else None}
+            "ima_abaixo": ima("abaixo"), "carteiras": len(posicoes), "longs": longs, "shorts": len(posicoes) - longs,
+            "com_stop": len(com_stop), "cobertura": notional / oi_usd if oi_usd else None}
 
 
 def zonas(con, hl, m, px, agora):
@@ -277,10 +286,14 @@ def calcular(hl, con, ativos, consenso, agora):
         reg = placar_regime(a, z, fluxo[m], consenso.get(m, {}))
         regs.append((agora, m, reg["alta"], reg["lateral"], reg["baixa"], px,
                      ";".join(f"{n}={v:.3f}" for n, _, v in reg["fatores"])))
-        saida[m] = {"liquidez": mapa_liquidez(con, m, px, a["oi"]), "sr": z, "regime": reg,
+        saida[m] = {"liquidez": mapa_liquidez(con, m, px, a["oi"], agora), "sr": z, "regime": reg,
                     "fluxo7": fluxo[m], "faixa": [a["lo"], a["hi"]], "amp": a.get("amp")}
     con.executemany("INSERT INTO regime VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", regs)
     con.commit()
+    lidas = con.execute("SELECT COUNT(*) FROM varejo_lido WHERE posicoes_em>=?", (agora - 24 * HORA,)).fetchone()[0]
+    saida["_amostra"] = {"varejo_24h": lidas, "ranking": con.execute("SELECT COUNT(*) FROM fotos").fetchone()[0],
+                         "varejo_total": con.execute("SELECT COUNT(*) FROM varejo_lido WHERE ativo=1").fetchone()[0],
+                         "tempo": agora}
     return saida
 
 

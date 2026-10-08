@@ -100,6 +100,22 @@ CREATE TABLE IF NOT EXISTS formadores_pos (
   carteiras INTEGER,
   PRIMARY KEY (tempo, moeda)
 );
+CREATE TABLE IF NOT EXISTS varejo_lido (
+  endereco TEXT PRIMARY KEY,        -- amostra de contas pequenas do leaderboard (US$ 1 mil a 100 mil)
+  ativo INTEGER DEFAULT 1,          -- 1 = está na amostra de hoje
+  posicoes_em BIGINT, ordens_em BIGINT
+);
+CREATE TABLE IF NOT EXISTS varejo_posicoes (
+  endereco TEXT, moeda TEXT, lado TEXT, tamanho DOUBLE PRECISION, preco_entrada DOUBLE PRECISION,
+  preco_liquidacao DOUBLE PRECISION, coletado BIGINT,
+  PRIMARY KEY (endereco, moeda)
+);
+CREATE TABLE IF NOT EXISTS varejo_ordens (
+  endereco TEXT, moeda TEXT, oid BIGINT, tipo TEXT, lado TEXT, preco DOUBLE PRECISION,
+  tamanho DOUBLE PRECISION, gatilho INTEGER, coletado BIGINT,
+  PRIMARY KEY (endereco, oid)
+);
+CREATE INDEX IF NOT EXISTS ix_varejo_pos ON varejo_posicoes (moeda, coletado);
 CREATE INDEX IF NOT EXISTS ix_ops_t1 ON operacoes (t1);
 CREATE INDEX IF NOT EXISTS ix_sinais_abertos ON sinais (endereco, moeda, fechado_em);
 CREATE INDEX IF NOT EXISTS ix_livro_moeda ON livro (moeda, tempo);

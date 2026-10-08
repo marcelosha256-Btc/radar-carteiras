@@ -20,6 +20,7 @@ if sys.stdout is None:   # pythonw: sem console, tudo vai para o log
 import contexto  # noqa: E402
 import fase2  # noqa: E402
 import fase4  # noqa: E402
+import varejo  # noqa: E402
 from avisos import avisar  # noqa: E402
 import gerar_painel  # noqa: E402
 import ranking_diario  # noqa: E402
@@ -183,6 +184,10 @@ def coletar(con):
     log(f"livro: {fase2.coletar_livro(hl, con, precos, agora)} faixas")
     log(f"mercado: {contexto.gravar_mercado(hl, con, agora)} ativos · "
         f"formadores: {contexto.gravar_formadores(hl, con, agora)} ativos com posição")
+    vp = varejo.ler_posicoes(hl, con, agora)
+    vo = varejo.ler_ordens(hl, con, agora)
+    varejo.limpar(con, agora)
+    log(f"varejo: {vp[0]} carteiras lidas ({vp[1]} posições) · ordens de {vo[0]} ({vo[1]} ordens)")
     if fase2.hora_das_ordens(con, ORDENS_A_CADA_H):
         alvo = [r["endereco"] for r in con.execute(
             "SELECT DISTINCT endereco FROM posicoes WHERE moeda IN ('BTC','ETH','SOL','XRP','HYPE','NEAR')")]
