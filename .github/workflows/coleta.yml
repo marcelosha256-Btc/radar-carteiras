@@ -1,8 +1,10 @@
-name: Coleta (a cada 2 h)
+name: Coleta (de hora em hora)
 
 on:
   schedule:
-    - cron: "7 */2 * * *"
+    # o GitHub atrasa e pula agendamentos; de hora em hora sobram coletas mesmo assim.
+    # quem chega menos de 50 min depois de uma coleta só registra e sai
+    - cron: "7 * * * *"
   workflow_dispatch:
 
 concurrency:

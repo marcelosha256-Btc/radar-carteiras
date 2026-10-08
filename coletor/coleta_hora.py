@@ -152,11 +152,27 @@ def avisar_swing(novos, fechados):
                f"({s['retorno'] * 100:+.1f}%".replace(".", ",") + " sem alavancagem, com custos).", rotulo="sinal")
 
 
+def registrar_execucao(con, tipo, ok, detalhe=""):
+    """Histórico das últimas execuções (para a revisão medir se o agendamento está confiável)."""
+    lista = (con.kv_ler("execucoes") or [])[-199:]
+    lista.append({"tempo": int(time.time() * 1000), "tipo": tipo, "origem": "github" if NA_NUVEM else "pc",
+                  "ok": ok, "detalhe": detalhe[:200]})
+    con.kv_gravar("execucoes", lista)
+
+
 def coletar(con):
+    # o GitHub atrasa e pula execuções agendadas: a nuvem roda de hora em hora e o PC fica de
+    # reserva; quem chegar depois de uma coleta recente só registra e sai
+    u = con.kv_ler("ultima_coleta")
+    janela = (50 if NA_NUVEM else 100) * 60_000
+    if u and time.time() * 1000 - u["tempo"] < janela:
+        log(f"coleta recente ({u['origem']}, há {(time.time() * 1000 - u['tempo']) / 60_000:.0f} min); pulei")
+        registrar_execucao(con, "coleta", True, "pulada: coleta recente")
+        return
     hl = Hyperliquid()
     rk = con.kv_ler("ranking")
-    if not NA_NUVEM and (not rk or time.time() * 1000 - rk["gerado"] > 24 * 3_600_000):
-        log("refazendo o ranking diário")
+    if not NA_NUVEM and (not rk or time.time() * 1000 - rk["gerado"] > 26 * 3_600_000):
+        log("ranking da nuvem atrasado; refazendo aqui no PC")
         ranking_diario.executar()
         rk = con.kv_ler("ranking")
     carteiras = {c["endereco"]: c for c in rk["carteiras"]}
@@ -177,6 +193,7 @@ def coletar(con):
     avisar_swing(novos, fechados)
     log(f"painel: {gerar_painel.gerar(hl, con)}")
     con.kv_gravar("ultima_coleta", {"tempo": agora, "origem": "github" if NA_NUVEM else "pc"})
+    registrar_execucao(con, "coleta", True, f"{(time.time() * 1000 - agora) / 1000:.0f} s")
 
 
 def main():
@@ -186,10 +203,18 @@ def main():
         return
     if local:
         TRAVA.write_text(str(os.getpid()))
+    con = None
     try:
-        coletar(conectar())
-    except Exception:
+        con = conectar()
+        coletar(con)
+    except Exception as e:
         log("ERRO\n" + traceback.format_exc() + f"python: {sys.executable}\nsys.path: {sys.path}")
+        try:
+            if con:
+                con.con.rollback()
+                registrar_execucao(con, "coleta", False, repr(e))
+        except Exception:
+            pass
         if NA_NUVEM:
             raise
     finally:

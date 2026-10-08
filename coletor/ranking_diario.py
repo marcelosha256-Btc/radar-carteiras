@@ -9,6 +9,7 @@ andamento, e a próxima coleta continua dali.
 """
 import argparse
 import json
+import os
 import time
 from collections import defaultdict
 
@@ -258,7 +259,29 @@ def main():
     ap.add_argument("--atraso-min", type=int, default=60)
     ap.add_argument("--so-analise", action="store_true")
     a = ap.parse_args()
-    executar(a.amostra, a.dias, a.atraso_min, a.so_analise)
+    con = conectar()
+    rk = con.kv_ler("ranking")
+    # o workflow tem dois horários porque o GitHub às vezes pula um; o segundo só trabalha se o primeiro faltou
+    if os.environ.get("GITHUB_ACTIONS") and not a.so_analise and rk and agora_ms() - rk["gerado"] < 20 * 3_600_000:
+        log("ranking de hoje já existe; só confiro a coleta")
+        vigiar_coleta(con)
+        return
+    inicio = agora_ms()
+    try:
+        executar(a.amostra, a.dias, a.atraso_min, a.so_analise)
+        ok, det = True, f"{(agora_ms() - inicio) / 60_000:.0f} min"
+    except Exception as e:
+        ok, det = False, repr(e)
+        raise
+    finally:
+        try:
+            c2 = conectar()
+            lista = (c2.kv_ler("execucoes") or [])[-199:]
+            lista.append({"tempo": agora_ms(), "tipo": "ranking", "origem": "github" if os.environ.get("GITHUB_ACTIONS") else "pc",
+                          "ok": ok, "detalhe": det[:200]})
+            c2.kv_gravar("execucoes", lista)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
