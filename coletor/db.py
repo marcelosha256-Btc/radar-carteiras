@@ -158,7 +158,10 @@ class Banco:
                 sys.path.insert(0, str(libs))
             import psycopg
             # prepare_threshold=None: o pooler do Supabase (pgbouncer) não aceita prepared statements
-            self.con = psycopg.connect(url, prepare_threshold=None, connect_timeout=30)
+            # autocommit: cada comando fecha a própria transação. Sem isso, uma consulta abre uma transação
+            # que fica parada enquanto o coletor espera a API (minutos) e o Neon derruba a conexão
+            # (IdleInTransactionSessionTimeout, 08/10/2026)
+            self.con = psycopg.connect(url, prepare_threshold=None, connect_timeout=30, autocommit=True)
             esquema = ESQUEMA.replace("{ID}", "BIGSERIAL PRIMARY KEY")
             with self.con.cursor() as cur:
                 cur.execute(esquema)
