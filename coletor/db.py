@@ -88,11 +88,31 @@ CREATE TABLE IF NOT EXISTS kv (
   chave TEXT PRIMARY KEY,          -- ranking, painel, marcos de tempo
   valor TEXT, atualizado BIGINT
 );
+CREATE TABLE IF NOT EXISTS mercado_hist (
+  tempo BIGINT, moeda TEXT, preco DOUBLE PRECISION,
+  oi_usd DOUBLE PRECISION,          -- contratos abertos na Hyperliquid, em US$
+  funding DOUBLE PRECISION,         -- funding anualizado em %
+  PRIMARY KEY (tempo, moeda)
+);
+CREATE TABLE IF NOT EXISTS formadores_pos (
+  tempo BIGINT, moeda TEXT,
+  long_usd DOUBLE PRECISION, short_usd DOUBLE PRECISION,   -- posição somada dos formadores de mercado
+  carteiras INTEGER,
+  PRIMARY KEY (tempo, moeda)
+);
 CREATE INDEX IF NOT EXISTS ix_ops_t1 ON operacoes (t1);
 CREATE INDEX IF NOT EXISTS ix_sinais_abertos ON sinais (endereco, moeda, fechado_em);
 CREATE INDEX IF NOT EXISTS ix_livro_moeda ON livro (moeda, tempo);
 CREATE INDEX IF NOT EXISTS ix_alertas_tempo ON alertas (tempo);
 """
+
+
+# colunas acrescentadas depois que o banco já existia
+COLUNAS_NOVAS = [
+    ("sinais", "stop", "DOUBLE PRECISION"), ("sinais", "alvo", "DOUBLE PRECISION"), ("sinais", "r", "DOUBLE PRECISION"),
+    ("carteiras", "primeira_atividade", "BIGINT"),   # ms da primeira atividade da conta (para marcar carteira nova)
+    ("alertas", "rotulos", "TEXT"),                  # ex.: "delta neutro;carteira nova"
+]
 
 
 class Linha(dict):
@@ -142,17 +162,16 @@ class Banco:
             esquema = ESQUEMA.replace("{ID}", "BIGSERIAL PRIMARY KEY")
             with self.con.cursor() as cur:
                 cur.execute(esquema)
-                for col in ("stop", "alvo", "r"):   # bancos criados antes da fase 4
-                    cur.execute(f"ALTER TABLE sinais ADD COLUMN IF NOT EXISTS {col} DOUBLE PRECISION")
+                for tab, col, tipo in COLUNAS_NOVAS:   # bancos criados antes dessas colunas
+                    cur.execute(f"ALTER TABLE {tab} ADD COLUMN IF NOT EXISTS {col} {tipo}")
         else:
             CAMINHO.parent.mkdir(parents=True, exist_ok=True)
             self.con = sqlite3.connect(CAMINHO, timeout=60)
             self.con.row_factory = sqlite3.Row
             self.con.executescript(ESQUEMA.replace("{ID}", "INTEGER PRIMARY KEY AUTOINCREMENT"))
-            cols = {r[1] for r in self.con.execute("PRAGMA table_info(sinais)")}
-            for col in ("stop", "alvo", "r"):
-                if col not in cols:
-                    self.con.execute(f"ALTER TABLE sinais ADD COLUMN {col} DOUBLE PRECISION")
+            for tab, col, tipo in COLUNAS_NOVAS:
+                if col not in {r[1] for r in self.con.execute(f"PRAGMA table_info({tab})")}:
+                    self.con.execute(f"ALTER TABLE {tab} ADD COLUMN {col} {tipo}")
         self.con.commit()
 
     def _q(self, sql):

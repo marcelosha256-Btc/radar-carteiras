@@ -14,6 +14,7 @@ import time
 import requests
 
 API = "https://bitview.space/api/metric/{}/day1?from=-{}"
+API4 = "https://bitview.space/api/metric/{}/hour4?from=-{}"
 DIAS = 4400                  # ~12 anos: 3 de janela + eventos desde 2017 com retorno de até 365 dias
 JANELA = 3 * 365
 HORIZONTES = [7, 30, 60, 120, 180, 365]
@@ -31,7 +32,12 @@ def baixar():
     n = min(len(v) for v in s.values())
     s = {k: v[-n:] for k, v in s.items()}
     ok = [i for i in range(n) if all(s[m][i] is not None for m in SERIES)]
-    return {k: [v[i] for i in ok] for k, v in s.items()}
+    s = {k: [v[i] for i in ok] for k, v in s.items()}
+    # SOPR de 24 h em velas de 4 h (últimos 7 dias), para ver o dia corrente sem esperar o fechamento
+    v4 = requests.get(API4.format("sth_sopr_24h", 42), timeout=60, headers={"User-Agent": "radar-carteiras"}).json()
+    t4 = requests.get(API4.format("timestamp", 42), timeout=60, headers={"User-Agent": "radar-carteiras"}).json()
+    s["h4"] = [[t * 1000, v] for t, v in zip(t4, v4) if v is not None]
+    return s
 
 
 def _quantil(ordenada, q):
@@ -71,6 +77,31 @@ def comportamento(v, f):
     return "Lucro extremo"
 
 
+def validacao(eventos, niveis, custo):
+    """Onde o preço estava em relação ao custo do curto prazo nos dias-chave reais, para
+    conferir se os níveis de hoje fazem sentido (ex.: uma "capitulação" acima do custo não faz)."""
+    out = {}
+    for tipo in ("capitulacao", "lucro"):
+        v = [e["vs_custo"] for e in eventos if e["tipo"] == tipo]
+        out[tipo] = {"n": len(v), "mediana": st.median(v) if v else None,
+                     "min": min(v) if v else None, "max": max(v) if v else None}
+    nome = {"capitulacao": "Capitulação", "lucro": "Lucro extremo"}
+    for tipo, prefixo in nome.items():
+        nv = next((x for x in niveis if x["nome"].startswith(prefixo)), None)
+        out[tipo]["nivel_hoje"] = nv["preco"] / custo - 1 if nv and nv["preco"] else None
+    return out
+
+
+def sopr_4h(s):
+    """SOPR de 24 h atualizado a cada 4 h, com as faixas de 2% e 98% do SOPR de 24 h diário
+    nos últimos 3 anos (é uma série mais nervosa que a de 7 dias, então tem faixas próprias)."""
+    if not s.get("h4"):
+        return None
+    hist = sorted(s["sth_sopr_24h"][-JANELA:])
+    return {"pontos": s["h4"], "p02": _quantil(hist, 0.02), "p98": _quantil(hist, 0.98),
+            "p10": _quantil(hist, 0.10), "p90": _quantil(hist, 0.90)}
+
+
 def calcular(s):
     datas, preco, custo, sopr = s["date"], s["price_close"], s["sth_realized_price"], s["sth_sopr_1w"]
     n = len(datas)
@@ -89,6 +120,7 @@ def calcular(s):
         ultimo[tipo] = i
         if novo:
             eventos.append({"i": i, "data": datas[i], "tipo": tipo, "preco": preco[i], "sopr": sopr[i],
+                            "vs_custo": preco[i] / custo[i] - 1,
                             "ret": {h: (preco[i + h] / preco[i] - 1) if i + h < n else None for h in HORIZONTES}})
     estudo = {}
     for tipo in ("capitulacao", "lucro"):
@@ -141,6 +173,8 @@ def calcular(s):
         "serie": {"datas": datas[corte:], "preco": [round(x) for x in preco[corte:]],
                   "custo": [round(x) for x in custo[corte:]], "sopr7": [round(x, 4) for x in sopr[corte:]]},
         "historico_desde": datas[0],
+        "validacao": validacao(eventos, niveis, c),
+        "sopr4h": sopr_4h(s),
     }
 
 

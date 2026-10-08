@@ -11,6 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import analise as an
+import contexto
 import fase2
 import fase3
 import fase4
@@ -140,6 +141,8 @@ def gerar(hl=None, con=None):
         pos[p["endereco"]].append({"moeda": p["moeda"], "lado": p["lado"], "alav": p["alavancagem"],
                                    "entrada": p["preco_entrada"], "pnl": p["pnl_aberto"]})
 
+    idade = {r["endereco"]: r["primeira_atividade"] for r in
+             con.execute("SELECT endereco, primeira_atividade FROM carteiras WHERE primeira_atividade IS NOT NULL")}
     carteiras = []
     for r in rk["carteiras"]:
         if not (r["confiavel"] or len(carteiras) < 80):
@@ -147,7 +150,8 @@ def gerar(hl=None, con=None):
         carteiras.append({k: r[k] for k in ("endereco", "grupo", "operacoes", "acerto", "minimo", "mediana",
                                             "copia_mediana", "copia_n", "horas_mediana", "pior_queda", "pnl_usd",
                                             "moedas", "confiavel")}
-                         | {"situacao": situacao(r, crit), "posicoes": pos.get(r["endereco"], [])})
+                         | {"situacao": situacao(r, crit), "posicoes": pos.get(r["endereco"], []),
+                            "desde": idade.get(r["endereco"])})
 
     # consenso atual das confiáveis (um voto por grupo), a partir da foto mais recente
     vistos, consenso = set(), defaultdict(lambda: {"long": 0, "short": 0})
@@ -194,6 +198,7 @@ def gerar(hl=None, con=None):
         "fase2": f2,
         "swing": fase4.painel(con, ativos, f2),
         "regime_log": {"n": reg["n"], "desde": reg["desde"]},
+        **contexto.painel(con, agora, ativos),
         "sopr": fase3.obter(con),
         "carteiras": carteiras,
         "consenso": sorted(([m, v["long"], v["short"]] for m, v in consenso.items()),

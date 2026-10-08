@@ -272,6 +272,16 @@ tr.avoid td { color: var(--muted); }
       <div class="box-head"><h2>Funding na Hyperliquid agora</h2><p>A Hyperliquid cobra um piso fixo de juros (cerca de 11% ao ano). Igual ao piso não diz nada; acima dele, os comprados pagam caro para ficar na posição; abaixo de zero, são os vendidos que pagam.</p></div>
       <svg id="funding" viewBox="0 0 720 210" role="img" aria-label="Funding anualizado por ativo comparado ao piso de 11%"></svg>
     </div>
+    <div class="box">
+      <div class="box-head"><h2>Formadores de mercado</h2><span class="chip warn">tese em teste</span></div>
+      <p class="small muted" id="mmNota"></p>
+      <div class="tbl-wrap"><table id="mmTabela"></table></div>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Open interest e funding</h2><div class="seg" id="oiAtivos" role="group" aria-label="Escolher ativo"></div></div>
+      <p class="small muted" id="oiNota"></p>
+      <svg id="oiChart" viewBox="0 0 720 230" role="img" aria-label="Histórico de open interest e funding"></svg>
+    </div>
   </section>
 
   <!-- DIÁRIO -->
@@ -351,9 +361,18 @@ tr.avoid td { color: var(--muted); }
     <div class="kpis" id="soprKpis"></div>
     <div class="box" id="soprLeitura"></div>
     <div class="box">
+      <div class="box-head"><h2>SOPR de 24 h, atualizado a cada 4 h</h2><span class="chip" id="sopr4hAgora"></span></div>
+      <p class="small muted">Mostra o dia corrente sem esperar o fechamento diário. É mais nervoso que o de 7 dias, por isso tem faixas próprias (percentis 2 e 98 dos últimos 3 anos). Últimos 7 dias.</p>
+      <svg id="sopr4hChart" viewBox="0 0 720 200" role="img" aria-label="SOPR de 24 horas do BTC em velas de 4 horas"></svg>
+    </div>
+    <div class="box">
       <div class="box-head"><h2>Níveis de preço pelo comportamento</h2><p>Onde o curto prazo entra em desespero (suporte) ou realiza lucro forte (resistência). Faixas = percentis 2, 10, 90 e 98 do SOPR de 7 dias nos últimos 3 anos, convertidos em preço pela relação histórica entre SOPR e a distância do preço ao custo.</p></div>
       <div class="tbl-wrap"><table id="soprNiveis"></table></div>
       <p class="small muted" id="soprAjuste"></p>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Os níveis batem com a história?</h2><p>Onde o preço estava em relação ao custo do curto prazo nos dias-chave reais desde 2017. Um nível de "capitulação" acima do custo, por exemplo, nunca aconteceu.</p></div>
+      <div class="tbl-wrap"><table id="soprValid"></table></div>
     </div>
     <div class="box">
       <div class="box-head"><h2>Preço × custo médio de quem comprou recentemente</h2><span class="chip">dado on-chain real, diário</span></div>
@@ -460,7 +479,7 @@ function renderReal(DADOS) {
         const [cls, txt] = SIT[r.situacao];
         const pos = r.posicoes.slice(0, 3).map(p => `<span class="chip ${p.lado === 'long' ? 'up' : 'down'}">${p.moeda} ${p.lado === 'long' ? 'L' : 'S'} ${fmt(p.alav)}x</span>`).join(' ')
           + (r.posicoes.length > 3 ? ` <span class="muted small">+${r.posicoes.length - 3}</span>` : '') || '<span class="muted small">nenhuma</span>';
-        return `<tr><td>${linkCarteira(r.endereco)}<br><span class="grp">${r.grupo ? 'Grupo ' + r.grupo + ' · ' : ''}${r.moedas.join(', ')}</span></td>
+        return `<tr><td>${linkCarteira(r.endereco)}<br><span class="grp">${r.grupo ? 'Grupo ' + r.grupo + ' · ' : ''}${r.moedas.join(', ')}</span>${r.desde && Date.now() - r.desde < 90 * 864e5 ? ` <span class="chip warn">nova · desde ${new Date(r.desde).toLocaleDateString('pt-BR', { month: '2-digit', year: '2-digit' })}</span>` : ''}</td>
           <td class="n">${r.operacoes}</td><td class="n">${fmt(r.acerto * 100)}%</td><td class="n"><b>${fmt(r.minimo * 100)}%</b></td>
           <td class="n ${sinalCls(r.mediana)}">${pctTxt(r.mediana)}</td><td class="n ${sinalCls(r.copia_mediana)}">${pctTxt(r.copia_mediana)}</td>
           <td class="n">${fmt(r.horas_mediana, 1)} h</td><td class="n neg">${pctTxt(r.pior_queda, 1)}</td>
@@ -481,7 +500,7 @@ function renderReal(DADOS) {
   const EV = { abriu: l => l === 'long' ? 'up' : 'down', fechou: () => 'flat', aumentou: () => 'acc', reduziu: () => 'flat', virou: () => 'warn' };
   $('#alertNota').textContent = `${fmt(C.alertas_24h)} alertas de todas as carteiras rastreadas nas últimas 24 h; aqui só os das confiáveis.`;
   $('#alerts').innerHTML = DADOS.alertas.length ? DADOS.alertas.map(a => `<div class="alert"><time>${quando(a.tempo).slice(6)}<br>${quando(a.tempo).slice(0, 5)}</time>
-    <span>${linkCarteira(a.endereco)} <span class="chip ${EV[a.evento](a.lado)}">${a.evento} ${a.lado.toUpperCase()} ${a.moeda}</span></span>
+    <span>${linkCarteira(a.endereco)} <span class="chip ${EV[a.evento](a.lado)}">${a.evento} ${a.lado.toUpperCase()} ${a.moeda}</span>${(a.rotulos || '').split(';').filter(Boolean).map(r => ` <span class="chip warn">${r}</span>`).join('')}</span>
     <span class="mono muted">${fmtPx(a.preco)}${a.alavancagem ? ' · ' + fmt(a.alavancagem) + 'x' : ''}</span></div>`).join('')
     : '<p class="muted">Nenhum alerta das confiáveis nas últimas 48 h.</p>';
 
@@ -539,8 +558,8 @@ function renderReal(DADOS) {
         : s.passa ? '<span class="chip acc">aguardar gatilho</span>' : '<span class="chip flat">nenhum setup passa</span>';
       const gat = s.ativo_ontem ? 'disparou no fechamento de ontem'
         : !s.gatilho ? 'sem gatilho até ±25% do preço'
-        : Math.abs(s.dist) < 0.003 ? `<b>já está na zona:</b> dispara se o dia fechar ${s.sentido < 0 ? 'abaixo' : 'acima'} de <b class="mono">${fmtPx(s.gatilho)}</b>`
-        : `se o dia fechar ${s.sentido < 0 ? 'abaixo' : 'acima'} de <b class="mono">${fmtPx(s.gatilho)}</b> (${pctTxt(s.dist, 1)})`;
+        : Math.abs(s.dist) < 0.003 ? `<b>já está na zona:</b> dispara se o dia fechar (21h de Brasília) ${s.sentido < 0 ? 'abaixo' : 'acima'} de <b class="mono">${fmtPx(s.gatilho)}</b>`
+        : `se o dia fechar (21h de Brasília) ${s.sentido < 0 ? 'abaixo' : 'acima'} de <b class="mono">${fmtPx(s.gatilho)}</b> (${pctTxt(s.dist, 1)})`;
       return `<button class="scard" aria-pressed="${a.t === swingSel}" data-t="${a.t}">
         <div class="hd"><span class="tick"><span class="sw" style="background:var(${CORES[a.t]})"></span>${a.t}</span>${status}</div>
         <p>Tendência de <b>${c.estado}</b> há <b>${c.dias} dias</b> · <b>${c.semanas_acima}</b> semanas fechando acima da média de 20 semanas · ${pctTxt(c.dist_topo, 1)} do topo</p>
@@ -792,6 +811,75 @@ function renderReal(DADOS) {
     $('#soprEventos').innerHTML = `<thead><tr><th>Data</th><th>Evento</th><th class="n">Preço</th><th class="n">SOPR 7d</th>${HZ.map(k => `<th class="n">${k} d</th>`).join('')}</tr></thead><tbody>` +
       S.eventos.map(e => `<tr><td class="mono">${e.data.split('-').reverse().join('/')}</td><td><span class="chip ${e.tipo === 'capitulacao' ? 'down' : 'up'}">${e.tipo === 'capitulacao' ? 'capitulação' : 'lucro extremo'}</span></td>
         <td class="n">${fmtPx(e.preco)}</td><td class="n">${fmt(e.sopr, 4)}</td>${HZ.map(k => `<td class="n ${sinalCls(e.ret[k])}">${e.ret[k] == null ? '—' : pctTxt(e.ret[k], 1)}</td>`).join('')}</tr>`).join('') + '</tbody>';
+  }
+
+  /* ---------- Formadores de mercado e histórico de OI/funding ---------- */
+  const FM = DADOS.formadores;
+  if (FM) {
+    $('#mmNota').innerHTML = `Posição somada das ${FM.acompanhadas} carteiras com perfil de formador de mercado (giram 150x a conta ou mais por mês, US$ 300 mi+ negociados). Tese do vídeo: <b>formador vendido = o ativo tende a subir</b>. Ainda não testada: estamos gravando desde ${quando(FM.desde)} e a revisão de 06/11 mede se o líquido vendido antecedeu alta. Foto de ${quando(FM.tempo)}.`;
+    $('#mmTabela').innerHTML = '<thead><tr><th>Ativo</th><th class="n">Comprado</th><th class="n">Vendido</th><th class="n">Líquido</th><th class="n">24 h atrás</th><th class="n">Carteiras</th></tr></thead><tbody>' +
+      FM.moedas.map(m => `<tr><td><b>${m.moeda}</b></td><td class="n pos">${usd(m.long)}</td><td class="n neg">${usd(m.short)}</td>
+        <td class="n ${m.liquido >= 0 ? 'pos' : 'neg'}"><b>${m.liquido >= 0 ? '+' : '−'}${usd(Math.abs(m.liquido))}</b></td>
+        <td class="n muted">${m.liquido_24h == null ? '—' : (m.liquido_24h >= 0 ? '+' : '−') + usd(Math.abs(m.liquido_24h))}</td><td class="n">${m.carteiras}</td></tr>`).join('') + '</tbody>';
+  } else {
+    $('#mmNota').textContent = 'A posição dos formadores de mercado começa a ser gravada na próxima coleta.';
+  }
+  const OI = DADOS.oi_hist;
+  if (OI) {
+    let selOI = 'BTC';
+    const renderOI = t => {
+      selOI = t;
+      $('#oiAtivos').innerHTML = Object.keys(OI.series).map(m => `<button aria-pressed="${m === t}" data-t="${m}">${m}</button>`).join('');
+      $('#oiAtivos').querySelectorAll('button').forEach(b => b.addEventListener('click', () => renderOI(b.dataset.t)));
+      const pts = OI.series[t] || [], s = $('#oiChart'); s.innerHTML = '';
+      const dias = pts.length ? (pts[pts.length - 1][0] - pts[0][0]) / 864e5 : 0;
+      $('#oiNota').textContent = `Open interest (contratos abertos, linha) e funding anualizado (barras) de ${t} na Hyperliquid. A Hyperliquid não guarda esse histórico; estamos gravando a cada coleta desde ${OI.desde ? quando(OI.desde) : 'agora'} (${fmt(dias, 1)} dias até aqui). Tese do vídeo: picos de open interest marcam o fim do movimento. Também entra na revisão de 06/11.`;
+      if (pts.length < 2) { svgEl('text', { x: 360, y: 120, 'text-anchor': 'middle', class: 'ax-l' }, s, 'Acumulando dados: o gráfico aparece a partir da segunda coleta.'); return; }
+      const x0 = 70, x1 = 650, y0 = 14, y1 = 200;
+      const t0 = pts[0][0], t1 = pts[pts.length - 1][0], X = tt => x0 + (tt - t0) / (t1 - t0 || 1) * (x1 - x0);
+      const ois = pts.map(p => p[1]), lo = Math.min(...ois) * 0.98, hi = Math.max(...ois) * 1.02;
+      const Y = v => y1 - (v - lo) / (hi - lo || 1) * (y1 - y0);
+      const fmax = Math.max(15, ...pts.map(p => Math.abs(p[2])));
+      const Yf = v => (y1 + y0) / 2 - v / fmax * (y1 - y0) / 2;
+      [lo, (lo + hi) / 2, hi].forEach(v => { svgEl('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), class: 'grid-ln' }, s); svgEl('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'ax' }, s, usd(v).replace('US$ ', '')); });
+      const bw = Math.max(1.5, (x1 - x0) / pts.length - 1);
+      pts.forEach(p => { const yv = Yf(p[2]), ym = Yf(0);
+        svgEl('rect', { x: X(p[0]) - bw / 2, y: Math.min(yv, ym), width: bw, height: Math.max(1, Math.abs(yv - ym)), fill: p[2] >= 13 ? 'var(--warn)' : p[2] < 0 ? 'var(--accent)' : 'var(--flat-soft)', opacity: 0.8 }, s); });
+      svgEl('path', { d: pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' '), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 }, s);
+      svgEl('text', { x: x1 + 6, y: Yf(fmax) + 10, class: 'ax' }, s, `+${fmt(fmax)}%`);
+      svgEl('text', { x: x1 + 6, y: Yf(0) + 4, class: 'ax' }, s, '0%');
+      [t0, t1].forEach((tt, k) => svgEl('text', { x: X(tt), y: y1 + 18, 'text-anchor': k ? 'end' : 'start', class: 'ax' }, s, quando(tt)));
+      const u = pts[pts.length - 1];
+      svgEl('text', { x: X(u[0]) - 4, y: Y(u[1]) - 8, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--accent)' }, s, `OI ${usd(u[1])} · funding ${fmt(u[2], 1)}%`);
+    };
+    renderOI(selOI);
+  }
+
+  /* ---------- SOPR 4 h e validação dos níveis ---------- */
+  if (S && S.sopr4h) {
+    const H = S.sopr4h, pts = H.pontos, s4 = $('#sopr4hChart'); s4.innerHTML = '';
+    const ult = pts[pts.length - 1][1];
+    const leitura = ult <= H.p02 ? ['down', 'capitulação'] : ult <= H.p10 ? ['down', 'prejuízo forte'] : ult < 1 ? ['warn', 'vendendo com prejuízo']
+      : ult < H.p90 ? ['up', 'vendendo com lucro'] : ult < H.p98 ? ['warn', 'lucro forte'] : ['warn', 'lucro extremo'];
+    $('#sopr4hAgora').className = 'chip ' + leitura[0];
+    $('#sopr4hAgora').textContent = `agora ${fmt(ult, 4)} · ${leitura[1]}`;
+    const x0 = 64, x1 = 700, y0 = 12, y1 = 170, vals = pts.map(p => p[1]).concat([H.p02, H.p98, 1]);
+    const lo = Math.min(...vals) - 0.001, hi = Math.max(...vals) + 0.001;
+    const X = i => x0 + i / (pts.length - 1) * (x1 - x0), Y = v => y1 - (v - lo) / (hi - lo) * (y1 - y0);
+    [[H.p98, 'lucro extremo', 'var(--up)'], [1, 'SOPR = 1', 'var(--faint)'], [H.p02, 'capitulação', 'var(--down)']].forEach(([v, nm, cor]) => {
+      svgEl('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: cor, 'stroke-dasharray': '5 4' }, s4);
+      svgEl('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'ax' }, s4, fmt(v, 3));
+      svgEl('text', { x: x1, y: Y(v) - 4, 'text-anchor': 'end', class: 'ax' }, s4, nm); });
+    svgEl('path', { d: pts.map((p, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' '), fill: 'none', stroke: 'var(--btc)', 'stroke-width': 2 }, s4);
+    svgEl('circle', { cx: X(pts.length - 1), cy: Y(ult), r: 4, fill: 'var(--btc)' }, s4);
+    [0, pts.length - 1].forEach((i, k) => svgEl('text', { x: X(i), y: y1 + 18, 'text-anchor': k ? 'end' : 'start', class: 'ax' }, s4, quando(pts[i][0])));
+  }
+  if (S && S.validacao) {
+    const V = S.validacao, linha = (tipo, nome, cls) => { const v = V[tipo];
+      return `<tr><td><span class="chip ${cls}">${nome}</span></td><td class="n">${v.n}</td><td class="n"><b>${pctTxt(v.mediana, 0)}</b></td>
+        <td class="n muted">${pctTxt(v.min, 0)} a ${pctTxt(v.max, 0)}</td><td class="n">${pctTxt(v.nivel_hoje, 0)}</td></tr>`; };
+    $('#soprValid').innerHTML = '<thead><tr><th>Dia-chave</th><th class="n">Casos</th><th class="n">Preço vs custo (mediana)</th><th class="n">Faixa histórica</th><th class="n">Nosso nível hoje</th></tr></thead><tbody>' +
+      linha('capitulacao', 'Capitulação', 'down') + linha('lucro', 'Lucro extremo', 'up') + '</tbody>';
   }
 }
 

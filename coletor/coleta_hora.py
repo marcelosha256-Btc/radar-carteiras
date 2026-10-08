@@ -17,6 +17,7 @@ DADOS.mkdir(exist_ok=True)
 if sys.stdout is None:   # pythonw: sem console, tudo vai para o log
     sys.stdout = sys.stderr = open(DADOS / "hora.log", "a", encoding="utf-8", buffering=1)
 
+import contexto  # noqa: E402
 import fase2  # noqa: E402
 import fase4  # noqa: E402
 from avisos import avisar  # noqa: E402
@@ -94,7 +95,9 @@ def foto(hl, con, carteiras, agora, precos):
             for moeda, evento, lado, t_antes, t_depois in comparar(antes, depois):
                 preco = precos.get(moeda)
                 alav = (depois.get(moeda) or antes.get(moeda) or {}).get("alavancagem")
-                alertas.append((agora, end, moeda, evento, lado, t_antes, t_depois, preco, alav, int(confiavel)))
+                rot = contexto.rotulos(hl, con, end, moeda, lado, t_depois or t_antes, depois.get(moeda), agora)                     if confiavel and evento in ("abriu", "aumentou", "virou") else []
+                alertas.append((agora, end, moeda, evento, lado, t_antes, t_depois, preco, alav, int(confiavel),
+                                ";".join(rot) or None))
                 if evento in ("fechou", "virou"):
                     for s in abertos.pop((end, moeda), []):
                         sinal = 1 if s["lado"] == "long" else -1
@@ -110,7 +113,7 @@ def foto(hl, con, carteiras, agora, precos):
         lote = ends[i:i + 200]
         con.execute(f"DELETE FROM posicoes WHERE endereco IN ({','.join('?' * len(lote))})", lote)
     con.executemany("INSERT INTO posicoes VALUES (?,?,?,?,?,?,?,?,?)", posicoes)
-    con.executemany("INSERT INTO alertas VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", alertas)
+    con.executemany("INSERT INTO alertas VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", alertas)
     con.executemany("UPDATE sinais SET fechado_em=?, preco_fechamento=?, retorno=? WHERE id=?", fechamentos)
     con.executemany("INSERT INTO sinais (origem, endereco, moeda, lado, aberto_em, preco_abertura) "
                     "VALUES ('copia',?,?,?,?,?)", novos_sinais)
@@ -162,6 +165,8 @@ def coletar(con):
 
     foto(hl, con, carteiras, agora, precos)
     log(f"livro: {fase2.coletar_livro(hl, con, precos, agora)} faixas")
+    log(f"mercado: {contexto.gravar_mercado(hl, con, agora)} ativos · "
+        f"formadores: {contexto.gravar_formadores(hl, con, agora)} ativos com posição")
     if fase2.hora_das_ordens(con, ORDENS_A_CADA_H):
         alvo = [r["endereco"] for r in con.execute(
             "SELECT DISTINCT endereco FROM posicoes WHERE moeda IN ('BTC','ETH','SOL','XRP','HYPE','NEAR')")]

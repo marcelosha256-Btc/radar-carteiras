@@ -13,6 +13,7 @@ import time
 from collections import defaultdict
 
 import analise as an
+import contexto
 from db import RAIZ, conectar
 from avisos import avisar
 from hl import Hyperliquid
@@ -64,7 +65,10 @@ def descobrir(hl, con, amostra):
         "volume_mes=excluded.volume_mes, pnl_total=excluded.pnl_total, atualizado=excluded.atualizado",
         [(*c[:5], agora_ms()) for c in escolhidas.values()])
     con.commit()
-    log(f"leaderboard: {len(linhas)} carteiras, {len(cands)} passam no filtro, {len(escolhidas)} escolhidas")
+    formadores = contexto.escolher_formadores(linhas)
+    con.kv_gravar("formadores", formadores)
+    log(f"leaderboard: {len(linhas)} carteiras, {len(cands)} passam no filtro, {len(escolhidas)} escolhidas, "
+        f"{len(formadores)} formadores de mercado acompanhados")
     return list(escolhidas)
 
 
@@ -240,6 +244,9 @@ def executar(amostra=600, dias=90, atraso_min=60, so_analise=False):
     simular_copia(con, atraso_min, dias)
     ops_por = operacoes_recentes(con, dias)
     linhas = montar_ranking(con, ops_por, atraso_min, dias)
+    if not so_analise:
+        feitas, faltavam = contexto.preencher_idades(hl, con, [x["endereco"] for x in linhas])
+        log(f"idade das carteiras: {feitas} de {faltavam} que faltavam")
     limpar(con)
     return linhas
 
