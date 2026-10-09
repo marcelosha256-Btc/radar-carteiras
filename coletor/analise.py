@@ -34,8 +34,11 @@ def _fechar(op, t1):
             "pnl": op["pnl"] - op["taxa"], "retorno": retorno, "horas": (t1 - op["t0"]) / 3.6e6}
 
 
-def montar_operacoes(fills, estados=None):
+def montar_operacoes(fills, estados=None, aceitar=eh_perp):
     """Uma operação vai de posição zerada até zerar (ou virar de lado) de novo.
+
+    `aceitar(moeda)` escolhe os mercados: perps do grupo principal (padrão, cripto) ou,
+    no ranking de ações, só os do grupo xyz.
 
     `estados` traz as operações que ficaram em andamento na coleta anterior
     ({moeda: dict ou None}); a função devolve (operações fechadas, estados novos),
@@ -48,7 +51,7 @@ def montar_operacoes(fills, estados=None):
     estados = dict(estados or {})
     por_moeda = defaultdict(list)
     for f in fills:
-        if eh_perp(f["moeda"]):
+        if aceitar(f["moeda"]):
             por_moeda[f["moeda"]].append(f)
     ops = []
     for moeda, fs in por_moeda.items():

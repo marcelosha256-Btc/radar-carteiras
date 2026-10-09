@@ -98,6 +98,10 @@ def processar_fills(con, end, fills):
         "INSERT INTO fluxo_diario VALUES (?,?,?,?) ON CONFLICT (dia, moeda) DO UPDATE SET "
         "compra=fluxo_diario.compra+excluded.compra, venda=fluxo_diario.venda+excluded.venda",
         [(d, m, c, v) for (d, m), (c, v) in fluxo.items()])
+    # operou ações (grupo xyz)? entra na lista do ranking de ações (acoes_ranking.py)
+    if any(f["moeda"].startswith("xyz:") for f in linhas):
+        con.execute("INSERT INTO acoes_carteiras (endereco, origem, entrou) VALUES (?, 'ranking', ?) "
+                    "ON CONFLICT (endereco) DO NOTHING", (end, agora_ms()))
     return len(ops)
 
 
@@ -158,19 +162,23 @@ def coletar_velas(hl, con, ops_por, dias, confiaveis):
     log(f"velas: {len(moedas)} moedas")
 
 
-def simular_copia(con, atraso_min, dias):
-    velas = defaultdict(list)
-    for r in con.execute("SELECT moeda, t, abertura, fechamento FROM velas ORDER BY moeda, t"):
-        velas[r["moeda"]].append((r["t"], r["abertura"], r["fechamento"]))
-    precos = an.Precos(velas)
+def simular_copia(con, atraso_min, dias, tabela="operacoes"):
+    """tabela="acoes_operacoes" no ranking de ações (as velas do xyz ficam na mesma tabela de velas)."""
     pend = [dict(o) for o in con.execute(
-        "SELECT * FROM operacoes WHERE retorno_copia IS NULL AND t1>=?", (agora_ms() - (dias + 3) * DIA,))]
+        f"SELECT * FROM {tabela} WHERE retorno_copia IS NULL AND t1>=?", (agora_ms() - (dias + 3) * DIA,))]
+    moedas = sorted({o["moeda"] for o in pend})
+    velas = defaultdict(list)
+    if moedas:
+        for r in con.execute(f"SELECT moeda, t, abertura, fechamento FROM velas WHERE moeda IN ({','.join('?' * len(moedas))}) "
+                             "ORDER BY moeda, t", moedas):
+            velas[r["moeda"]].append((r["t"], r["abertura"], r["fechamento"]))
+    precos = an.Precos(velas)
     atualizadas = []
     for o in pend:
         r = an.retorno_copiando(o, precos, atraso_min * 60_000)
         if r is not None:
             atualizadas.append((r, o["endereco"], o["moeda"], o["t0"]))
-    con.executemany("UPDATE operacoes SET retorno_copia=? WHERE endereco=? AND moeda=? AND t0=?", atualizadas)
+    con.executemany(f"UPDATE {tabela} SET retorno_copia=? WHERE endereco=? AND moeda=? AND t0=?", atualizadas)
     con.commit()
     log(f"cópia simulada: {len(atualizadas)} de {len(pend)} operações pendentes")
 

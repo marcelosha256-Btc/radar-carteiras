@@ -138,6 +138,44 @@ CREATE TABLE IF NOT EXISTS acoes_ordens (
   tamanho DOUBLE PRECISION, gatilho INTEGER, reduz INTEGER, coletado BIGINT,
   PRIMARY KEY (endereco, oid)
 );
+CREATE TABLE IF NOT EXISTS acoes_carteiras (
+  endereco TEXT PRIMARY KEY,        -- candidatas ao ranking de ações (operam o grupo xyz)
+  origem TEXT,                      -- 'amostra' (vista com ação na leitura) ou 'ranking' (fills do ranking de cripto)
+  entrou BIGINT,
+  ultimo_fill BIGINT,               -- cursor dos fills já processados (todos os mercados)
+  ultimo_xyz BIGINT,                -- último fill em ações (para tirar da lista quem parou)
+  robo INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS acoes_estados (
+  endereco TEXT, moeda TEXT, estado TEXT,
+  PRIMARY KEY (endereco, moeda)
+);
+CREATE TABLE IF NOT EXISTS acoes_operacoes (
+  endereco TEXT, moeda TEXT, lado TEXT, t0 BIGINT, t1 BIGINT,
+  preco_entrada DOUBLE PRECISION, preco_saida DOUBLE PRECISION, tamanho_max DOUBLE PRECISION,
+  pnl DOUBLE PRECISION, retorno DOUBLE PRECISION, horas DOUBLE PRECISION, retorno_copia DOUBLE PRECISION,
+  PRIMARY KEY (endereco, moeda, t0)
+);
+CREATE TABLE IF NOT EXISTS acoes_fluxo (
+  dia BIGINT, moeda TEXT, compra DOUBLE PRECISION, venda DOUBLE PRECISION,
+  PRIMARY KEY (dia, moeda)
+);
+CREATE TABLE IF NOT EXISTS acoes_fotos (
+  endereco TEXT PRIMARY KEY, tempo BIGINT   -- última foto de hora em hora das carteiras do ranking de ações
+);
+CREATE TABLE IF NOT EXISTS acoes_alertas (
+  tempo BIGINT, endereco TEXT, moeda TEXT, evento TEXT, lado TEXT,
+  tamanho_antes DOUBLE PRECISION, tamanho_depois DOUBLE PRECISION, preco DOUBLE PRECISION,
+  alavancagem DOUBLE PRECISION, confiavel INTEGER, rotulos TEXT,
+  PRIMARY KEY (tempo, endereco, moeda)
+);
+CREATE TABLE IF NOT EXISTS acoes_sinais (
+  id {ID},                          -- Diário: cópia das carteiras confiáveis em ações
+  endereco TEXT, moeda TEXT, lado TEXT, aberto_em BIGINT, preco_abertura DOUBLE PRECISION,
+  fechado_em BIGINT, preco_fechamento DOUBLE PRECISION, retorno DOUBLE PRECISION
+);
+CREATE INDEX IF NOT EXISTS ix_acoes_ops_t1 ON acoes_operacoes (t1);
+CREATE INDEX IF NOT EXISTS ix_acoes_alertas ON acoes_alertas (tempo);
 CREATE INDEX IF NOT EXISTS ix_acoes_pos ON acoes_posicoes (moeda, coletado);
 CREATE INDEX IF NOT EXISTS ix_acoes_ord ON acoes_ordens (moeda, coletado);
 CREATE INDEX IF NOT EXISTS ix_varejo_pos ON varejo_posicoes (moeda, coletado);

@@ -239,8 +239,11 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <button class="tab" role="tab" data-modo="cripto" data-tab="diario">Diário de sinais</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="swing">Swing trade</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-resumo" hidden>Resumo</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-carteiras" hidden>Carteiras</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-fluxo" hidden>Fluxo e alertas</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-liquidez" hidden>Stops e liquidações</button>
-      <span class="soon" data-modo="acoes" hidden>em breve: carteiras, fluxo e alertas, balanços, swing</span>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-diario" hidden>Diário de sinais</button>
+      <span class="soon" data-modo="acoes" hidden>em breve: balanços e eventos, swing, setores</span>
     </nav>
   </div>
 
@@ -251,6 +254,57 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
     <div class="seg" id="aSetores" role="group" aria-label="Filtrar por setor" style="justify-self:start"></div>
     <div class="assets" id="aAssets"></div>
     <p class="callout" id="aComoLer"></p>
+  </section>
+
+  <!-- AÇÕES: CARTEIRAS -->
+  <section class="panel" id="p-a-carteiras" role="tabpanel" hidden>
+    <div class="box">
+      <div class="box-head"><h2>Consenso das carteiras confiáveis em ações</h2><p id="aConsNota"></p></div>
+      <div class="bars" id="aConsensus"></div>
+    </div>
+    <div class="box">
+      <div class="box-head">
+        <h2>Ranking das carteiras de ações</h2>
+        <div class="seg" id="aFiltroCarteiras" role="group" aria-label="Filtrar carteiras">
+          <button aria-pressed="true" data-f="conf">Confiáveis</button>
+          <button aria-pressed="false" data-f="todas">Top 80</button>
+        </div>
+      </div>
+      <p class="small muted" id="aRankNota"></p>
+      <div class="tbl-wrap"><table id="aWallets"></table></div>
+      <p class="callout"><b>Como ler:</b> a mesma régua do ranking de cripto, calculada só com as operações em ações, índices e commodities. Retornos por operação, sem alavancagem e com taxas. "Copiando" refaz cada operação entrando e saindo 1 h depois da carteira. "Mínimo" é a pior taxa de acerto plausível com 95% de confiança.</p>
+    </div>
+  </section>
+
+  <!-- AÇÕES: FLUXO E ALERTAS -->
+  <section class="panel" id="p-a-fluxo" role="tabpanel" hidden>
+    <div class="grid-2">
+      <div class="box">
+        <div class="box-head"><h2>Fluxo em 7 dias</h2><p>Valor comprado e vendido em ações pelas carteiras do ranking de ações, em US$ milhões. Atualiza com o ranking diário.</p></div>
+        <div class="bars" id="aFlow"></div>
+        <div class="legend"><span><i style="background:var(--up)"></i>comprado</span><span><i style="background:var(--down)"></i>vendido</span></div>
+      </div>
+      <div class="box">
+        <div class="box-head">
+          <h2>Alertas das últimas 48 h</h2>
+          <div class="seg" id="aFiltroAlertas" role="group" aria-label="Filtrar alertas">
+            <button aria-pressed="true" data-f="conf">Confiáveis</button>
+            <button aria-pressed="false" data-f="todas">Todo o ranking</button>
+          </div>
+        </div>
+        <p class="small muted" id="aAlertNota"></p>
+        <div class="alerts" id="aAlerts"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AÇÕES: DIÁRIO -->
+  <section class="panel" id="p-a-diario" role="tabpanel" hidden>
+    <div class="kpis" id="aDiarioKpis"></div>
+    <div class="box">
+      <div class="box-head"><h2>Cópia das carteiras confiáveis em ações</h2><p>Quando uma carteira confiável em ações abre posição, o radar registra a entrada no preço daquele momento, até 1 h depois dela. Fecha quando ela fecha. Nada é apagado nem recalculado. Separado do Diário de cripto.</p></div>
+      <div class="tbl-wrap"><table id="aSignals"></table></div>
+    </div>
   </section>
 
   <!-- AÇÕES: STOPS E LIQUIDAÇÕES -->
@@ -915,6 +969,12 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
       const txt = `amostra: ${fmt(pl * 100)}% do valor comprado · ${n} carteira${n > 1 ? 's' : ''} (${P.L} long / ${P.S} short)`;
       return n < 10 ? `<span class="chip warn">${txt} · poucas</span>` : `<span class="chip ${pl >= 0.65 ? 'up' : pl <= 0.35 ? 'down' : 'flat'}">${txt}</span>`;
     };
+    const consChip = a => {   // confiáveis do ranking de ações (só aparece quando há alguma posicionada)
+      const n = (a.L || 0) + (a.S || 0);
+      if (!A.carteiras || !n) return '';
+      return n < 5 ? `<span class="chip warn">confiáveis ${a.L} long · ${a.S} short · poucas</span>`
+        : `<span class="chip ${a.L > a.S * 2 ? 'up' : a.S > a.L * 2 ? 'down' : 'flat'}">confiáveis ${a.L} long · ${a.S} short</span>`;
+    };
     function renderCards() {
       $('#aSetores').innerHTML = setores.map(s => `<button aria-pressed="${s === filtro}" data-s="${s}">${s}</button>`).join('');
       $('#aSetores').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.s; renderCards(); }));
@@ -933,7 +993,7 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
           <div class="read">
             <p class="line1">${a.frase}${a.aberta ? '' : ' Bolsa fechada agora: o preço é só da Hyperliquid e pode abrir com salto.'}</p>
             <div class="range" aria-label="Posição na faixa"><i style="left:calc(${pos}% - 1px)"></i><span class="lo">${fmtPx(a.lo)}</span><span class="hi">${fmtPx(a.hi)}</span></div>
-            <div class="facts" style="margin-top:12px">${ses}${fundChip(a.funding)}${posChip(a.pos)}${vol}<span>OI ${usd(a.oi)} · vol. 24 h ${usd(a.vol24)}</span></div>
+            <div class="facts" style="margin-top:12px">${ses}${fundChip(a.funding)}${consChip(a)}${posChip(a.pos)}${vol}<span>OI ${usd(a.oi)} · vol. 24 h ${usd(a.vol24)}</span></div>
           </div></article>`;
       }).join('');
       atualizarAoVivo();
@@ -965,6 +1025,81 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
       desenharMapa($('#aLiq'), L, px, []);
     }
     if (selA) renderLiqAcao(selA);
+
+    /* carteiras, fluxo e alertas, Diário das ações */
+    const CA = A.carteiras;
+    if (!CA) {
+      ['#aConsensus', '#aWallets', '#aFlow', '#aAlerts', '#aSignals'].forEach(s => { $(s).innerHTML = '<p class="muted">O ranking das carteiras de ações sai depois do primeiro processamento diário.</p>'; });
+      return;
+    }
+    const critA = CA.criterio;
+    $('#aConsNota').textContent = `Posições abertas agora das ${CA.confiaveis} carteiras confiáveis em ações: ${critA.operacoes}+ operações em ações em ${CA.dias} dias, mínimo estatístico de ${fmt(critA.minimo * 100)}%, lucro também copiando com ${CA.atraso_min} min de atraso e ${critA.horas} h ou mais por operação. Cada grupo conta uma vez.`;
+    $('#aConsensus').innerHTML = CA.consenso.length ? CA.consenso.map(([t, l, s]) => `<div class="bar-row"><span class="lbl">${t}</span>
+      <div class="split" role="img" aria-label="${l} comprados, ${s} vendidos"><span class="l" style="width:${l / (l + s) * 100}%"></span><span class="s" style="width:${s / (l + s) * 100}%"></span></div>
+      <span class="r">${l} long · ${s} short${l + s < 5 ? ' · poucas' : ''}</span></div>`).join('')
+      : `<p class="muted">${CA.confiaveis ? 'Nenhuma carteira confiável posicionada em ações agora.' : 'Nenhuma carteira passou no critério de confiável em ações ainda.'}</p>`;
+    function renderCarteirasA(filtro) {
+      const lista = CA.carteiras.filter(r => filtro === 'todas' || r.confiavel);
+      $('#aRankNota').textContent = (filtro === 'todas'
+        ? `As 80 com maior mínimo estatístico entre ${fmt(CA.com_operacoes)} carteiras com 10+ operações em ações, mais todas as confiáveis.`
+        : `${lista.length} carteiras confiáveis em ações, ordenadas pelo mínimo estatístico.`)
+        + ` Base: ${fmt(CA.candidatas || 0)} carteiras que operam ações acompanhadas, ranking de ${quando(CA.gerado)}.`;
+      $('#aWallets').innerHTML = `<thead><tr><th>Carteira</th><th class="n">Operações</th><th class="n">Acerto</th><th class="n">Mínimo</th><th class="n">Mediana / op.</th><th class="n">Copiando</th><th class="n">Segura</th><th class="n">Pior queda</th><th>Posições em ações agora</th><th>Situação</th></tr></thead><tbody>` +
+        (lista.length ? lista.map(r => {
+          const [cls, txt] = SIT[r.situacao];
+          const pos = r.posicoes.slice(0, 3).map(p => `<span class="chip ${p.lado === 'long' ? 'up' : 'down'}">${p.moeda} ${p.lado === 'long' ? 'L' : 'S'} ${fmt(p.alav)}x</span>`).join(' ')
+            + (r.posicoes.length > 3 ? ` <span class="muted small">+${r.posicoes.length - 3}</span>` : '') || '<span class="muted small">nenhuma</span>';
+          return `<tr><td>${linkCarteira(r.endereco)}<br><span class="grp">${r.grupo ? 'Grupo ' + r.grupo + ' · ' : ''}${r.moedas.join(', ')}</span></td>
+            <td class="n">${r.operacoes}</td><td class="n">${fmt(r.acerto * 100)}%</td><td class="n"><b>${fmt(r.minimo * 100)}%</b></td>
+            <td class="n ${sinalCls(r.mediana)}">${pctTxt(r.mediana)}</td><td class="n ${sinalCls(r.copia_mediana)}">${pctTxt(r.copia_mediana)}</td>
+            <td class="n">${fmt(r.horas_mediana, 1)} h</td><td class="n neg">${pctTxt(r.pior_queda, 1)}</td>
+            <td style="white-space:normal;min-width:180px">${pos}</td><td><span class="chip ${cls}">${txt}</span></td></tr>`;
+        }).join('') : `<tr><td colspan="10" class="muted">${filtro === 'todas' ? 'Nenhuma carteira com 10+ operações em ações ainda.' : 'Nenhuma carteira passou no critério de confiável em ações ainda. Veja o Top 80.'}</td></tr>`) + '</tbody>';
+    }
+    document.querySelectorAll('#aFiltroCarteiras button').forEach(b => b.addEventListener('click', () => {
+      document.querySelectorAll('#aFiltroCarteiras button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      renderCarteirasA(b.dataset.f);
+    }));
+    renderCarteirasA(CA.confiaveis ? 'conf' : 'todas');
+    document.querySelectorAll('#aFiltroCarteiras button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.f === (CA.confiaveis ? 'conf' : 'todas'))));
+
+    const fmaxA = Math.max(0.01, ...CA.fluxo.map(f => f[1] + f[2]));
+    $('#aFlow').innerHTML = CA.fluxo.length ? CA.fluxo.map(([t, b, s]) => `<div class="bar-row"><span class="lbl">${t}</span>
+      <div class="split" style="background:none"><span class="l" style="width:${b / fmaxA * 100}%"></span><span class="s" style="width:${s / fmaxA * 100}%"></span></div>
+      <span class="r"><span class="pos">+${fmt(b, 2)}</span> / <span class="neg">−${fmt(s, 2)}</span> mi</span></div>`).join('')
+      : '<p class="muted">Sem negócios em ações das carteiras do ranking nos últimos 7 dias.</p>';
+    function renderAlertasA(filtro) {
+      const lista = CA.alertas.filter(a => filtro === 'todas' || a.confiavel).slice(0, 40);
+      $('#aAlertNota').textContent = `${fmt(CA.alertas_24h)} alertas de ${fmt(CA.rastreadas)} carteiras do ranking de ações nas últimas 24 h${filtro === 'conf' ? '; aqui só os das confiáveis' : ''}. "Fora do pregão" = a bolsa da ação estava fechada.`;
+      $('#aAlerts').innerHTML = lista.length ? lista.map(a => `<div class="alert"><time>${quando(a.tempo).slice(6)}<br>${quando(a.tempo).slice(0, 5)}</time>
+        <span>${linkCarteira(a.endereco)} <span class="chip ${EV[a.evento](a.lado)}">${a.evento} ${a.lado.toUpperCase()} ${a.moeda}</span>${a.confiavel ? ' <span class="chip acc">confiável</span>' : ''}${(a.rotulos || '').split(';').filter(Boolean).map(r => ` <span class="chip warn">${r}</span>`).join('')}</span>
+        <span class="mono muted">${fmtPx(a.preco)}${a.alavancagem ? ' · ' + fmt(a.alavancagem) + 'x' : ''}</span></div>`).join('')
+        : `<p class="muted">${filtro === 'conf' ? 'Nenhum alerta das confiáveis nas últimas 48 h.' : 'Nenhum alerta nas últimas 48 h.'}</p>`;
+    }
+    document.querySelectorAll('#aFiltroAlertas button').forEach(b => b.addEventListener('click', () => {
+      document.querySelectorAll('#aFiltroAlertas button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      renderAlertasA(b.dataset.f);
+    }));
+    renderAlertasA('conf');
+
+    const sinaisA = CA.sinais, abertosA = sinaisA.filter(s => s.fechado_em == null);
+    const fechadosA = sinaisA.filter(s => s.retorno != null).map(s => s.retorno);
+    const acertoA = fechadosA.length ? fechadosA.filter(r => r > 0).length / fechadosA.length : null;
+    const somaA = fechadosA.reduce((a, b) => a + b, 0);
+    $('#aDiarioKpis').innerHTML =
+      kpi('Cópias registradas', sinaisA.length, `${abertosA.length} abertas agora`) +
+      kpi('Acerto real', acertoA == null ? '—' : fmt(acertoA * 100) + '%', fechadosA.length ? `${fechadosA.length} fechadas` : 'aguardando a primeira cópia fechar') +
+      kpi('Mediana por cópia', fechadosA.length ? pctTxt(mediana(fechadosA)) : '—', 'sem alavancagem, com taxas', fechadosA.length ? sinalCls(mediana(fechadosA)) : '') +
+      kpi('Resultado somado', fechadosA.length ? pctTxt(somaA, 1) : '—', 'soma simples dos retornos fechados', fechadosA.length ? sinalCls(somaA) : '');
+    $('#aSignals').innerHTML = '<thead><tr><th>Aberta em</th><th>Ativo</th><th>Carteira</th><th class="n">Entrada</th><th>Fechada em</th><th class="n">Saída</th><th>Situação</th><th class="n">Resultado</th></tr></thead><tbody>' +
+      (sinaisA.length ? sinaisA.map(s => {
+        const aberto = s.fechado_em == null, r = aberto ? s.agora : s.retorno;
+        const sit = aberto ? '<span class="chip acc">aberta</span>' : r > 0 ? '<span class="chip up">ganho</span>' : '<span class="chip down">perda</span>';
+        return `<tr><td class="mono muted">${quando(s.aberto_em)}</td><td><b>${s.moeda}</b> <span class="chip ${s.lado === 'long' ? 'up' : 'down'}">${s.lado.toUpperCase()}</span></td>
+          <td>${linkCarteira(s.endereco)}</td><td class="n">${fmtPx(s.preco_abertura)}</td>
+          <td class="mono muted">${aberto ? '—' : quando(s.fechado_em)}</td><td class="n">${aberto ? '—' : fmtPx(s.preco_fechamento)}</td>
+          <td>${sit}</td><td class="n ${sinalCls(r)}">${pctTxt(r)}${aberto ? ' <span class="muted small">agora</span>' : ''}</td></tr>`;
+      }).join('') : `<tr><td colspan="8" class="muted">${CA.confiaveis ? 'Nenhuma cópia registrada ainda: entra aqui quando uma confiável em ações abrir posição.' : 'Sem carteiras confiáveis em ações ainda, então nada para copiar.'}</td></tr>`) + '</tbody>';
   }
 
   /* ---------- SOPR do BTC (fase 3) ---------- */

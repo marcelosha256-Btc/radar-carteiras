@@ -39,6 +39,8 @@ def main():
         # ranking diário: só trabalha se o último tiver mais de 24 h
         if not rodar("ranking_diario.py", "--se-velho", "24"):
             falhas += 1
+        if not rodar("acoes_ranking.py", "--se-velho", "24"):   # ranking das carteiras de ações
+            falhas += 1
         if not rodar("coleta_hora.py"):
             falhas += 1
         proxima = (time.time() // 3600 + 1) * 3600 + 7 * 60

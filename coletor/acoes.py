@@ -12,6 +12,7 @@ abrir com salto no pregão seguinte.
 """
 import math
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
@@ -227,14 +228,96 @@ def ler_ordens(hl, con, moedas, agora):
     return len(feitas), len(linhas)
 
 
+def _posicao(p):
+    tam = float(p["szi"])
+    return {"lado": "long" if tam > 0 else "short", "tamanho": abs(tam), "preco_entrada": float(p["entryPx"]),
+            "alavancagem": float(p["leverage"]["value"]), "pnl_aberto": float(p["unrealizedPnl"]),
+            "preco_liquidacao": float(p["liquidationPx"]) if p.get("liquidationPx") else None,
+            "valor": abs(float(p["positionValue"]))}
+
+
+def foto(hl, con, agora):
+    """Foto de hora em hora das carteiras do ranking de ações (acoes_ranking.py): compara com a
+    anterior, grava os alertas e abre/fecha no Diário as cópias das carteiras confiáveis."""
+    from coleta_hora import comparar   # importado aqui: coleta_hora importa este módulo
+    from analise import TAXA_TAKER
+    rk = con.kv_ler("acoes_ranking")
+    if not rk or not rk["carteiras"]:
+        return "sem ranking de ações ainda"
+    carteiras = {c["endereco"]: c for c in rk["carteiras"]}
+    precos = {k: float(v) for k, v in hl.info({"type": "allMids", "dex": DEX}).items()}
+
+    def uma(end):
+        try:
+            return end, hl.estado(end, DEX)
+        except RuntimeError:
+            return end, None
+    with ThreadPoolExecutor(8) as ex:
+        lidas = [(e, s) for e, s in ex.map(uma, carteiras) if s is not None]
+    depois_por = {end: {ap["position"]["coin"]: _posicao(ap["position"]) for ap in est.get("assetPositions", [])
+                        if float(ap["position"]["szi"])} for end, est in lidas}
+    ends = list(depois_por)
+    antes_por = defaultdict(dict)
+    for i in range(0, len(ends), 200):
+        lote = ends[i:i + 200]
+        for r in con.execute(f"SELECT * FROM acoes_posicoes WHERE endereco IN ({','.join('?' * len(lote))})", lote):
+            antes_por[r["endereco"]][r["moeda"]] = dict(r)
+    fotografadas = {r["endereco"] for r in con.execute("SELECT endereco FROM acoes_fotos")}
+    abertos = defaultdict(list)
+    for s in con.execute("SELECT id, endereco, moeda, lado, preco_abertura FROM acoes_sinais WHERE fechado_em IS NULL"):
+        abertos[(s["endereco"], s["moeda"])].append(dict(s))
+    fechado = {k: not fn(agora) for k, fn in SESSOES.items()}
+
+    alertas, novos, fechamentos, linhas = [], [], [], []
+    for end, depois in depois_por.items():
+        antes = antes_por.get(end, {})
+        confiavel = bool(carteiras[end].get("confiavel"))
+        if end in fotografadas:   # sem foto anterior não há com o que comparar
+            for moeda, evento, lado, t_antes, t_depois in comparar(antes, depois):
+                preco = precos.get(moeda)
+                alav = (depois.get(moeda) or antes.get(moeda) or {}).get("alavancagem")
+                rot = ["fora do pregão"] if fechado[sessao_de(moeda.split(":", 1)[-1])] else []
+                alertas.append((agora, end, moeda, evento, lado, t_antes, t_depois, preco, alav, int(confiavel),
+                                ";".join(rot) or None))
+                if evento in ("fechou", "virou"):
+                    for s in abertos.pop((end, moeda), []):
+                        sinal = 1 if s["lado"] == "long" else -1
+                        ret = sinal * (preco / s["preco_abertura"] - 1) - 2 * TAXA_TAKER if preco else None
+                        fechamentos.append((agora, preco, ret, s["id"]))
+                if evento in ("abriu", "virou") and confiavel and preco:
+                    novos.append((end, moeda, lado, agora, preco))
+        linhas += [(end, m, p["lado"], p["tamanho"], p["preco_entrada"], p["alavancagem"], p["pnl_aberto"],
+                    p["preco_liquidacao"], p["valor"], agora) for m, p in depois.items()]
+
+    _em_lotes(con, "DELETE FROM acoes_posicoes WHERE endereco IN ({})", ends)
+    con.executemany("INSERT INTO acoes_posicoes VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", linhas)
+    con.executemany("INSERT INTO acoes_lido (endereco, posicoes_em, tem_acao) VALUES (?,?,?) ON CONFLICT (endereco) "
+                    "DO UPDATE SET posicoes_em=excluded.posicoes_em, tem_acao=excluded.tem_acao",
+                    [(e, agora, int(bool(depois_por[e]))) for e in ends])
+    con.executemany("INSERT INTO acoes_alertas VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", alertas)
+    con.executemany("UPDATE acoes_sinais SET fechado_em=?, preco_fechamento=?, retorno=? WHERE id=?", fechamentos)
+    con.executemany("INSERT INTO acoes_sinais (endereco, moeda, lado, aberto_em, preco_abertura) VALUES (?,?,?,?,?)", novos)
+    con.executemany("INSERT INTO acoes_fotos VALUES (?,?) ON CONFLICT (endereco) DO UPDATE SET tempo=excluded.tempo",
+                    [(e, agora) for e in ends])
+    con.commit()
+    return (f"foto: {len(ends)} carteiras do ranking de ações · {len(alertas)} alertas · {len(novos)} cópias abertas · "
+            f"{len(fechamentos)} fechadas")
+
+
 def coletar(hl, con, agora):
     moedas = universo(con, _contextos(hl), agora)
+    try:   # um erro na foto não pode impedir o rodízio que alimenta o mapa
+        resumo_foto = foto(hl, con, agora)
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc(), flush=True)
+        resumo_foto = f"foto falhou: {e!r}"[:200]
     lp = ler_posicoes(hl, con, agora)
     lo = ler_ordens(hl, con, moedas, agora)
     con.execute("DELETE FROM acoes_posicoes WHERE coletado < ?", (agora - 36 * HORA,))
     con.execute("DELETE FROM acoes_ordens WHERE coletado < ?", (agora - 48 * HORA,))
     con.commit()
-    return (f"{lp[0]} carteiras lidas ({lp[1]} com posição no xyz, {lp[2]} posições) · "
+    return (f"{resumo_foto} · rodízio: {lp[0]} carteiras lidas ({lp[1]} com posição no xyz, {lp[2]} posições) · "
             f"ordens de {lo[0]} ({lo[1]} ordens)")
 
 
@@ -267,12 +350,74 @@ def _amostra(con, agora):
             "tempo": agora}
 
 
+def _carteiras(con, agora, ctx, situacao):
+    """Abas Carteiras, Fluxo e alertas e Diário das ações (ranking feito por acoes_ranking.py)."""
+    from analise import TAXA_TAKER
+    rk = con.kv_ler("acoes_ranking")
+    if not rk:
+        return None, {}
+    curto = lambda m: m.split(":", 1)[-1]
+    pos = defaultdict(list)
+    for p in con.execute("SELECT * FROM acoes_posicoes WHERE endereco IN (SELECT endereco FROM acoes_fotos)"):
+        pos[p["endereco"]].append({"moeda": curto(p["moeda"]), "lado": p["lado"], "alav": p["alavancagem"],
+                                   "entrada": p["preco_entrada"], "pnl": p["pnl_aberto"], "valor": p["valor"]})
+    for v in pos.values():
+        v.sort(key=lambda p: -(p["valor"] or 0))
+    carteiras = []
+    for r in rk["carteiras"]:
+        if not (r["confiavel"] or len(carteiras) < 80):
+            continue
+        carteiras.append({k: r[k] for k in ("endereco", "grupo", "operacoes", "acerto", "minimo", "mediana",
+                                            "copia_mediana", "copia_n", "horas_mediana", "pior_queda", "pnl_usd",
+                                            "moedas", "confiavel")}
+                         | {"situacao": situacao(r, rk["criterio"]), "posicoes": pos.get(r["endereco"], [])})
+
+    # consenso das confiáveis (um voto por grupo), pela foto mais recente
+    vistos, consenso = set(), defaultdict(lambda: {"long": 0, "short": 0})
+    for r in rk["carteiras"]:
+        chave = r["grupo"] or r["endereco"]
+        if not r["confiavel"] or chave in vistos:
+            continue
+        vistos.add(chave)
+        for p in pos.get(r["endereco"], []):
+            consenso["xyz:" + p["moeda"]][p["lado"]] += 1
+
+    fluxo = sorted(([curto(r["moeda"]), round((r["c"] or 0) / 1e6, 2), round((r["v"] or 0) / 1e6, 2)] for r in con.execute(
+        "SELECT moeda, SUM(compra) c, SUM(venda) v FROM acoes_fluxo WHERE dia>=? GROUP BY moeda", (agora - 7 * DIA,))),
+        key=lambda x: -(x[1] + x[2]))[:10]
+    alertas = [dict(r) | {"moeda": curto(r["moeda"])} for r in con.execute(
+        "SELECT * FROM acoes_alertas WHERE tempo>=? ORDER BY confiavel DESC, tempo DESC LIMIT 80", (agora - 2 * DIA,))]
+    alertas.sort(key=lambda a: -a["tempo"])
+    um = lambda sql, *a: con.execute(sql, a).fetchone()[0] or 0
+    mids = {m: float(c["markPx"]) for m, c in ctx.items()}
+    sinais = []
+    for s in con.execute("SELECT * FROM acoes_sinais ORDER BY aberto_em DESC LIMIT 300"):
+        s = dict(s)
+        if s["fechado_em"] is None and mids.get(s["moeda"]):
+            sinal = 1 if s["lado"] == "long" else -1
+            s["agora"] = sinal * (mids[s["moeda"]] / s["preco_abertura"] - 1) - 2 * TAXA_TAKER
+        s["moeda"] = curto(s["moeda"])
+        sinais.append(s)
+    dados = {"gerado": rk["gerado"], "dias": rk["dias"], "atraso_min": rk["atraso_min"], "criterio": rk["criterio"],
+             "candidatas": rk.get("candidatas"), "com_ops": rk.get("com_ops"), "com_operacoes": len(rk["carteiras"]),
+             "confiaveis": sum(1 for r in rk["carteiras"] if r["confiavel"]),
+             "rastreadas": um("SELECT COUNT(*) FROM acoes_fotos"),
+             "ultima_foto": con.execute("SELECT MAX(tempo) FROM acoes_fotos").fetchone()[0],
+             "carteiras": carteiras,
+             "consenso": sorted(([curto(m), v["long"], v["short"]] for m, v in consenso.items()), key=lambda x: -(x[1] + x[2]))[:12],
+             "fluxo": fluxo, "alertas": alertas,
+             "alertas_24h": um("SELECT COUNT(*) FROM acoes_alertas WHERE tempo>=?", agora - DIA),
+             "sinais": sinais}
+    return dados, consenso
+
+
 def painel(hl, con, agora):
     # importado aqui: gerar_painel importa este módulo
-    from gerar_painel import FRASES, leitura_4h, tendencia_diaria
+    from gerar_painel import FRASES, leitura_4h, situacao, tendencia_diaria
     ctx = _contextos(hl)
     moedas = universo(con, ctx, agora)
     diarias = _tendencias(hl, con, moedas, agora, tendencia_diaria)
+    carteiras, consenso = _carteiras(con, agora, ctx, situacao)
 
     lados = {}
     for r in con.execute("SELECT moeda, lado, COUNT(*) AS n, SUM(valor) AS v FROM acoes_posicoes "
@@ -307,7 +452,8 @@ def painel(hl, con, agora):
                        "px": px, "ch": (px / ontem - 1) * 100 if ontem else 0.0, "oraculo": float(c["oraclePx"]),
                        "D": d, "D_por_que": d_por_que, "dias": dias, "H": h, "lo": lo, "hi": hi, "vol": vol,
                        "amp": amp, "lo_hoje": lo_hoje, "hi_hoje": hi_hoje, "funding": funding, "oi": oi,
-                       "vol24": float(c["dayNtlVlm"]), "sessao": ses, "aberta": aberta, "frase": frase, "pos": pos})
+                       "vol24": float(c["dayNtlVlm"]), "sessao": ses, "aberta": aberta, "frase": frase, "pos": pos,
+                       "L": consenso.get(m, {}).get("long", 0), "S": consenso.get(m, {}).get("short", 0)})
 
         posicoes = {r["endereco"]: dict(r) for r in con.execute(
             "SELECT * FROM acoes_posicoes WHERE moeda=? AND coletado >= ?", (m, agora - DIA))}
@@ -322,6 +468,6 @@ def painel(hl, con, agora):
     con.executemany("INSERT INTO mercado_hist VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING", hist)
     con.executemany("INSERT INTO liquidez_hist VALUES (?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", liq_hist)
     con.commit()
-    return {"gerado": agora, "ativos": ativos, "liquidez": mapas, "sessoes": sessoes,
+    return {"gerado": agora, "ativos": ativos, "liquidez": mapas, "sessoes": sessoes, "carteiras": carteiras,
             "funding_base": FUNDING_BASE, "amostra": _amostra(con, agora),
             "universo_dia": (con.kv_ler("acoes_universo") or {}).get("dia")}

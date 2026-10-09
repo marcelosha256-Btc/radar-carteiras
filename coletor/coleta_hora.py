@@ -18,6 +18,7 @@ if sys.stdout is None:   # pythonw: sem console, tudo vai para o log
     sys.stdout = sys.stderr = open(DADOS / "hora.log", "a", encoding="utf-8", buffering=1)
 
 import acoes  # noqa: E402
+import acoes_ranking  # noqa: E402
 import contexto  # noqa: E402
 import fase2  # noqa: E402
 import fase4  # noqa: E402
@@ -177,6 +178,13 @@ def coletar(con):
         log("ranking da nuvem atrasado; refazendo aqui no PC")
         ranking_diario.executar()
         rk = con.kv_ler("ranking")
+    ra = con.kv_ler("acoes_ranking")
+    if not NA_NUVEM and (not ra or time.time() * 1000 - ra["gerado"] > 26 * 3_600_000):
+        try:
+            log("ranking de ações atrasado; refazendo aqui no PC")
+            acoes_ranking.executar()
+        except Exception:
+            log("ERRO no ranking de ações (cripto segue normal)\n" + traceback.format_exc())
     carteiras = {c["endereco"]: c for c in rk["carteiras"]}
     agora = int(time.time() * 1000)
     precos = {k: float(v) for k, v in hl.info({"type": "allMids"}).items()}
