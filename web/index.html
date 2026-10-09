@@ -705,7 +705,7 @@ function renderReal(DADOS) {
     linhas.forEach((preco, i) => {
       const y = y0 + i * rh, f = porPreco[preco];
       if (i % 4 === 0) svgEl('text', { x: x0 - 8, y: y + 9, 'text-anchor': 'end', class: 'ax' }, s, fmtPx(preco));
-      if (!f) return;
+      if (!f || total(f) <= 0) return;
       let x = x0;
       [['stop_short', 'var(--up)', 1], ['liq_short', 'var(--up)', .5], ['stop_long', 'var(--down)', 1], ['liq_long', 'var(--down)', .5]].forEach(([k, cor, op]) => {
         if (!f[k]) return;
@@ -714,6 +714,13 @@ function renderReal(DADOS) {
         x += w;
       });
       if (top.includes(f.preco)) svgEl('text', { x: x + 6, y: y + 9, class: 'ax', style: 'fill:var(--fg)' }, s, usd(total(f)));
+      // detalhe ao passar o mouse: o que compõe a faixa e quantas carteiras
+      const nn = f.n || {}, q = k => `${usd(f[k] || 0)} (${nn[k] || 0})`;
+      const alvo = svgEl('rect', { x: x0, y, width: x1 - x0, height: rh, fill: 'transparent' }, s);
+      svgEl('title', {}, alvo, `${faixaTxt(f.preco, p)} (${pctTxt((f.preco + p / 2) / px - 1, 1)})
+Stops de long: ${q('stop_long')} · liq. long: ${q('liq_long')}
+Stops de short: ${q('stop_short')} · liq. short: ${q('liq_short')}
+Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
     });
     const iPx = linhas.findIndex(l => l <= px);
     const py = y0 + iPx * rh + rh * (1 - (px - linhas[iPx]) / p);

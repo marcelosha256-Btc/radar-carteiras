@@ -15,8 +15,9 @@ HORA = 3_600_000
 
 
 def passo(px):
-    """Faixa "redonda" perto de 0,5% do preço: 500 no BTC a 85 mil, 10 no ETH a 2,5 mil."""
-    alvo = px * 0.005
+    """Faixa "redonda" perto de 0,75% do preço: 500 no BTC a 81 mil, 20 no ETH a 2,5 mil
+    (o mesmo agrupamento do radar original; faixas mais finas picavam os aglomerados)."""
+    alvo = px * 0.0075
     base = 10 ** math.floor(math.log10(alvo))
     return min((base * m for m in (1, 2, 5, 10)), key=lambda s: abs(s - alvo))
 
@@ -136,7 +137,9 @@ def mapa_liquidez(con, m, px, oi_usd, agora):
     """Stops e liquidações das carteiras do ranking + amostra de varejo lida nas últimas 24 h.
     Uma carteira que está nas duas conta uma vez (vale a leitura do ranking, mais recente)."""
     p = passo(px)
-    b = defaultdict(lambda: {"stop_long": 0.0, "liq_long": 0.0, "stop_short": 0.0, "liq_short": 0.0})
+    b = defaultdict(lambda: {"stop_long": 0.0, "liq_long": 0.0, "stop_short": 0.0, "liq_short": 0.0,
+                             "tp_long": 0.0, "tp_short": 0.0})
+    n = defaultdict(lambda: defaultdict(set))      # faixa -> tipo -> carteiras (para o detalhe ao passar o mouse)
     posicoes = {r["endereco"]: dict(r) for r in con.execute(
         "SELECT * FROM varejo_posicoes WHERE moeda=? AND coletado>=?", (m, agora - 24 * HORA))}
     posicoes.update({r["endereco"]: dict(r) for r in con.execute("SELECT * FROM posicoes WHERE moeda=?", (m,))})
@@ -146,19 +149,31 @@ def mapa_liquidez(con, m, px, oi_usd, agora):
         longs += r["lado"] == "long"
         liq = r["preco_liquidacao"]
         if liq and abs(liq / px - 1) <= ALCANCE:
-            b[faixa(liq, p)]["liq_long" if r["lado"] == "long" else "liq_short"] += r["tamanho"] * liq
+            k = "liq_long" if r["lado"] == "long" else "liq_short"
+            b[faixa(liq, p)][k] += r["tamanho"] * liq
+            n[faixa(liq, p)][k].add(end)
     ordens = {(r["endereco"], r["oid"]): dict(r) for r in con.execute(
         "SELECT * FROM varejo_ordens WHERE moeda=? AND gatilho=1 AND coletado>=?", (m, agora - 36 * HORA))}
     ordens.update({(r["endereco"], r["oid"]): dict(r) for r in con.execute(
         "SELECT * FROM ordens WHERE moeda=? AND gatilho=1", (m,))})
     com_stop = set()
     for r in ordens.values():
-        if "Stop" not in r["tipo"] or abs(r["preco"] / px - 1) > ALCANCE:
+        if abs(r["preco"] / px - 1) > ALCANCE:
             continue
-        com_stop.add(r["endereco"])
-        # stop de venda protege comprado (fica abaixo); stop de compra protege vendido (acima)
-        b[faixa(r["preco"], p)]["stop_long" if r["lado"] == "A" else "stop_short"] += r["tamanho"] * r["preco"]
-    faixas = sorted(({"preco": f, **v} for f, v in b.items()), key=lambda x: -x["preco"])
+        f = faixa(r["preco"], p)
+        if "Take Profit" in r["tipo"]:
+            # alvo de venda = de quem está comprado; alvo de compra = de quem está vendido
+            k = "tp_long" if r["lado"] == "A" else "tp_short"
+        elif "Stop" in r["tipo"]:
+            com_stop.add(r["endereco"])
+            # stop de venda protege comprado (fica abaixo); stop de compra protege vendido (acima)
+            k = "stop_long" if r["lado"] == "A" else "stop_short"
+        else:
+            continue
+        b[f][k] += r["tamanho"] * r["preco"]
+        n[f][k].add(r["endereco"])
+    faixas = sorted(({"preco": f, **v, "n": {k: len(s) for k, s in n[f].items()}} for f, v in b.items()),
+                    key=lambda x: -x["preco"])
     acima = sum(x["stop_short"] + x["liq_short"] for x in faixas if x["preco"] > px)
     abaixo = sum(x["stop_long"] + x["liq_long"] for x in faixas if x["preco"] < px)
 
