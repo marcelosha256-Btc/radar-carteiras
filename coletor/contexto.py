@@ -60,7 +60,8 @@ def gravar_formadores(hl, con, agora):
             return None
     with ThreadPoolExecutor(8) as ex:
         estados = list(ex.map(uma, [f["endereco"] for f in lista]))
-    soma = defaultdict(lambda: [0.0, 0.0, 0])
+    # [US$ comprado, US$ vendido, carteiras, moedas compradas, moedas vendidas, Σ tam×entrada long, Σ short]
+    soma = defaultdict(lambda: [0.0, 0.0, 0, 0.0, 0.0, 0.0, 0.0])
     for est in estados:
         if not est:
             continue
@@ -71,10 +72,17 @@ def gravar_formadores(hl, con, agora):
                 continue
             valor = abs(float(p["positionValue"]))
             s = soma[p["coin"]]
-            s[0 if tam > 0 else 1] += valor
+            k = 0 if tam > 0 else 1
+            s[k] += valor
             s[2] += 1
-    linhas = [(agora, m, lo, sh, n) for m, (lo, sh, n) in soma.items() if lo + sh >= 100_000]
-    con.executemany("INSERT INTO formadores_pos VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING", linhas)
+            s[3 + k] += abs(tam)
+            s[5 + k] += abs(tam) * float(p["entryPx"])
+    # preço médio de entrada ponderado pelo tamanho: o "institucional entrou em 2.300" do vídeo
+    # de 08/10/2026, medido nas carteiras que acompanhamos
+    linhas = [(agora, m, lo, sh, n, el / ql if ql else None, es / qs if qs else None)
+              for m, (lo, sh, n, ql, qs, el, es) in soma.items() if lo + sh >= 100_000]
+    con.executemany("INSERT INTO formadores_pos (tempo, moeda, long_usd, short_usd, carteiras, long_entrada, "
+                    "short_entrada) VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", linhas)
     con.commit()
     return len(linhas)
 
@@ -134,11 +142,15 @@ def painel(con, agora, ativos):
     desde_f = con.execute("SELECT MIN(tempo) FROM formadores_pos").fetchone()[0]
     formadores = None
     if ult:
+        precos = {r["moeda"]: r["preco"] for r in con.execute(
+            "SELECT moeda, preco FROM mercado_hist WHERE tempo=(SELECT MAX(tempo) FROM mercado_hist)")}
         antes = con.execute("SELECT MAX(tempo) FROM formadores_pos WHERE tempo<=?", (ult - DIA + 3_600_000,)).fetchone()[0]
         net_antes = {r["moeda"]: r["long_usd"] - r["short_usd"] for r in
                      con.execute("SELECT * FROM formadores_pos WHERE tempo=?", (antes,))} if antes else {}
         linhas = [{"moeda": r["moeda"], "long": r["long_usd"], "short": r["short_usd"], "carteiras": r["carteiras"],
-                   "liquido": r["long_usd"] - r["short_usd"], "liquido_24h": net_antes.get(r["moeda"])}
+                   "liquido": r["long_usd"] - r["short_usd"], "liquido_24h": net_antes.get(r["moeda"]),
+                   "long_entrada": r["long_entrada"], "short_entrada": r["short_entrada"],
+                   "preco": precos.get(r["moeda"])}
                   for r in con.execute("SELECT * FROM formadores_pos WHERE tempo=?", (ult,))]
         linhas.sort(key=lambda x: -abs(x["liquido"]))
         formadores = {"tempo": ult, "desde": desde_f, "acompanhadas": len(con.kv_ler("formadores") or []),

@@ -100,6 +100,13 @@ CREATE TABLE IF NOT EXISTS formadores_pos (
   carteiras INTEGER,
   PRIMARY KEY (tempo, moeda)
 );
+CREATE TABLE IF NOT EXISTS liquidez_hist (
+  tempo BIGINT, moeda TEXT, preco DOUBLE PRECISION,
+  acima DOUBLE PRECISION, abaixo DOUBLE PRECISION,     -- US$ de stops + liquidações até ±15% (mapa de stops)
+  acima5 DOUBLE PRECISION, abaixo5 DOUBLE PRECISION,   -- só até ±5%
+  carteiras INTEGER,
+  PRIMARY KEY (tempo, moeda)
+);
 CREATE TABLE IF NOT EXISTS varejo_lido (
   endereco TEXT PRIMARY KEY,        -- amostra de contas pequenas do leaderboard (US$ 1 mil a 100 mil)
   ativo INTEGER DEFAULT 1,          -- 1 = está na amostra de hoje
@@ -128,6 +135,8 @@ COLUNAS_NOVAS = [
     ("sinais", "stop", "DOUBLE PRECISION"), ("sinais", "alvo", "DOUBLE PRECISION"), ("sinais", "r", "DOUBLE PRECISION"),
     ("carteiras", "primeira_atividade", "BIGINT"),   # ms da primeira atividade da conta (para marcar carteira nova)
     ("alertas", "rotulos", "TEXT"),                  # ex.: "delta neutro;carteira nova"
+    ("formadores_pos", "long_entrada", "DOUBLE PRECISION"),    # preço médio de entrada (ponderado pelo tamanho)
+    ("formadores_pos", "short_entrada", "DOUBLE PRECISION"),
 ]
 
 

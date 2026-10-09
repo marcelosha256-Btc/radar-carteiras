@@ -357,6 +357,11 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       </div>
       <svg id="liq" viewBox="0 0 720 470" role="img" aria-label="Volume de stops e liquidações por faixa de preço"></svg>
     </div>
+    <div class="box">
+      <div class="box-head"><h2>Teste da tese: o preço vai para o lado mais carregado?</h2><span class="chip warn">em teste</span></div>
+      <p class="small muted" id="teseNota"></p>
+      <div class="tbl-wrap"><table id="teseTabela"></table></div>
+    </div>
   </section>
 
   <!-- SOPR -->
@@ -661,8 +666,11 @@ function renderReal(DADOS) {
           <td class="n">${s.n}</td><td class="n">${pctN(s.acerto)}</td><td class="n ${sinalCls(s.mediana)}">${Rtxt(s.mediana)}</td>
           <td class="n ${sinalCls(s.media)}">${Rtxt(s.media)}</td><td class="n ${sinalCls(s.media_fora)}">${Rtxt(s.media_fora)} <span class="muted small">n=${s.n_fora}</span></td>
           <td class="n">${pctN(s.stopado)}</td>
-          <td>${s.ativo_ontem ? '<span class="chip up">disparou ontem</span>' : s.gatilho ? `${fmtPx(s.gatilho)} <span class="muted small">(${pctTxt(s.dist, 1)})</span>` : '<span class="muted small">longe</span>'}</td>
-          <td>${s.passa ? '<span class="chip up">passa</span>' : '<span class="chip flat">não passa</span>'}</td></tr>`).join('') + '</tbody>';
+          <td>${s.ativo_ontem ? '<span class="chip up">disparou ontem</span>' : s.gatilho ? `${fmtPx(s.gatilho)} <span class="muted small">(${pctTxt(s.dist, 1)})</span>` : `<span class="muted small">${s.nota || 'longe'}</span>`}</td>
+          <td>${s.passa ? '<span class="chip up">passa</span>' : '<span class="chip flat">não passa</span>'}</td></tr>`).join('') +
+        (a.referencia ? (r => `<tr class="muted"><td><i>${r.nome}</i></td><td class="n">${r.n}</td><td class="n">${pctN(r.acerto)}</td>
+          <td class="n">${Rtxt(r.mediana)}</td><td class="n">${Rtxt(r.media)}</td><td class="n">${Rtxt(r.media_fora)} <span class="small">n=${r.n_fora}</span></td>
+          <td class="n">${pctN(r.stopado)}</td><td colspan="2" class="small">base: o long precisa ganhar dela</td></tr>`)(a.referencia) : '') + '</tbody>';
     };
 
     const renderSwing = () => {
@@ -863,14 +871,31 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
         <td class="n">${fmtPx(e.preco)}</td><td class="n">${fmt(e.sopr, 4)}</td>${HZ.map(k => `<td class="n ${sinalCls(e.ret[k])}">${e.ret[k] == null ? '—' : pctTxt(e.ret[k], 1)}</td>`).join('')}</tr>`).join('') + '</tbody>';
   }
 
+  /* ---------- Teste da tese do lado mais carregado ---------- */
+  const TESE = F2 && F2._tese_lado;
+  if (TESE) {
+    const lim = fmt(TESE.limite * 100);
+    const comDados = Object.values(TESE.grupos).some(g => g['24'].n > 0);
+    $('#teseNota').innerHTML = `Tese do radar original: com a maior parte da liquidez abaixo do preço, o preço desce para buscá-la (e o contrário acima). Gravamos o lado mais carregado de cada ativo desde ${quando(TESE.desde)} e medimos o preço 24 h e 72 h depois, usando uma leitura por ativo por dia (as de hora em hora se repetem). Lado carregado = ${lim}% ou mais da liquidez de um lado. "Acertou" = o preço andou para o lado carregado. ` +
+      (comDados ? `${fmt(TESE.leituras)} leituras até agora: com menos de ~60 por grupo, qualquer número aqui é ruído.` : '<b>Ainda sem resultado:</b> a primeira medição sai 24 h depois da primeira leitura. A revisão de 06/11 traz o primeiro balanço.');
+    const nomesG = { abaixo: `Carregado abaixo (≥ ${lim}%)`, acima: `Carregado acima (≥ ${lim}%)`, equilibrado: 'Equilibrado' };
+    const cel = (r, eq) => r.n ? `<td class="n ${sinalCls(r.mediana)}">${pctTxt(r.mediana, 1)}</td><td class="n">${eq ? '—' : fmt(r.acerto * 100) + '%'}</td><td class="n muted">${r.n}</td>` : '<td class="n muted">—</td><td class="n muted">—</td><td class="n muted">0</td>';
+    $('#teseTabela').innerHTML = '<thead><tr><th>Leitura</th><th class="n">24 h: mediana</th><th class="n">acertou</th><th class="n">n</th><th class="n">72 h: mediana</th><th class="n">acertou</th><th class="n">n</th></tr></thead><tbody>' +
+      Object.entries(nomesG).map(([g, nome]) => `<tr><td>${nome}</td>${cel(TESE.grupos[g]['24'], g === 'equilibrado')}${cel(TESE.grupos[g]['72'], g === 'equilibrado')}</tr>`).join('') + '</tbody>';
+  } else {
+    $('#teseNota').textContent = 'O histórico do lado mais carregado começa a ser gravado na próxima coleta.';
+  }
+
   /* ---------- Formadores de mercado e histórico de OI/funding ---------- */
   const FM = DADOS.formadores;
   if (FM) {
-    $('#mmNota').innerHTML = `Posição somada das ${FM.acompanhadas} carteiras com perfil de formador de mercado (giram 150x a conta ou mais por mês, US$ 300 mi+ negociados). Tese do vídeo: <b>formador vendido = o ativo tende a subir</b>. Ainda não testada: estamos gravando desde ${quando(FM.desde)} e a revisão de 06/11 mede se o líquido vendido antecedeu alta. Foto de ${quando(FM.tempo)}.`;
-    $('#mmTabela').innerHTML = '<thead><tr><th>Ativo</th><th class="n">Comprado</th><th class="n">Vendido</th><th class="n">Líquido</th><th class="n">24 h atrás</th><th class="n">Carteiras</th></tr></thead><tbody>' +
+    $('#mmNota').innerHTML = `Posição somada das ${FM.acompanhadas} carteiras com perfil de formador de mercado (giram 150x a conta ou mais por mês, US$ 300 mi+ negociados). Tese do vídeo: <b>formador vendido = o ativo tende a subir</b>. Ainda não testada: estamos gravando desde ${quando(FM.desde)} e a revisão de 06/11 mede se o líquido vendido antecedeu alta. Entrada média = preço médio ponderado pelo tamanho; entre parênteses, a distância até o preço atual (a outra tese do vídeo: "o institucional só sai do prejuízo abaixo da entrada dele"). Foto de ${quando(FM.tempo)}.`;
+    const entr = (v, px) => v == null ? '<span class="muted">—</span>' : `${fmtPx(v)}${px ? ` <span class="muted small">(${pctTxt(v / px - 1, 1)})</span>` : ''}`;
+    $('#mmTabela').innerHTML = '<thead><tr><th>Ativo</th><th class="n">Comprado</th><th class="n">Vendido</th><th class="n">Líquido</th><th class="n">24 h atrás</th><th class="n">Entrada média dos comprados</th><th class="n">Entrada média dos vendidos</th><th class="n">Carteiras</th></tr></thead><tbody>' +
       FM.moedas.map(m => `<tr><td><b>${m.moeda}</b></td><td class="n pos">${usd(m.long)}</td><td class="n neg">${usd(m.short)}</td>
         <td class="n ${m.liquido >= 0 ? 'pos' : 'neg'}"><b>${m.liquido >= 0 ? '+' : '−'}${usd(Math.abs(m.liquido))}</b></td>
-        <td class="n muted">${m.liquido_24h == null ? '—' : (m.liquido_24h >= 0 ? '+' : '−') + usd(Math.abs(m.liquido_24h))}</td><td class="n">${m.carteiras}</td></tr>`).join('') + '</tbody>';
+        <td class="n muted">${m.liquido_24h == null ? '—' : (m.liquido_24h >= 0 ? '+' : '−') + usd(Math.abs(m.liquido_24h))}</td>
+        <td class="n">${entr(m.long_entrada, m.preco)}</td><td class="n">${entr(m.short_entrada, m.preco)}</td><td class="n">${m.carteiras}</td></tr>`).join('') + '</tbody>';
   } else {
     $('#mmNota').textContent = 'A posição dos formadores de mercado começa a ser gravada na próxima coleta.';
   }

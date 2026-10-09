@@ -176,6 +176,8 @@ def mapa_liquidez(con, m, px, oi_usd, agora):
                     key=lambda x: -x["preco"])
     acima = sum(x["stop_short"] + x["liq_short"] for x in faixas if x["preco"] > px)
     abaixo = sum(x["stop_long"] + x["liq_long"] for x in faixas if x["preco"] < px)
+    acima5 = sum(x["stop_short"] + x["liq_short"] for x in faixas if px < x["preco"] <= px * 1.05)
+    abaixo5 = sum(x["stop_long"] + x["liq_long"] for x in faixas if px * 0.95 <= x["preco"] < px)
 
     def ima(lado):
         cand = [x for x in faixas if (x["preco"] > px if lado == "acima" else x["preco"] + p < px)
@@ -184,7 +186,8 @@ def mapa_liquidez(con, m, px, oi_usd, agora):
         cand = [x for x in cand if chave(x) > 0]
         return max(cand, key=chave)["preco"] if cand else None
 
-    return {"passo": p, "faixas": faixas, "acima": acima, "abaixo": abaixo, "ima_acima": ima("acima"),
+    return {"passo": p, "faixas": faixas, "acima": acima, "abaixo": abaixo, "acima5": acima5, "abaixo5": abaixo5,
+            "ima_acima": ima("acima"),
             "ima_abaixo": ima("abaixo"), "carteiras": len(posicoes), "longs": longs, "shorts": len(posicoes) - longs,
             "com_stop": len(com_stop), "cobertura": notional / oi_usd if oi_usd else None}
 
@@ -304,12 +307,79 @@ def calcular(hl, con, ativos, consenso, agora):
         saida[m] = {"liquidez": mapa_liquidez(con, m, px, a["oi"], agora), "sr": z, "regime": reg,
                     "fluxo7": fluxo[m], "faixa": [a["lo"], a["hi"]], "amp": a.get("amp")}
     con.executemany("INSERT INTO regime VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", regs)
+    # histórico do lado mais carregado, para testar a tese "liquidez abaixo → o preço vai buscar"
+    con.executemany("INSERT INTO liquidez_hist VALUES (?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING",
+                    [(agora, a["t"], a["px"], saida[a["t"]]["liquidez"]["acima"], saida[a["t"]]["liquidez"]["abaixo"],
+                      saida[a["t"]]["liquidez"]["acima5"], saida[a["t"]]["liquidez"]["abaixo5"],
+                      saida[a["t"]]["liquidez"]["carteiras"]) for a in ativos])
     con.commit()
+    saida["_tese_lado"] = estudo_lado(con, agora)
     lidas = con.execute("SELECT COUNT(*) FROM varejo_lido WHERE posicoes_em>=?", (agora - 24 * HORA,)).fetchone()[0]
     saida["_amostra"] = {"varejo_24h": lidas, "ranking": con.execute("SELECT COUNT(*) FROM fotos").fetchone()[0],
                          "varejo_total": con.execute("SELECT COUNT(*) FROM varejo_lido WHERE ativo=1").fetchone()[0],
                          "tempo": agora}
     return saida
+
+
+LADO_FORTE = 0.65          # 65% ou mais da liquidez de um lado = lado carregado
+HORIZONTES_H = (24, 72)
+
+
+def estudo_lado(con, agora):
+    """Testa a tese do vídeo de 08/10/2026: "lado mais carregado é para onde o preço vai".
+    Uma leitura por ativo a cada 24 h (leituras de hora em hora seriam quase a mesma coisa
+    contada várias vezes); o retorno vem do preço gravado no histórico 24 h e 72 h depois."""
+    linhas = con.execute("SELECT tempo, moeda, preco, acima, abaixo FROM liquidez_hist ORDER BY moeda, tempo").fetchall()
+    if not linhas:
+        return None
+    precos = defaultdict(list)
+    for r in con.execute("SELECT tempo, moeda, preco FROM mercado_hist WHERE moeda IN ({}) AND tempo>=?".format(
+            ",".join("?" * len(ATIVOS))), (*ATIVOS, linhas[0]["tempo"])):
+        precos[r["moeda"]].append((r["tempo"], r["preco"]))
+    for v in precos.values():
+        v.sort()
+
+    def preco_em(m, t):
+        """Preço gravado mais perto de t (até 90 min de diferença)."""
+        serie = precos.get(m) or []
+        lo, hi = 0, len(serie)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if serie[mid][0] < t:
+                lo = mid + 1
+            else:
+                hi = mid
+        cands = [serie[k] for k in (lo - 1, lo) if 0 <= k < len(serie)]
+        melhor = min(cands, key=lambda x: abs(x[0] - t), default=None)
+        return melhor[1] if melhor and abs(melhor[0] - t) <= 90 * 60_000 else None
+
+    grupos = {g: {h: [] for h in HORIZONTES_H} for g in ("abaixo", "acima", "equilibrado")}
+    ultimo = {}
+    leituras = 0
+    for r in linhas:
+        tot = (r["acima"] or 0) + (r["abaixo"] or 0)
+        if not tot or r["tempo"] - ultimo.get(r["moeda"], -10 ** 15) < 24 * HORA:
+            continue
+        ultimo[r["moeda"]] = r["tempo"]
+        leituras += 1
+        frac = r["abaixo"] / tot
+        g = "abaixo" if frac >= LADO_FORTE else "acima" if frac <= 1 - LADO_FORTE else "equilibrado"
+        for h in HORIZONTES_H:
+            fut = preco_em(r["moeda"], r["tempo"] + h * HORA)
+            if fut:
+                grupos[g][h].append(fut / r["preco"] - 1)
+
+    def resumo(xs, lado):
+        if not xs:
+            return {"n": 0}
+        xs = sorted(xs)
+        meio = len(xs) // 2
+        med = xs[meio] if len(xs) % 2 else (xs[meio - 1] + xs[meio]) / 2
+        # "acertou" = o preço andou na direção do lado carregado
+        acerto = None if lado == "equilibrado" else sum(1 for x in xs if (x < 0 if lado == "abaixo" else x > 0)) / len(xs)
+        return {"n": len(xs), "mediana": med, "acerto": acerto}
+    return {"desde": linhas[0]["tempo"], "leituras": leituras, "limite": LADO_FORTE,
+            "grupos": {g: {str(h): resumo(v[h], g) for h in HORIZONTES_H} for g, v in grupos.items()}}
 
 
 def hora_das_ordens(con, intervalo_h):

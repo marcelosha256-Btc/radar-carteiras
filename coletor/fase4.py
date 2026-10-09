@@ -114,6 +114,22 @@ def atr(h, l, c, n=14):
     return out
 
 
+def rsi_semanal(ts, c, n=14):
+    """RSI de 14 semanas, só nos dias que fecham a semana (domingo, UTC); nos outros dias, None.
+    Usa só semanas fechadas: não olha o futuro."""
+    out = [None] * len(c)
+    dom = [k for k, t in enumerate(ts) if datetime.fromtimestamp(t, timezone.utc).weekday() == 6]
+    r = rsi([c[k] for k in dom], n)
+    for k, v in zip(dom, r):
+        out[k] = v
+    return out
+
+
+def _tr(k, i):
+    h, l, c = k["h"], k["l"], k["c"]
+    return max(h[i] - l[i], abs(h[i] - c[i - 1]), abs(l[i] - c[i - 1]))
+
+
 def crsi(c):
     """Connors RSI: média de RSI(3) do preço, RSI(2) da sequência de altas/quedas e
     percentil do retorno de 1 dia nos últimos 100."""
@@ -136,7 +152,7 @@ def indicadores(d):
     c, h, l = d["c"], d["h"], d["l"]
     n = len(c)
     ind = {"c": c, "h": h, "l": l, "o": d["o"], "sma20": sma(c, 20), "sma50": sma(c, 50), "sma200": sma(c, 200),
-           "rsi2": rsi(c, 2), "rsi14": rsi(c, 14), "atr": atr(h, l, c)}
+           "rsi2": rsi(c, 2), "rsi14": rsi(c, 14), "atr": atr(h, l, c), "rsi_sem": rsi_semanal(d["ts"], c)}
     max20 = [None] * n
     min20 = [None] * n
     largura = [None] * n
@@ -176,7 +192,21 @@ SETUPS = [
     {"id": "euforia", "nome": "Euforia: preço esticado", "lado": "short", "sentido": 1,
      "cond": lambda k, i: k["sma20"][i] is not None and k["atr"][i] is not None and k["rsi14"][i] is not None
      and k["c"][i] > k["sma20"][i] + 3 * k["atr"][i] and k["rsi14"][i] > 80},
+    # os dois do vídeo de 08/10/2026, com as mesmas regras de saída dos outros
+    {"id": "rsi_semanal_60", "nome": "Regime de alta: RSI semanal acima de 60 (só no domingo)", "lado": "long",
+     "sentido": 1,
+     "cond": lambda k, i: k["rsi_sem"][i] is not None and k["rsi_sem"][i] >= 60},
+    {"id": "volatilidade_queda", "nome": "Queda com volatilidade anormal em tendência de alta", "lado": "long",
+     "sentido": -1,
+     "cond": lambda k, i: i >= 1 and _tend(k, i, "alta") and k["atr"][i - 1] is not None
+     and k["c"][i] < k["c"][i - 1] and _tr(k, i) >= 2 * k["atr"][i - 1]},
 ]
+
+
+# referência para os setups de compra: comprar em qualquer dia, com as mesmas regras de saída.
+# Em ativos que subiram muito no período, um long "passa" no filtro só por pegar carona na alta.
+QUALQUER_DIA = {"id": "referencia", "nome": "Referência: comprar em qualquer dia", "lado": "long", "sentido": 1,
+                "cond": lambda k, i: True}
 
 
 # ---------- teste ----------
@@ -236,6 +266,10 @@ def gatilho(setup, d, px):
     """Preço de fechamento de hoje que dispararia o setup (busca numa grade de ±25%)."""
     base = {k: d[k][-400:] for k in ("o", "h", "l", "c")}
     ult = base["c"][-1]
+    amanha = d["ts"][-1] + DIA_S
+    semanal = setup["id"] == "rsi_semanal_60"
+    if semanal and datetime.fromtimestamp(amanha, timezone.utc).weekday() != 6:
+        return None          # só pode disparar no fechamento de domingo
     melhor = None
     passos = [k * 0.0025 for k in range(0, 101)]
     for p in passos:
@@ -243,6 +277,8 @@ def gatilho(setup, d, px):
         teste = {"o": base["o"] + [ult], "h": base["h"] + [max(ult, preco)],
                  "l": base["l"] + [min(ult, preco)], "c": base["c"] + [preco]}
         ind = indicadores_rapidos(teste)
+        if semanal:
+            ind["rsi_sem"][-1] = rsi_semanal(d["ts"] + [amanha], d["c"] + [preco])[-1]
         if setup["cond"](ind, len(teste["c"]) - 1):
             melhor = preco
             break
@@ -254,7 +290,7 @@ def indicadores_rapidos(d):
     c, h, l = d["c"], d["h"], d["l"]
     n = len(c)
     ind = {"c": c, "h": h, "l": l, "o": d["o"], "sma20": sma(c, 20), "sma50": sma(c, 50), "sma200": sma(c, 200),
-           "rsi2": rsi(c, 2), "rsi14": rsi(c, 14), "atr": atr(h, l, c)}
+           "rsi2": rsi(c, 2), "rsi14": rsi(c, 14), "atr": atr(h, l, c), "rsi_sem": [None] * n}
     max20 = [None] * n
     min20 = [None] * n
     comp = [False] * n
@@ -316,11 +352,17 @@ def calcular_base(hl, precos):
             r.update({"id": s["id"], "nome": s["nome"], "lado": s["lado"], "ativo_ontem": ativo,
                       "gatilho": None if ativo else gatilho(s, d, px),
                       "ultimas": [{"t": x["t"], "r": round(x["r"], 2)} for x in ops[-5:]]})
+            if s["id"] == "rsi_semanal_60":
+                ult = next((v for v in reversed(ind["rsi_sem"]) if v is not None), None)
+                r["nota"] = f"RSI sem. {ult:.0f} (domingo)" if ult is not None else None
             setups.append(r)
-        saida["ativos"][m] = {"fonte": d["fonte"], "desde": time.strftime("%Y-%m-%d", time.gmtime(ts[0])),
+        ref = resumo(testar(QUALQUER_DIA, ind, ts), corte)
+        ref.update({"id": QUALQUER_DIA["id"], "nome": QUALQUER_DIA["nome"], "lado": "long"})
+        saida["ativos"][m] = {"fonte": d["fonte"], "referencia": ref, "desde": time.strftime("%Y-%m-%d", time.gmtime(ts[0])),
                               "dias": len(ts), "ultimo_fechamento": d["c"][-1], "baixa_ontem": d["l"][-1],
                               "alta_ontem": d["h"][-1], "sinal_ts": ts[-1],
                               "contexto": contexto(d, ind), "setups": setups}
+    saida["ids"] = [s["id"] for s in SETUPS]
     saida["testes"] = sum(len(a.get("setups", [])) for a in saida["ativos"].values())
     saida["passam"] = sum(1 for a in saida["ativos"].values() for s in a.get("setups", []) if s["passa"])
     return saida
@@ -329,7 +371,8 @@ def calcular_base(hl, precos):
 def base_do_dia(hl, con, precos):
     hoje = time.strftime("%Y-%m-%d", time.gmtime())
     salvo = con.kv_ler("swing_base")
-    if salvo and salvo.get("dia") == hoje:
+    ids = [s["id"] for s in SETUPS]
+    if salvo and salvo.get("dia") == hoje and salvo.get("ids") == ids:   # setup novo = recalcula no mesmo dia
         return salvo
     base = calcular_base(hl, precos)
     con.kv_gravar("swing_base", base)
@@ -410,6 +453,7 @@ def painel(con, ativos, f2):
         p = px.get(m, a["ultimo_fechamento"])
         setups = a["setups"]
         sentido = {x["id"]: x["sentido"] for x in SETUPS}
+        setups = [s for s in setups if s["id"] in sentido]   # base de um dia com setup que saiu da lista
         for s in setups:
             s["dist"] = (s["gatilho"] / p - 1) if s["gatilho"] else None
             s["sentido"] = sentido[s["id"]]   # -1 dispara na queda, +1 na alta
@@ -434,5 +478,6 @@ def painel(con, ativos, f2):
                  "stop_curto": curto, "curto_pego": principal["curto_pego"], "stopado": principal["stopado"],
                  "atr": ctx["atr"], "atr_pct": ctx["atr_pct"]}
         out["ativos"].append({"t": m, "px": p, "fonte": a["fonte"], "desde": a["desde"], "contexto": ctx,
+                              "referencia": a.get("referencia"),
                               "setups": setups, "principal": principal["id"], "plano": plano})
     return out
