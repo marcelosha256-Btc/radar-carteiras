@@ -146,12 +146,13 @@ def mapa_liquidez(con, m, px, oi_usd, agora):
     return mapa_de(posicoes, ordens.values(), px, oi_usd)
 
 
-def mapa_de(posicoes, ordens, px, oi_usd, posicao_inteira=False):
+def mapa_de(posicoes, ordens, px, oi_usd):
     """Mapa a partir das posições ({endereco: linha}) e das ordens com gatilho já lidas.
     Usado pelos 6 ativos de cripto e pelas ações (acoes.py), que ficam em tabelas próprias.
 
-    posicao_inteira=True: o stop/alvo "da posição inteira" (isPositionTpsl) vem da API com
-    tamanho 0; conta com o tamanho da posição da carteira, quando ela está na leitura."""
+    O stop/alvo "da posição inteira" (isPositionTpsl) vem da API com tamanho 0: conta com o
+    tamanho da posição da carteira, quando ela está na leitura (antes de 09/10/2026 valia
+    US$ 0, ~45% das ordens com gatilho)."""
     p = passo(px)
     b = defaultdict(lambda: {"stop_long": 0.0, "liq_long": 0.0, "stop_short": 0.0, "liq_short": 0.0,
                              "tp_long": 0.0, "tp_short": 0.0})
@@ -179,9 +180,7 @@ def mapa_de(posicoes, ordens, px, oi_usd, posicao_inteira=False):
             k = "stop_long" if r["lado"] == "A" else "stop_short"
         else:
             continue
-        tam = r["tamanho"]
-        if not tam and posicao_inteira:
-            tam = (posicoes.get(r["endereco"]) or {}).get("tamanho") or 0
+        tam = r["tamanho"] or (posicoes.get(r["endereco"]) or {}).get("tamanho") or 0
         b[f][k] += tam * r["preco"]
         n[f][k].add(r["endereco"])
     faixas = sorted(({"preco": f, **v, "n": {k: len(s) for k, s in n[f].items()}} for f, v in b.items()),
@@ -215,6 +214,8 @@ def zonas(con, hl, m, px, agora):
     baleias = defaultdict(float)
     n_baleias = defaultdict(set)
     alvos = defaultdict(float)
+    # alvo "da posição inteira" vem com tamanho 0: vale o tamanho da posição da carteira
+    tam_pos = {r["endereco"]: r["tamanho"] for r in con.execute("SELECT endereco, tamanho FROM posicoes WHERE moeda=?", (m,))}
     for r in con.execute("SELECT * FROM ordens WHERE moeda=?", (m,)):
         if abs(r["preco"] / px - 1) > ALCANCE:
             continue
@@ -223,7 +224,7 @@ def zonas(con, hl, m, px, agora):
             baleias[f] += r["preco"] * r["tamanho"]
             n_baleias[f].add(r["endereco"])
         elif "Take Profit" in r["tipo"]:
-            alvos[f] += r["preco"] * r["tamanho"]
+            alvos[f] += r["preco"] * (r["tamanho"] or tam_pos.get(r["endereco"]) or 0)
     volume = perfil_volume_guardado(con, hl, m, px, p, agora)
     corte_vol = sorted(volume.values(), reverse=True)[max(0, len(volume) // 10)] if volume else math.inf
 

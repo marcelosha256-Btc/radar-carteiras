@@ -313,7 +313,7 @@ def painel(hl, con, agora):
             "SELECT * FROM acoes_posicoes WHERE moeda=? AND coletado >= ?", (m, agora - DIA))}
         ordens = [dict(r) for r in con.execute(
             "SELECT * FROM acoes_ordens WHERE moeda=? AND gatilho=1 AND coletado >= ?", (m, agora - 36 * HORA))]
-        L = fase2.mapa_de(posicoes, ordens, px, oi, posicao_inteira=True)
+        L = fase2.mapa_de(posicoes, ordens, px, oi)
         mapas[m] = L
         hist.append((agora, m, px, oi, funding))
         liq_hist.append((agora, m, px, L["acima"], L["abaixo"], L["acima5"], L["abaixo5"], L["carteiras"]))
