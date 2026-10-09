@@ -14,12 +14,12 @@ import time
 import requests
 
 API = "https://bitview.space/api/metric/{}/day1?from=-{}"
-API4 = "https://bitview.space/api/metric/{}/hour4?from=-{}"
+API1 = "https://bitview.space/api/metric/{}/hour1?from=-{}"
 DIAS = 4400                  # ~12 anos: 3 de janela + eventos desde 2017 com retorno de até 365 dias
 JANELA = 3 * 365
 HORIZONTES = [7, 30, 60, 120, 180, 365]
 AGRUPAR_DIAS = 14            # eventos do mesmo tipo a menos de 14 dias contam uma vez
-GUARDAR_H = 3                # recalcula no máximo a cada 3 h
+GUARDAR_H = 0.75             # recalcula a cada coleta (de hora em hora); a fonte fecha as velas de 1 h
 SERIES = ("date", "price_close", "sth_realized_price", "sth_sopr_1w", "sth_sopr_24h")
 
 
@@ -33,10 +33,10 @@ def baixar():
     s = {k: v[-n:] for k, v in s.items()}
     ok = [i for i in range(n) if all(s[m][i] is not None for m in SERIES)]
     s = {k: [v[i] for i in ok] for k, v in s.items()}
-    # SOPR de 24 h em velas de 4 h (últimos 7 dias), para ver o dia corrente sem esperar o fechamento
-    v4 = requests.get(API4.format("sth_sopr_24h", 42), timeout=60, headers={"User-Agent": "radar-carteiras"}).json()
-    t4 = requests.get(API4.format("timestamp", 42), timeout=60, headers={"User-Agent": "radar-carteiras"}).json()
-    s["h4"] = [[t * 1000, v] for t, v in zip(t4, v4) if v is not None]
+    # SOPR de 24 h em velas de 1 h (últimos 7 dias), para ver o dia corrente sem esperar o fechamento
+    v1 = requests.get(API1.format("sth_sopr_24h", 168), timeout=60, headers={"User-Agent": "radar-carteiras"}).json()
+    t1 = requests.get(API1.format("timestamp", 168), timeout=60, headers={"User-Agent": "radar-carteiras"}).json()
+    s["h1"] = [[t * 1000, v] for t, v in zip(t1, v1) if v is not None]
     return s
 
 
@@ -92,13 +92,13 @@ def validacao(eventos, niveis, custo):
     return out
 
 
-def sopr_4h(s):
-    """SOPR de 24 h atualizado a cada 4 h, com as faixas de 2% e 98% do SOPR de 24 h diário
+def sopr_horario(s):
+    """SOPR de 24 h atualizado de hora em hora, com as faixas de 2% e 98% do SOPR de 24 h diário
     nos últimos 3 anos (é uma série mais nervosa que a de 7 dias, então tem faixas próprias)."""
-    if not s.get("h4"):
+    if not s.get("h1"):
         return None
     hist = sorted(s["sth_sopr_24h"][-JANELA:])
-    return {"pontos": s["h4"], "p02": _quantil(hist, 0.02), "p98": _quantil(hist, 0.98),
+    return {"pontos": s["h1"], "atualizado_ate": s["h1"][-1][0], "p02": _quantil(hist, 0.02), "p98": _quantil(hist, 0.98),
             "p10": _quantil(hist, 0.10), "p90": _quantil(hist, 0.90)}
 
 
@@ -174,7 +174,7 @@ def calcular(s):
                   "custo": [round(x) for x in custo[corte:]], "sopr7": [round(x, 4) for x in sopr[corte:]]},
         "historico_desde": datas[0],
         "validacao": validacao(eventos, niveis, c),
-        "sopr4h": sopr_4h(s),
+        "sopr_horario": sopr_horario(s),
     }
 
 

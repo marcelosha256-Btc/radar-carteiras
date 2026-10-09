@@ -361,8 +361,8 @@ tr.avoid td { color: var(--muted); }
     <div class="kpis" id="soprKpis"></div>
     <div class="box" id="soprLeitura"></div>
     <div class="box">
-      <div class="box-head"><h2>SOPR de 24 h, atualizado a cada 4 h</h2><span class="chip" id="sopr4hAgora"></span></div>
-      <p class="small muted">Mostra o dia corrente sem esperar o fechamento diário. É mais nervoso que o de 7 dias, por isso tem faixas próprias (percentis 2 e 98 dos últimos 3 anos). Últimos 7 dias.</p>
+      <div class="box-head"><h2>SOPR de 24 h, atualizado de hora em hora</h2><span class="chip" id="sopr4hAgora"></span></div>
+      <p class="small muted">Mostra o dia corrente sem esperar o fechamento diário: cada ponto é uma hora. É mais nervoso que o de 7 dias, por isso tem faixas próprias (percentis 2 e 98 dos últimos 3 anos). Últimos 7 dias.</p>
       <svg id="sopr4hChart" viewBox="0 0 720 200" role="img" aria-label="SOPR de 24 horas do BTC em velas de 4 horas"></svg>
     </div>
     <div class="box">
@@ -422,7 +422,12 @@ function renderReal(DADOS) {
   const C = DADOS.coleta;
   const velho = (ms, h) => Date.now() - ms > h * 3600000;
   $('#sub').textContent = `Hyperliquid · ${fmt(C.rastreadas)} carteiras rastreadas · BTC, ETH, SOL, XRP, HYPE, NEAR`;
-  $('#fresh').innerHTML = '<span class="chip" id="aoVivo"><span class="dot"></span>preço ao vivo: conectando…</span>' + [['Painel', DADOS.gerado, 2], ['Posições', C.ultima_foto, 2], ['Ranking', C.ranking, 30]]
+  const proxColeta = (() => { const d = new Date(Math.max(Date.now(), C.ultima_foto)); d.setMinutes(7, 0, 0); if (d.getTime() <= Date.now()) d.setHours(d.getHours() + 1); return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); })();
+  const soprAte = DADOS.sopr && DADOS.sopr.sopr_horario ? DADOS.sopr.sopr_horario.atualizado_ate : null;
+  $('#fresh').innerHTML = '<span class="chip" id="aoVivo"><span class="dot"></span>preço ao vivo: conectando…</span>'
+    + (soprAte ? `<span class="chip ${Date.now() - soprAte > 3 * 3600000 ? 'stale' : ''}"><span class="dot"></span>SOPR até ${quando(soprAte)}</span>` : '')
+    + `<span class="chip"><span class="dot"></span>próxima coleta ~${proxColeta}</span>`
+    + [['Painel', DADOS.gerado, 2], ['Posições', C.ultima_foto, 2], ['Ranking', C.ranking, 30]]
     .map(([n, ms, h]) => `<span class="chip ${velho(ms, h) ? 'stale' : ''}"><span class="dot"></span>${n} ${quando(ms)} · ${ha(ms)}</span>`).join('');
 
   /* ---------- Resumo ---------- */
@@ -860,8 +865,8 @@ function renderReal(DADOS) {
   }
 
   /* ---------- SOPR 4 h e validação dos níveis ---------- */
-  if (S && S.sopr4h) {
-    const H = S.sopr4h, pts = H.pontos, s4 = $('#sopr4hChart'); s4.innerHTML = '';
+  if (S && S.sopr_horario) {
+    const H = S.sopr_horario, pts = H.pontos, s4 = $('#sopr4hChart'); s4.innerHTML = '';
     const ult = pts[pts.length - 1][1];
     const leitura = ult <= H.p02 ? ['down', 'capitulação'] : ult <= H.p10 ? ['down', 'prejuízo forte'] : ult < 1 ? ['warn', 'vendendo com prejuízo']
       : ult < H.p90 ? ['up', 'vendendo com lucro'] : ult < H.p98 ? ['warn', 'lucro forte'] : ['warn', 'lucro extremo'];
