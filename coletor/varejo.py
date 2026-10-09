@@ -1,28 +1,29 @@
-"""Amostra de varejo para o mapa de stops e liquidações.
+"""Amostra ampla para o mapa de stops e liquidações.
 
 As carteiras do ranking são traders bons e ativos; para saber onde estão os stops e as
-liquidações "do varejo" é preciso uma amostra grande de contas comuns. Escolhemos até
-8 mil contas pequenas do leaderboard (US$ 1 mil a 100 mil, com movimento no mês) e
-lemos em rodízio: ~600 posições por coleta (as lidas há mais tempo primeiro) e as
-ordens de ~60 delas que têm posição nos 6 ativos. Em ~14 h a amostra inteira é lida.
+liquidações do mercado é preciso uma amostra grande de contas comuns. Sorteamos até
+10 mil contas do leaderboard (US$ 1 mil a 1 milhão, com movimento no mês; em 08/10/2026
+ampliado de US$ 100 mil para 1 milhão, para chegar perto da amostra do radar original) e
+lemos em rodízio: ~800 posições por coleta (as lidas há mais tempo primeiro) e as ordens
+de ~200 delas que têm posição nos 6 ativos. Em ~13 h a amostra inteira é lida.
 """
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 
 ATIVOS = ("BTC", "ETH", "SOL", "XRP", "HYPE", "NEAR")
-AMOSTRA = 8000
-POSICOES_POR_COLETA = 600
-ORDENS_POR_COLETA = 60
+AMOSTRA = 10000
+POSICOES_POR_COLETA = 800
+ORDENS_POR_COLETA = 200
 HORA = 3_600_000
 
 
 def escolher(con, linhas_leaderboard):
-    """Sorteio estável (pelo hash do endereço) entre as contas pequenas e ativas."""
+    """Sorteio estável (pelo hash do endereço) entre as contas comuns e ativas."""
     cands = []
     for r in linhas_leaderboard:
         mes = {w: v for w, v in r["windowPerformances"]}["month"]
         conta, vol = float(r["accountValue"]), float(mes["vlm"])
-        if 1_000 <= conta <= 100_000 and vol >= 20_000:
+        if 1_000 <= conta <= 1_000_000 and vol >= 20_000:
             cands.append(r["ethAddress"])
     cands.sort(key=lambda e: hashlib.sha1(e.encode()).hexdigest())
     escolhidas = cands[:AMOSTRA]

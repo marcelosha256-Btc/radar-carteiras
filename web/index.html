@@ -673,7 +673,7 @@ function renderReal(DADOS) {
     botoes($('#liqAssets'), t, renderLiq);
     const L = F2[t].liquidez, a = ativoPor[t], px = a.px, p = L.passo;
     const AM = F2._amostra || {};
-    $('#liqMeta').innerHTML = `foto de ${quando(AM.tempo || DADOS.gerado)} com preço ${fmtPx(px)} <span id="liqVivo"></span> · faixas de ${fmt(p, p >= 1 ? 0 : casas(p))}<br>amostra das últimas 24 h: ${fmt(AM.ranking || 0)} carteiras do ranking + ${fmt(AM.varejo_24h || 0)} de varejo (de ${fmt(AM.varejo_total || 0)} sorteadas, lidas em rodízio de ~600 por hora)`;
+    $('#liqMeta').innerHTML = `foto de ${quando(AM.tempo || DADOS.gerado)} com preço ${fmtPx(px)} <span id="liqVivo"></span> · faixas de ${fmt(p, p >= 1 ? 0 : casas(p))}<br>amostra das últimas 24 h: ${fmt(AM.ranking || 0)} carteiras do ranking + ${fmt(AM.varejo_24h || 0)} da amostra ampla (de ${fmt(AM.varejo_total || 0)} contas de US$ 1 mil a 1 milhão sorteadas, lidas em rodízio de ~800 por hora)`;
     liqAtual = { t, px };
     atualizarAoVivo();
     const dist = v => v == null ? '' : ` (${pctTxt((v + p / 2) / px - 1, 1)})`;
