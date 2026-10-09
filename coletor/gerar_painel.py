@@ -15,6 +15,7 @@ import contexto
 import fase2
 import fase3
 import fase4
+import sopr_ativos
 from db import RAIZ, conectar
 from hl import Hyperliquid
 
@@ -207,6 +208,7 @@ def gerar(hl=None, con=None):
         "alertas": alertas,
         "sinais": sinais,
     }
+    dados["sopr_ativos"] = sopr_ativos.obter(hl, con)   # depois do SOPR do BTC: usa o ajuste dele
     con.kv_gravar("painel", dados)
     html = MODELO.read_text(encoding="utf-8").replace("/*DADOS*/null", json.dumps(dados, ensure_ascii=False))
     SAIDA_HTML.write_text(html, encoding="utf-8")

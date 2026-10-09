@@ -195,6 +195,9 @@ tr.avoid td { color: var(--muted); }
 .srcs { display: flex; flex-wrap: wrap; gap: 4px; white-space: normal; min-width: 260px; }
 .srcs .chip { font-size: 11px; }
 
+.pilha { display: grid; gap: 16px; }
+table.clicavel tbody tr:hover { background: var(--surface-2); }
+table.clicavel tbody tr.sel { background: var(--accent-soft); }
 .callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; font-size: 13px; color: var(--muted); }
 .callout b { color: var(--fg); }
 @media (prefers-reduced-motion: no-preference) { .panel { animation: fade .18s ease-out; } @keyframes fade { from { opacity: .4; } to { opacity: 1; } } }
@@ -218,7 +221,7 @@ tr.avoid td { color: var(--muted); }
       <button class="tab" role="tab" data-tab="fluxo">Fluxo e alertas</button>
       <button class="tab" role="tab" data-tab="liquidez">Stops e liquidações</button>
       <button class="tab" role="tab" data-tab="sr">Suportes e resistências</button>
-      <button class="tab" role="tab" data-tab="sopr">SOPR do BTC</button>
+      <button class="tab" role="tab" data-tab="sopr">SOPR e suportes</button>
       <button class="tab" role="tab" data-tab="diario">Diário de sinais</button>
       <button class="tab" role="tab" data-tab="swing">Swing trade</button>
     </nav>
@@ -358,6 +361,26 @@ tr.avoid td { color: var(--muted); }
 
   <!-- SOPR -->
   <section class="panel" id="p-sopr" role="tabpanel" hidden>
+    <div class="box">
+      <div class="box-head"><h2>Visão geral: curto prazo em lucro ou prejuízo?</h2></div>
+      <p class="small muted" id="soprVisaoNota"></p>
+      <div class="tbl-wrap"><table id="soprVisao" class="clicavel"></table></div>
+    </div>
+    <div class="seg" id="soprAtivos" role="group" aria-label="Escolher ativo" style="justify-self:start"></div>
+    <div class="pilha" id="soprAlt" hidden>
+      <div class="kpis" id="altKpis"></div>
+      <div class="box" id="altLeitura"></div>
+      <div class="box">
+        <div class="box-head"><h2 id="altTitulo">Preço × custo médio estimado</h2><span class="chip warn">estimativa, não é dado on-chain</span></div>
+        <div class="legend"><span><i style="background:var(--fg)"></i>preço</span><span><i style="background:var(--accent)"></i>custo médio do curto prazo (estimado)</span></div>
+        <svg id="altChart" viewBox="0 0 720 280" role="img" aria-label="Preço e custo médio estimado do curto prazo"></svg>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Níveis de preço pelo comportamento</h2><p>Mesma conta do BTC, com as faixas do SOPR estimado do próprio ativo. Os níveis mais distantes são os menos precisos.</p></div>
+        <div class="tbl-wrap"><table id="altNiveis"></table></div>
+      </div>
+    </div>
+    <div class="pilha" id="soprBtc">
     <div class="kpis" id="soprKpis"></div>
     <div class="box" id="soprLeitura"></div>
     <div class="box">
@@ -377,8 +400,13 @@ tr.avoid td { color: var(--muted); }
     <div class="box">
       <div class="box-head"><h2>Preço × custo médio de quem comprou recentemente</h2><span class="chip">dado on-chain real, diário</span></div>
       <p class="small muted">Com o preço acima da linha azul, o curto prazo está no lucro e a linha costuma virar suporte; abaixo, vira resistência. Os pontos marcam os dias-chave dos últimos 2 anos.</p>
-      <div class="legend"><span><i style="background:var(--btc)"></i>preço BTC</span><span><i style="background:var(--accent)"></i>custo médio do curto prazo</span><span><i style="background:var(--down);width:8px;height:8px;border-radius:50%"></i>capitulação</span><span><i style="background:var(--up);width:8px;height:8px;border-radius:50%"></i>lucro extremo</span></div>
+      <div class="legend"><span><i style="background:var(--btc)"></i>preço BTC</span><span><i style="background:var(--accent)"></i>custo médio do curto prazo (on-chain, real)</span><span><i style="background:var(--up);height:2px"></i>custo estimado (a mesma conta usada nos outros ativos)</span><span><i style="background:var(--down);width:8px;height:8px;border-radius:50%"></i>capitulação</span><span><i style="background:var(--up);width:8px;height:8px;border-radius:50%"></i>lucro extremo</span></div>
       <svg id="soprChart" viewBox="0 0 720 280" role="img" aria-label="Preço do BTC e custo médio do curto prazo nos últimos 2 anos"></svg>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>SOPR de curto prazo, dia a dia</h2><span class="chip">on-chain real</span></div>
+      <div class="legend"><span><i style="background:var(--up);opacity:.6"></i>vendendo com lucro (&gt; 1)</span><span><i style="background:var(--down);opacity:.6"></i>vendendo com prejuízo (&lt; 1)</span><span><i style="background:var(--fg)"></i>média de 7 dias</span><span><i style="background:var(--surface-2);border:1px dashed var(--faint)"></i>faixas dos últimos 3 anos</span></div>
+      <svg id="soprBarras" viewBox="0 0 720 245" role="img" aria-label="SOPR diário do BTC nos últimos 2 anos"></svg>
     </div>
     <div class="box">
       <div class="box-head"><h2>O que aconteceu depois dos dias-chave</h2><p id="soprEstudoNota"></p></div>
@@ -389,7 +417,13 @@ tr.avoid td { color: var(--muted); }
       <div class="box-head"><h2>Últimos dias-chave</h2></div>
       <div class="tbl-wrap"><table id="soprEventos"></table></div>
     </div>
+    </div>
   </section>
+  <footer class="small muted" style="border-top:1px solid var(--line);padding-top:12px;max-width:110ch">
+    Fontes: Hyperliquid (posições, ordens, execuções, livro de ofertas, funding, open interest e leaderboard), Coinbase (livro de ofertas e velas diárias),
+    bitview.space / Bitcoin Research Kit (SOPR e custo do curto prazo on-chain do BTC, de hora em hora). O SOPR e o custo de ETH, SOL, XRP, HYPE e NEAR são
+    estimados (média de preço ponderada pelo volume, calibrada no BTC). Monitoramento de dados públicos: não é recomendação de investimento.
+  </footer>
 </div>
 
 <script>
@@ -897,6 +931,108 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
     $('#soprValid').innerHTML = '<thead><tr><th>Dia-chave</th><th class="n">Casos</th><th class="n">Preço vs custo (mediana)</th><th class="n">Faixa histórica</th><th class="n">Nosso nível hoje</th></tr></thead><tbody>' +
       linha('capitulacao', 'Capitulação', 'down') + linha('lucro', 'Lucro extremo', 'up') + '</tbody>';
   }
+
+  /* ---------- SOPR: visão geral dos 6 ativos, seletor e ativos estimados ---------- */
+  const SA = DADOS.sopr_ativos;
+  const corComp = c => /Capitula|Prejuízo forte/.test(c) ? 'var(--down)' : /prejuízo/.test(c) ? 'var(--warn)' : /extremo|forte/.test(c) ? 'var(--warn)' : 'var(--up)';
+  const regimeTxt = t => { const R = (F2[t] || {}).regime; if (!R) return '—';
+    const o = [['Alta', R.alta, 'var(--up)'], ['Lateral', R.lateral, 'var(--flat)'], ['Baixa', R.baixa, 'var(--down)']].sort((x, y) => y[1] - x[1])[0];
+    return `<span style="color:${o[2]}">●</span> ${o[0]} ${fmt(o[1] * 100)}%`; };
+  function graficoPrecoCusto(svg, serie, real, cor) {
+    svg.innerHTML = '';
+    const { datas, preco, custo } = serie, N = datas.length;
+    const reais = real ? datas.map(d => real[d] ?? null) : null;
+    const todos = preco.concat(custo.filter(v => v != null), reais ? reais.filter(v => v != null) : []);
+    const mn = Math.min(...todos), mx = Math.max(...todos), passoY = Math.pow(10, Math.floor(Math.log10((mx - mn) / 3)));
+    const lo = Math.floor(mn / passoY) * passoY, hi = Math.ceil(mx / passoY) * passoY;
+    const x0 = 64, x1 = 700, y0 = 12, y1 = 245;
+    const X = i => x0 + i / (N - 1) * (x1 - x0), Y = v => y1 - (v - lo) / (hi - lo) * (y1 - y0);
+    const nT = Math.round((hi - lo) / passoY), salto = Math.max(1, Math.ceil(nT / 5));
+    for (let k = 0; k <= nT; k += salto) { const v = lo + k * passoY; svgEl('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), class: 'grid-ln' }, svg); svgEl('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'ax' }, svg, fmtPx(v)); }
+    const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    datas.forEach((d, i) => { const [a, m, dia] = d.split('-'); if (dia === '01' && (+m - 1) % 3 === 0) svgEl('text', { x: X(i), y: y1 + 20, 'text-anchor': 'middle', class: 'ax' }, svg, `${MES[+m - 1]}/${a.slice(2)}`); });
+    const linha = arr => { let d = '', aberto = false; arr.forEach((v, i) => { if (v == null) { aberto = false; return; } d += (aberto ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1); aberto = true; }); return d; };
+    svgEl('path', { d: linha(preco) + ` L${X(N - 1)} ${y1} L${x0} ${y1} Z`, fill: cor, opacity: 0.08 }, svg);
+    if (reais) svgEl('path', { d: linha(reais), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 }, svg);
+    svgEl('path', { d: linha(custo), fill: 'none', stroke: reais ? 'var(--up)' : 'var(--accent)', 'stroke-width': reais ? 1.5 : 2, 'stroke-dasharray': reais ? '5 4' : null }, svg);
+    svgEl('path', { d: linha(preco), fill: 'none', stroke: cor, 'stroke-width': 1.5 }, svg);
+    svgEl('circle', { cx: X(N - 1), cy: Y(preco[N - 1]), r: 4, fill: cor }, svg);
+    svgEl('text', { x: X(N - 1) - 6, y: Y(preco[N - 1]) - 9, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--fg)' }, svg, fmtPx(preco[N - 1]));
+  }
+  let soprSel = 'BTC';
+  function renderSoprAtivo(t) {
+    soprSel = t;
+    $('#soprAtivos').innerHTML = Object.keys(CORES).map(m => `<button aria-pressed="${m === t}" data-t="${m}">${m}</button>`).join('');
+    $('#soprAtivos').querySelectorAll('button').forEach(b => b.addEventListener('click', () => renderSoprAtivo(b.dataset.t)));
+    document.querySelectorAll('#soprVisao tbody tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.t === t));
+    $('#soprBtc').hidden = t !== 'BTC';
+    $('#soprAlt').hidden = t === 'BTC';
+    if (t === 'BTC' || !SA) return;
+    const A = SA.ativos[t];
+    if (!A || A.erro) { $('#altLeitura').innerHTML = `<p class="muted">${t}: ${A ? A.erro : 'sem dados'}.</p>`; return; }
+    const nv = nome => A.niveis.find(n => n.nome.startsWith(nome));
+    const cap = nv('Capitulação'), pref = nv('Prejuízo forte'), luc = nv('Lucro forte'), ext = nv('Lucro extremo');
+    $('#altKpis').innerHTML = kpi('SOPR 7 dias (estimado)', fmt(A.sopr7, 4), A.comportamento) +
+      kpi('Custo do curto prazo (estimado)', fmtPx(A.custo), `preço ${pctTxt(A.acima, 1)} do custo`) +
+      kpi('Desespero abaixo de', fmtPx(pref.preco), `extremo abaixo de ${fmtPx(cap.preco)} (${pctTxt(cap.dist, 1)})`, 'neg') +
+      kpi('Lucro forte acima de', fmtPx(luc.preco), `extremo acima de ${fmtPx(ext.preco)} (${pctTxt(ext.dist, 1)})`, 'pos');
+    $('#altLeitura').innerHTML = `<h3>Leitura do momento · ${t}</h3>
+      <p>O curto prazo está <b>${A.comportamento.toLowerCase()}</b> (SOPR 7d estimado ${fmt(A.sopr7, 4)}). O preço está <b>${pctTxt(A.acima, 1)}</b> ${A.acima >= 0 ? 'acima' : 'abaixo'} do custo médio estimado de quem comprou recentemente (${fmtPx(A.custo)}), que costuma funcionar como ${A.acima >= 0 ? 'suporte' : 'resistência'}.</p>
+      <p class="small muted">Estimativa: não existe o dado on-chain de ${t} de graça. O custo é a média de preço ponderada pelo volume (meia-vida de ${SA.meia_vida} dias) e o SOPR sai da relação preço ÷ custo ajustada no Bitcoin, onde a estimativa errou ${SA.validacao ? fmt(SA.validacao.erro_custo * 100, 1) + '% em mediana' : 'pouco'} contra o real. As faixas de desespero e lucro são as do próprio ${t} (${fmt(A.dias)} dias de histórico, ${A.fonte}).</p>`;
+    $('#altTitulo').textContent = `${t} · preço × custo médio estimado de quem comprou recentemente`;
+    graficoPrecoCusto($('#altChart'), A.serie, null, `var(${CORES[t]})`);
+    const corNivel = { lucro: 'up', prejuizo: 'down', neutro: 'flat', custo: 'acc' };
+    $('#altNiveis').innerHTML = '<thead><tr><th class="n">Preço</th><th class="n">Distância</th><th class="n">SOPR 7d</th><th>Significado</th></tr></thead><tbody>' +
+      A.niveis.map(n => `<tr><td class="n"><b>${fmtPx(n.preco)}</b></td><td class="n ${sinalCls(n.dist)}">${pctTxt(n.dist, 1)}</td>
+        <td class="n">${n.sopr == null ? '—' : fmt(n.sopr, 3)}</td><td><span class="chip ${corNivel[n.tipo]}">${n.nome}</span></td></tr>`).join('') + '</tbody>';
+  }
+  if (SA) {
+    const fund = Object.fromEntries(DADOS.ativos.map(a => [a.t, a.funding]));
+    $('#soprVisao').innerHTML = '<thead><tr><th>Ativo</th><th class="n">Preço</th><th class="n">SOPR 7d</th><th>Comportamento</th><th class="n">Custo médio curto prazo</th><th class="n">Preço vs custo</th><th class="n">Funding (ao ano)</th><th>Regime</th></tr></thead><tbody>' +
+      Object.keys(CORES).map(t => { const A = SA.ativos[t]; if (!A || A.erro) return `<tr data-t="${t}"><td><b>${t}</b></td><td colspan="7" class="muted">${A ? A.erro : 'sem dados'}</td></tr>`;
+        return `<tr data-t="${t}" style="cursor:pointer"><td><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(${CORES[t]})"></span> <b>${t}</b></td>
+          <td class="n">${fmtPx(A.preco)}</td><td class="n">${fmt(A.sopr7, 3)}${A.estimado ? ' <span class="muted small">est.</span>' : ''}</td>
+          <td><span style="color:${corComp(A.comportamento)}">●</span> ${A.comportamento}</td>
+          <td class="n">${fmtPx(A.custo)}${A.estimado ? ' <span class="muted small">est.</span>' : ''}</td><td class="n ${sinalCls(A.acima)}">${pctTxt(A.acima, 1)}</td>
+          <td class="n">${fund[t] == null ? '—' : (fund[t] >= 0 ? '+' : '') + fmt(fund[t], 1) + '%'}</td><td>${regimeTxt(t)}</td></tr>`; }).join('') + '</tbody>';
+    $('#soprVisao').querySelectorAll('tbody tr').forEach(tr => tr.addEventListener('click', () => renderSoprAtivo(tr.dataset.t)));
+    $('#soprVisaoNota').textContent = `SOPR acima de 1 = quem comprou nos últimos meses está vendendo com lucro; abaixo de 1 = vendendo com prejuízo (desespero). BTC usa o dado on-chain real; os demais, estimativa (est.) validada no BTC${SA.validacao ? ` (custo com erro mediano de ${fmt(SA.validacao.erro_custo * 100, 1)}% em ${SA.validacao.dias} dias)` : ''}. Clique numa linha para abrir o ativo.`;
+    // linha do custo estimado no gráfico do BTC, ao lado do real
+    const B = SA.ativos.BTC;
+    if (S && B && !B.erro) {
+      const real = Object.fromEntries(S.serie.datas.map((d, i) => [d, S.serie.custo[i]]));
+      const est = Object.fromEntries(B.serie.datas.map((d, i) => [d, B.serie.custo[i]]));
+      graficoPrecoCusto($('#soprChart'), { datas: S.serie.datas, preco: S.serie.preco, custo: S.serie.datas.map(d => est[d] ?? null) }, real, 'var(--btc)');
+      const idx = Object.fromEntries(S.serie.datas.map((d, i) => [d, i])), N = S.serie.datas.length;
+      const vals = S.serie.preco.concat(Object.values(real), Object.values(est).filter(v => v != null));
+      const mn = Math.min(...vals), mx = Math.max(...vals), pY = Math.pow(10, Math.floor(Math.log10((mx - mn) / 3)));
+      const lo = Math.floor(mn / pY) * pY, hi = Math.ceil(mx / pY) * pY, Xc = i => 64 + i / (N - 1) * 636, Yc = v => 245 - (v - lo) / (hi - lo) * 233;
+      S.marcas.forEach(m => { const i = idx[m.data]; if (i == null) return;
+        const c = svgEl('circle', { cx: Xc(i), cy: Yc(S.serie.preco[i]), r: 4.5, fill: m.tipo === 'capitulacao' ? 'var(--down)' : 'var(--up)', stroke: 'var(--surface)', 'stroke-width': 1.5 }, $('#soprChart'));
+        svgEl('title', {}, c, `${m.data.split('-').reverse().join('/')} · ${m.tipo === 'capitulacao' ? 'capitulação' : 'lucro extremo'}`); });
+    }
+  }
+  // SOPR diário do BTC em barras: verde = vendendo com lucro, vermelho = com prejuízo
+  if (S && S.serie.sopr24) {
+    const s = $('#soprBarras'); s.innerHTML = '';
+    const { datas, sopr24, sopr7 } = S.serie, N = datas.length, F = S.faixas;
+    const vals = sopr24.concat(sopr7, [F.p02, F.p98]), lo = Math.min(...vals) - 0.002, hi = Math.max(...vals) + 0.002;
+    const x0 = 64, x1 = 700, y0 = 12, y1 = 220, X = i => x0 + i / (N - 1) * (x1 - x0), Y = v => y1 - (v - lo) / (hi - lo) * (y1 - y0);
+    [hi - 0.002, 1, lo + 0.002].forEach(v => svgEl('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'ax' }, s, fmt(v, 2)));
+    [[F.p98, 'lucro extremo'], [F.p90, 'lucro forte'], [F.p10, 'prejuízo forte'], [F.p02, 'capitulação']].forEach(([v, nm]) => {
+      svgEl('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--faint)', 'stroke-dasharray': '4 4' }, s);
+      svgEl('text', { x: x1, y: Y(v) - 3, 'text-anchor': 'end', class: 'ax' }, s, nm); });
+    const bw = Math.max(1, (x1 - x0) / N - 0.4);
+    sopr24.forEach((v, i) => { const r = svgEl('rect', { x: X(i) - bw / 2, y: Math.min(Y(v), Y(1)), width: bw, height: Math.max(0.6, Math.abs(Y(v) - Y(1))), fill: v >= 1 ? 'var(--up)' : 'var(--down)', opacity: 0.55 }, s);
+      svgEl('title', {}, r, `${datas[i].split('-').reverse().join('/')} · SOPR do dia ${fmt(v, 3)} · média 7 dias ${fmt(sopr7[i], 3)} · preço ${fmtPx(S.serie.preco[i])}`); });
+    svgEl('line', { x1: x0, x2: x1, y1: Y(1), y2: Y(1), stroke: 'var(--fg)', 'stroke-width': 0.8 }, s);
+    svgEl('path', { d: sopr7.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' '), fill: 'none', stroke: 'var(--fg)', 'stroke-width': 1.5 }, s);
+    const idx = Object.fromEntries(datas.map((d, i) => [d, i]));
+    S.marcas.forEach(m => { const i = idx[m.data]; if (i == null) return; svgEl('circle', { cx: X(i), cy: Y(sopr7[i]), r: 4.5, fill: m.tipo === 'capitulacao' ? 'var(--down)' : 'var(--up)', stroke: 'var(--surface)', 'stroke-width': 1.5 }, s); });
+    const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    datas.forEach((d, i) => { const [a, m, dia] = d.split('-'); if (dia === '01' && (+m - 1) % 3 === 0) svgEl('text', { x: X(i), y: y1 + 18, 'text-anchor': 'middle', class: 'ax' }, s, `${MES[+m - 1]}/${a.slice(2)}`); });
+  }
+  renderSoprAtivo(soprSel);
 }
 
 /* ---------- abas ---------- */
