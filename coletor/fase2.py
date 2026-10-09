@@ -314,7 +314,7 @@ def calcular(hl, con, ativos, consenso, agora):
                       saida[a["t"]]["liquidez"]["carteiras"]) for a in ativos])
     con.commit()
     saida["_tese_lado"] = estudo_lado(con, agora)
-    lidas = con.execute("SELECT COUNT(*) FROM varejo_lido WHERE posicoes_em>=?", (agora - 24 * HORA,)).fetchone()[0]
+    lidas = con.execute("SELECT COUNT(*) FROM varejo_lido WHERE ativo=1 AND posicoes_em>=?", (agora - 24 * HORA,)).fetchone()[0]
     saida["_amostra"] = {"varejo_24h": lidas, "ranking": con.execute("SELECT COUNT(*) FROM fotos").fetchone()[0],
                          "varejo_total": con.execute("SELECT COUNT(*) FROM varejo_lido WHERE ativo=1").fetchone()[0],
                          "tempo": agora}

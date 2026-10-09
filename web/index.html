@@ -751,7 +751,7 @@ function renderReal(DADOS) {
       let x = x0;
       [['stop_short', 'var(--up)', 1], ['liq_short', 'var(--up)', .5], ['stop_long', 'var(--down)', 1], ['liq_long', 'var(--down)', .5]].forEach(([k, cor, op]) => {
         if (!f[k]) return;
-        const w = Math.max(2, f[k] / max * (x1 - x0 - 90));
+        const w = Math.max(2, f[k] / max * (x1 - x0 - 200));   // sobra à direita para o rótulo e a etiqueta do preço
         svgEl('rect', { x, y: y + 1, width: w, height: rh - 3, rx: 2, fill: cor, opacity: op }, s);
         x += w;
       });
@@ -767,7 +767,10 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
     const iPx = linhas.findIndex(l => l <= px);
     const py = y0 + iPx * rh + rh * (1 - (px - linhas[iPx]) / p);
     svgEl('line', { x1: x0, x2: x1, y1: py, y2: py, stroke: 'var(--fg)', 'stroke-dasharray': '6 4', 'stroke-width': 1.2 }, s);
-    svgEl('text', { x: x1, y: py - 4, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--fg);font-weight:500' }, s, 'na foto ' + fmtPx(px));
+    // etiqueta do preço na coluna livre da direita, com fundo próprio para não encavalar com os rótulos das barras
+    const etq = 'na foto ' + fmtPx(px), we = etq.length * 6.7 + 16;
+    svgEl('rect', { x: x1 - we, y: py - 9, width: we, height: 18, rx: 9, fill: 'var(--surface)', stroke: 'var(--fg)', 'stroke-width': 1 }, s);
+    svgEl('text', { x: x1 - we / 2, y: py + 4, 'text-anchor': 'middle', class: 'ax', style: 'fill:var(--fg);font-weight:600' }, s, etq);
   }
 
   function renderSR(t) {
