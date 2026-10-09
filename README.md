@@ -10,7 +10,10 @@ stops, liquidações, suportes e resistências dos 6 ativos (BTC, ETH, SOL, XRP,
   Resumo e mapa de stops e liquidações. Um erro aqui não para a coleta de cripto.
   `coletor/acoes_ranking.py` (1x por dia, no laço da nuvem): ranking das carteiras só pelas operações em ações
   (mesma régua do de cripto), fluxo de 7 dias; a coleta de hora em hora fotografa essas carteiras, grava os
-  alertas (com "fora do pregão") e o Diário de cópia das confiáveis em ações (`acoes_sinais`).
+  alertas (com "fora do pregão" e "perto do balanço") e o Diário de cópia das confiáveis em ações (`acoes_sinais`).
+  `coletor/acoes_eventos.py` (1x por dia): calendário de balanços da Nasdaq (tabela `balancos`; carga de 10 anos
+  com `--historico`), reação histórica a balanços (preços do Yahoo), agenda macro dos EUA (Nasdaq; ForexFactory de
+  reserva) e o teste "o contrato no fim de semana antecipa a abertura de segunda?".
 - `web/` — site na Vercel: `index.html` (painel, seletor Cripto | Ações) + `api/dados.js` (lê o painel do banco, pede senha).
 - `.github/workflows/` — agenda as duas coletas no GitHub Actions.
 

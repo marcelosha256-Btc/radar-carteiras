@@ -236,6 +236,18 @@ def _posicao(p):
             "valor": abs(float(p["positionValue"]))}
 
 
+def _perto_do_balanco(con, agora, antes=3, depois=2):
+    """Tickers com balanço nos próximos 3 dias ou nos últimos 2 (tabela balancos, calendário da Nasdaq)."""
+    hoje = _hora_ny(agora).date()
+    ini, fim = (hoje - timedelta(days=depois)).isoformat(), (hoje + timedelta(days=antes)).isoformat()
+    from acoes_eventos import DATAS_DE   # importado aqui: acoes_eventos importa este módulo
+    try:
+        s = {r["simbolo"] for r in con.execute("SELECT simbolo FROM balancos WHERE data >= ? AND data <= ?", (ini, fim))}
+    except Exception:
+        return set()
+    return s | {tk for tk, fonte in DATAS_DE.items() if fonte in s}
+
+
 def foto(hl, con, agora):
     """Foto de hora em hora das carteiras do ranking de ações (acoes_ranking.py): compara com a
     anterior, grava os alertas e abre/fecha no Diário as cópias das carteiras confiáveis."""
@@ -267,6 +279,7 @@ def foto(hl, con, agora):
     for s in con.execute("SELECT id, endereco, moeda, lado, preco_abertura FROM acoes_sinais WHERE fechado_em IS NULL"):
         abertos[(s["endereco"], s["moeda"])].append(dict(s))
     fechado = {k: not fn(agora) for k, fn in SESSOES.items()}
+    perto = _perto_do_balanco(con, agora)
 
     alertas, novos, fechamentos, linhas = [], [], [], []
     for end, depois in depois_por.items():
@@ -276,7 +289,8 @@ def foto(hl, con, agora):
             for moeda, evento, lado, t_antes, t_depois in comparar(antes, depois):
                 preco = precos.get(moeda)
                 alav = (depois.get(moeda) or antes.get(moeda) or {}).get("alavancagem")
-                rot = ["fora do pregão"] if fechado[sessao_de(moeda.split(":", 1)[-1])] else []
+                tk = moeda.split(":", 1)[-1]
+                rot = (["fora do pregão"] if fechado[sessao_de(tk)] else []) + (["perto do balanço"] if tk in perto else [])
                 alertas.append((agora, end, moeda, evento, lado, t_antes, t_depois, preco, alav, int(confiavel),
                                 ";".join(rot) or None))
                 if evento in ("fechou", "virou"):
@@ -350,6 +364,23 @@ def _amostra(con, agora):
             "tempo": agora}
 
 
+def _ultimo_preco_bolsa(tks):
+    """Último preço na bolsa de Nova York (Yahoo): com a bolsa fechada é o fechamento, e o site mostra
+    quanto o contrato já andou desde ele. Falha de rede = sem a comparação, o resto segue."""
+    from acoes_eventos import yahoo_diario   # importado aqui: acoes_eventos importa este módulo
+
+    def um(tk):
+        try:
+            _, meta = yahoo_diario(tk, "5d")
+            if meta.get("regularMarketPrice") and meta.get("regularMarketTime"):
+                return tk, {"preco": float(meta["regularMarketPrice"]), "tempo": int(meta["regularMarketTime"]) * 1000}
+        except Exception:
+            pass
+        return tk, None
+    with ThreadPoolExecutor(4) as ex:
+        return {tk: v for tk, v in ex.map(um, tks) if v}
+
+
 def _carteiras(con, agora, ctx, situacao):
     """Abas Carteiras, Fluxo e alertas e Diário das ações (ranking feito por acoes_ranking.py)."""
     from analise import TAXA_TAKER
@@ -418,6 +449,8 @@ def painel(hl, con, agora):
     moedas = universo(con, ctx, agora)
     diarias = _tendencias(hl, con, moedas, agora, tendencia_diaria)
     carteiras, consenso = _carteiras(con, agora, ctx, situacao)
+    eventos = con.kv_ler("acoes_eventos")
+    bolsa = _ultimo_preco_bolsa([m.split(":", 1)[1] for m in moedas if sessao_de(m.split(":", 1)[1]) == "Nova York"])
 
     lados = {}
     for r in con.execute("SELECT moeda, lado, COUNT(*) AS n, SUM(valor) AS v FROM acoes_posicoes "
@@ -453,7 +486,9 @@ def painel(hl, con, agora):
                        "D": d, "D_por_que": d_por_que, "dias": dias, "H": h, "lo": lo, "hi": hi, "vol": vol,
                        "amp": amp, "lo_hoje": lo_hoje, "hi_hoje": hi_hoje, "funding": funding, "oi": oi,
                        "vol24": float(c["dayNtlVlm"]), "sessao": ses, "aberta": aberta, "frase": frase, "pos": pos,
-                       "L": consenso.get(m, {}).get("long", 0), "S": consenso.get(m, {}).get("short", 0)})
+                       "L": consenso.get(m, {}).get("long", 0), "S": consenso.get(m, {}).get("short", 0),
+                       "bolsa": bolsa.get(tk),
+                       "balanco": ((eventos or {}).get("balancos") or {}).get(tk, {}).get("proximo")})
 
         posicoes = {r["endereco"]: dict(r) for r in con.execute(
             "SELECT * FROM acoes_posicoes WHERE moeda=? AND coletado >= ?", (m, agora - DIA))}
@@ -469,5 +504,6 @@ def painel(hl, con, agora):
     con.executemany("INSERT INTO liquidez_hist VALUES (?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", liq_hist)
     con.commit()
     return {"gerado": agora, "ativos": ativos, "liquidez": mapas, "sessoes": sessoes, "carteiras": carteiras,
+            "eventos": eventos,
             "funding_base": FUNDING_BASE, "amostra": _amostra(con, agora),
             "universo_dia": (con.kv_ler("acoes_universo") or {}).get("dia")}

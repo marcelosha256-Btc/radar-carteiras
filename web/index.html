@@ -242,8 +242,9 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-carteiras" hidden>Carteiras</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-fluxo" hidden>Fluxo e alertas</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-liquidez" hidden>Stops e liquidações</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-eventos" hidden>Balanços e eventos</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-diario" hidden>Diário de sinais</button>
-      <span class="soon" data-modo="acoes" hidden>em breve: balanços e eventos, swing, setores</span>
+      <span class="soon" data-modo="acoes" hidden>em breve: swing, setores e força</span>
     </nav>
   </div>
 
@@ -295,6 +296,31 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
         <p class="small muted" id="aAlertNota"></p>
         <div class="alerts" id="aAlerts"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- AÇÕES: BALANÇOS E EVENTOS -->
+  <section class="panel" id="p-a-eventos" role="tabpanel" hidden>
+    <div class="kpis" id="aEvKpis"></div>
+    <div class="box" id="aAgoraBox">
+      <div class="box-head"><h2>Contrato × último fechamento da bolsa</h2><span class="chip" id="aAgoraChip"></span></div>
+      <p class="small muted" id="aAgoraNota"></p>
+      <div class="tbl-wrap"><table id="aAgora"></table></div>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Próximos balanços e reação histórica</h2><p>Reação = do fechamento do pregão anterior ao anúncio até o fechamento do pregão seguinte (2 pregões), nos últimos 10 anos. "Vezes o normal" compara com o movimento comum de 2 pregões da mesma ação.</p></div>
+      <div class="tbl-wrap"><table id="aBalancos"></table></div>
+      <p class="small muted" id="aBalNota"></p>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Agenda macro dos EUA · próximos 10 dias</h2><p>Os dados que mexem em tudo ao mesmo tempo: inflação, emprego, juros e PIB. Horários no seu fuso.</p></div>
+      <div class="tbl-wrap"><table id="aMacro"></table></div>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Teste: o contrato no fim de semana antecipa a abertura de segunda?</h2><span class="chip warn">em teste</span></div>
+      <p class="small muted" id="aFdsNota"></p>
+      <div class="tbl-wrap"><table id="aFds"></table></div>
+      <div class="tbl-wrap"><table id="aFdsAcoes"></table></div>
     </div>
   </section>
 
@@ -969,6 +995,22 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
       const txt = `amostra: ${fmt(pl * 100)}% do valor comprado · ${n} carteira${n > 1 ? 's' : ''} (${P.L} long / ${P.S} short)`;
       return n < 10 ? `<span class="chip warn">${txt} · poucas</span>` : `<span class="chip ${pl >= 0.65 ? 'up' : pl <= 0.35 ? 'down' : 'flat'}">${txt}</span>`;
     };
+    const dataBR = d => d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '—';
+    const diasAte = d => { const [y, m, dd] = d.split('-').map(Number), h = new Date();
+      return Math.round((Date.UTC(y, m - 1, dd) - Date.UTC(h.getFullYear(), h.getMonth(), h.getDate())) / 864e5); };
+    const HORA_BAL = { antes: 'antes da abertura', depois: 'depois do fechamento' };
+    const emDias = n => n === 0 ? 'hoje' : n === 1 ? 'amanhã' : `em ${n} dias`;
+    const balChip = a => {   // próximo balanço, quando está a até 30 dias
+      const b = a.balanco; if (!b) return '';
+      const n = diasAte(b.data); if (n < 0 || n > 30) return '';
+      return `<span class="chip ${n <= 7 ? 'warn' : ''}">balanço ${emDias(n)} · ${dataBR(b.data)}${HORA_BAL[b.hora] ? ' · ' + HORA_BAL[b.hora] : ''}${b.estimado ? ' · data estimada' : ''}</span>`;
+    };
+    const bolsaChip = a => {   // com a bolsa fechada: quanto o contrato já andou desde o último fechamento
+      if (a.aberta || !a.bolsa) return '';
+      const d = a.px / a.bolsa.preco - 1;
+      if (Math.abs(d) < 0.001) return '';
+      return `<span class="chip ${Math.abs(d) >= 0.01 ? (d > 0 ? 'up' : 'down') : 'flat'}" title="último preço na bolsa ${fmtPx(a.bolsa.preco)} em ${quando(a.bolsa.tempo)}">contrato ${pctTxt(d, 1)} vs fechamento da bolsa</span>`;
+    };
     const consChip = a => {   // confiáveis do ranking de ações (só aparece quando há alguma posicionada)
       const n = (a.L || 0) + (a.S || 0);
       if (!A.carteiras || !n) return '';
@@ -993,13 +1035,85 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
           <div class="read">
             <p class="line1">${a.frase}${a.aberta ? '' : ' Bolsa fechada agora: o preço é só da Hyperliquid e pode abrir com salto.'}</p>
             <div class="range" aria-label="Posição na faixa"><i style="left:calc(${pos}% - 1px)"></i><span class="lo">${fmtPx(a.lo)}</span><span class="hi">${fmtPx(a.hi)}</span></div>
-            <div class="facts" style="margin-top:12px">${ses}${fundChip(a.funding)}${consChip(a)}${posChip(a.pos)}${vol}<span>OI ${usd(a.oi)} · vol. 24 h ${usd(a.vol24)}</span></div>
+            <div class="facts" style="margin-top:12px">${ses}${bolsaChip(a)}${balChip(a)}${fundChip(a.funding)}${consChip(a)}${posChip(a.pos)}${vol}<span>OI ${usd(a.oi)} · vol. 24 h ${usd(a.vol24)}</span></div>
           </div></article>`;
       }).join('');
       atualizarAoVivo();
     }
     renderCards();
     $('#aComoLer').innerHTML = `<b>Como ler:</b> funding normal no grupo xyz é a taxa fixa de ${fmt(base, 1)}% ao ano (no cripto o piso é ~11%). "Amostra" são as carteiras que o radar lê em rodízio (as mesmas contas do mapa de cripto e as do ranking): mostra para que lado está o dinheiro delas, não o mercado inteiro. Diário e 4h usam as velas da própria Hyperliquid, que incluem noites e fins de semana. Bolsas: Nova York ${sesTxt('Nova York')}; futuros ${sesTxt('Futuros')}; Seul ${sesTxt('Seul')}.`;
+
+    /* balanços e eventos */
+    renderEventos(A.eventos);
+    function renderEventos(E) {
+      if (!E) {
+        $('#aEvKpis').innerHTML = ''; $('#aAgoraBox').hidden = true;
+        $('#aBalancos').innerHTML = '<tbody><tr><td class="muted">Os balanços e eventos saem no primeiro processamento diário.</td></tr></tbody>';
+        return;
+      }
+      const B = E.balancos || {}, F = E.fim_de_semana || {}, FD = F.dom || {};
+      const dist = v => v == null ? '—' : fmt(v * 100, 2) + '%';   // erro = distância, sem sinal
+      const linhas = A.ativos.filter(a => B[a.tk]).map(a => ({ a, b: B[a.tk], p: B[a.tk].proximo }))
+        .sort((x, y) => (x.p ? x.p.data : '9999').localeCompare(y.p ? y.p.data : '9999'));
+      const futuros = linhas.filter(l => l.p && diasAte(l.p.data) >= 0);
+      const prox = futuros[0];
+      const altos = (E.macro || []).filter(e => e.impacto === 'alto' && (e.t || 0) >= Date.now() - 36e5);
+      $('#aEvKpis').innerHTML =
+        kpi('Próximo balanço', prox ? prox.a.tk : '—', prox ? `${dataBR(prox.p.data)} · ${emDias(diasAte(prox.p.data))}${prox.p.estimado ? ' · data estimada' : ''}` : 'nenhum nos próximos 60 dias') +
+        kpi('Balanços em 14 dias', futuros.filter(l => diasAte(l.p.data) <= 14 && !l.p.estimado).length, `entre as ${linhas.length} empresas dos 20 mercados`) +
+        kpi('Próximo dado forte', altos[0] ? altos[0].nome : '—', altos[0] ? (altos[0].t ? quando(altos[0].t) : dataBR(altos[0].dia)) : 'nenhum de impacto alto nos próximos 10 dias') +
+        kpi('Fim de semana: direção', FD.acerto == null ? '—' : fmt(FD.acerto * 100) + '%', FD.n ? `contrato no domingo 20h × abertura de segunda · ${FD.fortes} casos com movimento de 0,5% ou mais` : 'acumulando dados');
+
+      // com a bolsa de Nova York fechada: quanto o contrato andou desde o último fechamento
+      const nyAberta = SESSOES['Nova York'](Date.now());
+      const comBolsa = A.ativos.filter(a => a.bolsa);
+      $('#aAgoraBox').hidden = nyAberta || !comBolsa.length;
+      if (!nyAberta && comBolsa.length) {
+        const ref = FD.n >= 5 ? ` No teste abaixo, o contrato no domingo acertou a direção da abertura em ${FD.acerto == null ? '—' : fmt(FD.acerto * 100) + '%'} dos movimentos fortes, com erro mediano de ${dist(FD.erro)} contra ${dist(FD.erro_sem_gap)} de quem supõe que a ação abre igual ao fechamento.` : '';
+        $('#aAgoraChip').textContent = `bolsa fechada · abre ${quando(proximaMudanca(SESSOES['Nova York'], Date.now()))}`;
+        $('#aAgoraNota').textContent = `Prévia da abertura: o contrato continua negociando com a bolsa fechada. Preço do contrato na foto de ${quando(A.gerado)}.${ref}`;
+        $('#aAgora').innerHTML = '<thead><tr><th>Mercado</th><th class="n">Último preço na bolsa</th><th>Quando</th><th class="n">Contrato</th><th class="n">Diferença</th></tr></thead><tbody>' +
+          comBolsa.map(a => ({ a, d: a.px / a.bolsa.preco - 1 })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d)).map(({ a, d }) =>
+            `<tr><td><b>${a.tk}</b>${a.nome ? ` <span class="muted small">${a.nome}</span>` : ''}</td><td class="n">${fmtPx(a.bolsa.preco)}</td><td class="mono muted">${quando(a.bolsa.tempo)}</td>
+             <td class="n">${fmtPx(a.px)}</td><td class="n ${Math.abs(d) < 0.002 ? 'muted' : sinalCls(d)}"><b>${pctTxt(d, 2)}</b></td></tr>`).join('') + '</tbody>';
+      }
+
+      const r1 = v => v == null ? '—' : pctTxt(v, 1);
+      $('#aBalancos').innerHTML = '<thead><tr><th>Empresa</th><th>Próximo balanço</th><th class="n">Reação típica</th><th class="n">Vezes o normal</th><th class="n">Subiu</th><th class="n">Média na alta / queda</th><th class="n">Maior alta</th><th class="n">Maior queda</th><th>Últimos 4</th><th class="n">n</th></tr></thead><tbody>' +
+        (linhas.length ? linhas.map(({ a, b, p }) => {
+          const R = b.reacao || {}, n = diasAte(p ? p.data : '9999-01-01');
+          const prx = p ? `<b class="mono">${dataBR(p.data)}</b> <span class="muted small">${emDias(n)}${HORA_BAL[p.hora] ? ' · ' + HORA_BAL[p.hora] : ''}</span>${p.estimado ? ' <span class="chip">estimada</span>' : n <= 7 ? ' <span class="chip warn">esta semana</span>' : ''}` : '<span class="muted">—</span>';
+          const ult = (R.ultimas || []).map(([d, , x]) => `<span class="chip ${x > 0 ? 'up' : 'down'}" title="${d.split('-').reverse().join('/')}">${pctTxt(x, 1)}</span>`).join(' ');
+          return `<tr><td><b>${a.tk}</b>${a.nome ? `<br><span class="grp">${a.nome}</span>` : ''}</td><td style="white-space:normal;min-width:150px">${prx}</td>
+            <td class="n">${R.n ? '±' + fmt(R.mediana_abs * 100, 1) + '%' : '—'}</td><td class="n">${R.vezes ? fmt(R.vezes, 1) + 'x' : '—'}</td>
+            <td class="n">${R.n ? fmt(R.subiu * 100) + '%' : '—'}</td><td class="n">${R.n ? `<span class="pos">${r1(R.media_alta)}</span> / <span class="neg">${r1(R.media_queda)}</span>` : '—'}</td>
+            <td class="n pos">${R.n ? r1(R.maior_alta) : '—'}</td><td class="n neg">${R.n ? r1(R.maior_queda) : '—'}</td>
+            <td style="white-space:normal;min-width:170px">${ult || '<span class="muted small">sem histórico</span>'}</td>
+            <td class="n">${R.n || 0}${R.n && R.n < 12 ? ' <span class="chip warn">pouco</span>' : ''}</td></tr>`;
+        }).join('') : '<tr><td colspan="10" class="muted">Nenhuma empresa entre os 20 mercados (só índices, ETFs e commodities).</td></tr>') + '</tbody>';
+      const H = E.historico || {};
+      $('#aBalNota').textContent = `Datas: calendário de balanços da Nasdaq (${fmt(E.datas_guardadas || 0)} datas guardadas${H.ate ? `, desde ${dataBR(H.ate)}/${H.ate.slice(0, 4)}` : ''}). Data "estimada" = a Nasdaq ainda não publicou; vale a mesma época do ano passado (52 semanas depois). Preços: Yahoo, ajustados por desdobramento. Índices, ETFs e commodities não têm balanço.${E.calendario_ok === false ? ' Atenção: a última atualização do calendário falhou; as datas são da anterior.' : ''}`;
+
+      const IMP = { alto: 'down', 'médio': 'warn' };
+      const mac = E.macro || [];
+      $('#aMacro').innerHTML = '<thead><tr><th>Quando</th><th>Evento</th><th>Impacto</th><th class="n">Previsto</th><th class="n">Anterior</th><th class="n">Saiu</th></tr></thead><tbody>' +
+        (mac.length ? mac.map(e => `<tr><td class="mono">${e.t ? new Date(e.t).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' ' + new Date(e.t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : dataBR(e.dia)}</td>
+          <td title="${e.original}">${e.nome}</td><td><span class="chip ${IMP[e.impacto] || ''}">${e.impacto}</span></td>
+          <td class="n">${e.previsto || '—'}</td><td class="n muted">${e.anterior || '—'}</td><td class="n"><b>${e.real || ''}</b></td></tr>`).join('')
+          : '<tr><td colspan="6" class="muted">Nenhum evento importante dos EUA nos próximos 10 dias (ou a agenda não pôde ser lida).</td></tr>') + '</tbody>';
+
+      const FP = F.pre || {};
+      $('#aFdsNota').textContent = `Para cada fim de semana desde ${F.desde ? F.desde.split('-').reverse().join('/') : '—'} (velas de 1 h da Hyperliquid), compara quanto o contrato andou desde o fechamento de sexta (16h em Nova York) com o gap real da abertura de segunda (Yahoo). "Acertou a direção" conta só os movimentos de 0,5% ou mais. O teste de verdade é a última coluna: se o erro usando o contrato não for menor que o de supor "abre igual ao fechamento", o contrato não ajuda. Ações de Nova York, ETFs e índices; commodities e ações asiáticas ficam de fora (horários diferentes).`;
+      const linhaF = (nome, R) => R.n >= 5 ? `<tr><td>${nome}</td><td class="n">${R.n}</td><td class="n">${R.fins}</td><td class="n"><b>${R.acerto == null ? '—' : fmt(R.acerto * 100) + '%'}</b> <span class="muted small">(${R.fortes})</span></td>
+        <td class="n">${dist(R.erro)}</td><td class="n muted">${dist(R.erro_sem_gap)}</td><td class="n">${R.corr == null ? '—' : fmt(R.corr, 2)}</td>
+        <td>${R.erro < R.erro_sem_gap * 0.8 ? '<span class="chip up">ajuda</span>' : R.erro < R.erro_sem_gap ? '<span class="chip flat">ajuda pouco</span>' : '<span class="chip down">não ajuda</span>'}</td></tr>`
+        : `<tr><td>${nome}</td><td colspan="7" class="muted">poucos casos ainda (${R.n || 0})</td></tr>`;
+      $('#aFds').innerHTML = '<thead><tr><th>Leitura do contrato</th><th class="n">Casos</th><th class="n">Fins de semana</th><th class="n">Acertou a direção</th><th class="n">Erro mediano</th><th class="n">Erro "sem gap"</th><th class="n">Correlação</th><th>Veredito</th></tr></thead><tbody>' +
+        linhaF('Domingo 20h (Nova York)', FD) + linhaF('Segunda 9h, antes da abertura', FP) + '</tbody>';
+      const PA = Object.entries(F.por_acao || {}).filter(([, R]) => R.n >= 5).sort((x, y) => y[1].n - x[1].n);
+      $('#aFdsAcoes').innerHTML = PA.length ? '<thead><tr><th>Mercado (domingo 20h)</th><th class="n">Casos</th><th class="n">Acertou a direção</th><th class="n">Erro mediano</th><th class="n">Erro "sem gap"</th></tr></thead><tbody>' +
+        PA.map(([tk, R]) => `<tr><td><b>${tk}</b></td><td class="n">${R.n}</td><td class="n">${R.acerto == null ? '—' : fmt(R.acerto * 100) + '%'} <span class="muted small">(${R.fortes})</span></td><td class="n">${dist(R.erro)}</td><td class="n muted">${dist(R.erro_sem_gap)}</td></tr>`).join('') + '</tbody>' : '';
+    }
 
     /* stops e liquidações das ações */
     const LQ = A.liquidez || {};

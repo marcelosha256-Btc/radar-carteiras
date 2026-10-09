@@ -41,6 +41,8 @@ def main():
             falhas += 1
         if not rodar("acoes_ranking.py", "--se-velho", "24"):   # ranking das carteiras de ações
             falhas += 1
+        if not rodar("acoes_eventos.py", "--se-velho", "20"):   # balanços, agenda macro, teste do fim de semana
+            falhas += 1
         if not rodar("coleta_hora.py"):
             falhas += 1
         proxima = (time.time() // 3600 + 1) * 3600 + 7 * 60

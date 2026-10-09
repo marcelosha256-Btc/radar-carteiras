@@ -174,6 +174,12 @@ CREATE TABLE IF NOT EXISTS acoes_sinais (
   endereco TEXT, moeda TEXT, lado TEXT, aberto_em BIGINT, preco_abertura DOUBLE PRECISION,
   fechado_em BIGINT, preco_fechamento DOUBLE PRECISION, retorno DOUBLE PRECISION
 );
+CREATE TABLE IF NOT EXISTS balancos (
+  simbolo TEXT, data TEXT,          -- data do anúncio (AAAA-MM-DD, calendário de balanços da Nasdaq)
+  hora TEXT,                        -- antes | depois (da sessão) | NULL quando a Nasdaq não informa
+  trimestre TEXT, eps_previsto TEXT, atualizado BIGINT,
+  PRIMARY KEY (simbolo, data)
+);
 CREATE INDEX IF NOT EXISTS ix_acoes_ops_t1 ON acoes_operacoes (t1);
 CREATE INDEX IF NOT EXISTS ix_acoes_alertas ON acoes_alertas (tempo);
 CREATE INDEX IF NOT EXISTS ix_acoes_pos ON acoes_posicoes (moeda, coletado);

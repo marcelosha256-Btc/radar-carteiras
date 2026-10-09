@@ -18,6 +18,7 @@ if sys.stdout is None:   # pythonw: sem console, tudo vai para o log
     sys.stdout = sys.stderr = open(DADOS / "hora.log", "a", encoding="utf-8", buffering=1)
 
 import acoes  # noqa: E402
+import acoes_eventos  # noqa: E402
 import acoes_ranking  # noqa: E402
 import contexto  # noqa: E402
 import fase2  # noqa: E402
@@ -166,6 +167,14 @@ def registrar_execucao(con, tipo, ok, detalhe=""):
 def coletar(con):
     # o GitHub atrasa e pula execuções agendadas: a nuvem roda de hora em hora e o PC fica de
     # reserva; quem chegar depois de uma coleta recente só registra e sai
+    if not NA_NUVEM:   # reserva: se a nuvem não conseguir o calendário (Nasdaq às vezes barra a nuvem), o PC faz
+        ev = con.kv_ler("acoes_eventos")
+        if not ev or time.time() * 1000 - ev["gerado"] > 30 * 3_600_000:
+            try:
+                log("balanços e eventos das ações atrasados; refazendo aqui no PC")
+                acoes_eventos.executar(con)
+            except Exception:
+                log("ERRO em balanços e eventos (o resto segue normal)\n" + traceback.format_exc())
     u = con.kv_ler("ultima_coleta")
     janela = (50 if NA_NUVEM else 100) * 60_000
     if u and time.time() * 1000 - u["tempo"] < janela:
