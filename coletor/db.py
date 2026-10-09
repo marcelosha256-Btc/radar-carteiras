@@ -122,6 +122,24 @@ CREATE TABLE IF NOT EXISTS varejo_ordens (
   tamanho DOUBLE PRECISION, gatilho INTEGER, coletado BIGINT,
   PRIMARY KEY (endereco, oid)
 );
+CREATE TABLE IF NOT EXISTS acoes_lido (
+  endereco TEXT PRIMARY KEY,        -- carteiras (amostra ampla + ranking) lidas no grupo xyz (ações e commodities)
+  posicoes_em BIGINT, ordens_em BIGINT,
+  tem_acao INTEGER DEFAULT 0        -- 1 = tinha posição no xyz na última leitura (relida com prioridade)
+);
+CREATE TABLE IF NOT EXISTS acoes_posicoes (
+  endereco TEXT, moeda TEXT,        -- moeda com o prefixo: xyz:MU
+  lado TEXT, tamanho DOUBLE PRECISION, preco_entrada DOUBLE PRECISION, alavancagem DOUBLE PRECISION,
+  pnl_aberto DOUBLE PRECISION, preco_liquidacao DOUBLE PRECISION, valor DOUBLE PRECISION, coletado BIGINT,
+  PRIMARY KEY (endereco, moeda)
+);
+CREATE TABLE IF NOT EXISTS acoes_ordens (
+  endereco TEXT, moeda TEXT, oid BIGINT, tipo TEXT, lado TEXT, preco DOUBLE PRECISION,
+  tamanho DOUBLE PRECISION, gatilho INTEGER, reduz INTEGER, coletado BIGINT,
+  PRIMARY KEY (endereco, oid)
+);
+CREATE INDEX IF NOT EXISTS ix_acoes_pos ON acoes_posicoes (moeda, coletado);
+CREATE INDEX IF NOT EXISTS ix_acoes_ord ON acoes_ordens (moeda, coletado);
 CREATE INDEX IF NOT EXISTS ix_varejo_pos ON varejo_posicoes (moeda, coletado);
 CREATE INDEX IF NOT EXISTS ix_ops_t1 ON operacoes (t1);
 CREATE INDEX IF NOT EXISTS ix_sinais_abertos ON sinais (endereco, moeda, fechado_em);

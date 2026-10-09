@@ -136,13 +136,26 @@ def _faixas_entre(lo, hi, p):
 def mapa_liquidez(con, m, px, oi_usd, agora):
     """Stops e liquidações das carteiras do ranking + amostra de varejo lida nas últimas 24 h.
     Uma carteira que está nas duas conta uma vez (vale a leitura do ranking, mais recente)."""
+    posicoes = {r["endereco"]: dict(r) for r in con.execute(
+        "SELECT * FROM varejo_posicoes WHERE moeda=? AND coletado>=?", (m, agora - 24 * HORA))}
+    posicoes.update({r["endereco"]: dict(r) for r in con.execute("SELECT * FROM posicoes WHERE moeda=?", (m,))})
+    ordens = {(r["endereco"], r["oid"]): dict(r) for r in con.execute(
+        "SELECT * FROM varejo_ordens WHERE moeda=? AND gatilho=1 AND coletado>=?", (m, agora - 36 * HORA))}
+    ordens.update({(r["endereco"], r["oid"]): dict(r) for r in con.execute(
+        "SELECT * FROM ordens WHERE moeda=? AND gatilho=1", (m,))})
+    return mapa_de(posicoes, ordens.values(), px, oi_usd)
+
+
+def mapa_de(posicoes, ordens, px, oi_usd, posicao_inteira=False):
+    """Mapa a partir das posições ({endereco: linha}) e das ordens com gatilho já lidas.
+    Usado pelos 6 ativos de cripto e pelas ações (acoes.py), que ficam em tabelas próprias.
+
+    posicao_inteira=True: o stop/alvo "da posição inteira" (isPositionTpsl) vem da API com
+    tamanho 0; conta com o tamanho da posição da carteira, quando ela está na leitura."""
     p = passo(px)
     b = defaultdict(lambda: {"stop_long": 0.0, "liq_long": 0.0, "stop_short": 0.0, "liq_short": 0.0,
                              "tp_long": 0.0, "tp_short": 0.0})
     n = defaultdict(lambda: defaultdict(set))      # faixa -> tipo -> carteiras (para o detalhe ao passar o mouse)
-    posicoes = {r["endereco"]: dict(r) for r in con.execute(
-        "SELECT * FROM varejo_posicoes WHERE moeda=? AND coletado>=?", (m, agora - 24 * HORA))}
-    posicoes.update({r["endereco"]: dict(r) for r in con.execute("SELECT * FROM posicoes WHERE moeda=?", (m,))})
     notional, longs = 0.0, 0
     for end, r in posicoes.items():
         notional += r["tamanho"] * px
@@ -152,12 +165,8 @@ def mapa_liquidez(con, m, px, oi_usd, agora):
             k = "liq_long" if r["lado"] == "long" else "liq_short"
             b[faixa(liq, p)][k] += r["tamanho"] * liq
             n[faixa(liq, p)][k].add(end)
-    ordens = {(r["endereco"], r["oid"]): dict(r) for r in con.execute(
-        "SELECT * FROM varejo_ordens WHERE moeda=? AND gatilho=1 AND coletado>=?", (m, agora - 36 * HORA))}
-    ordens.update({(r["endereco"], r["oid"]): dict(r) for r in con.execute(
-        "SELECT * FROM ordens WHERE moeda=? AND gatilho=1", (m,))})
     com_stop = set()
-    for r in ordens.values():
+    for r in ordens:
         if abs(r["preco"] / px - 1) > ALCANCE:
             continue
         f = faixa(r["preco"], p)
@@ -170,7 +179,10 @@ def mapa_liquidez(con, m, px, oi_usd, agora):
             k = "stop_long" if r["lado"] == "A" else "stop_short"
         else:
             continue
-        b[f][k] += r["tamanho"] * r["preco"]
+        tam = r["tamanho"]
+        if not tam and posicao_inteira:
+            tam = (posicoes.get(r["endereco"]) or {}).get("tamanho") or 0
+        b[f][k] += tam * r["preco"]
         n[f][k].add(r["endereco"])
     faixas = sorted(({"preco": f, **v, "n": {k: len(s) for k, s in n[f].items()}} for f, v in b.items()),
                     key=lambda x: -x["preco"])
@@ -329,7 +341,9 @@ def estudo_lado(con, agora):
     """Testa a tese do vídeo de 08/10/2026: "lado mais carregado é para onde o preço vai".
     Uma leitura por ativo a cada 24 h (leituras de hora em hora seriam quase a mesma coisa
     contada várias vezes); o retorno vem do preço gravado no histórico 24 h e 72 h depois."""
-    linhas = con.execute("SELECT tempo, moeda, preco, acima, abaixo FROM liquidez_hist ORDER BY moeda, tempo").fetchall()
+    # só os 6 ativos de cripto: as ações também gravam liquidez_hist, mas o teste delas é separado
+    linhas = con.execute("SELECT tempo, moeda, preco, acima, abaixo FROM liquidez_hist WHERE moeda IN ({}) "
+                         "ORDER BY moeda, tempo".format(",".join("?" * len(ATIVOS))), ATIVOS).fetchall()
     if not linhas:
         return None
     precos = defaultdict(list)

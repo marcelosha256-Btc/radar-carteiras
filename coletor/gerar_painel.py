@@ -7,9 +7,11 @@ Grava no banco (o site na Vercel lê de lá) e gera o painel.html local.
 import json
 import statistics as st
 import time
+import traceback
 from collections import defaultdict
 from pathlib import Path
 
+import acoes
 import analise as an
 import contexto
 import fase2
@@ -210,6 +212,14 @@ def gerar(hl=None, con=None):
     }
     dados["sopr_ativos"] = sopr_ativos.obter(hl, con)   # depois do SOPR do BTC: usa o ajuste dele
     con.kv_gravar("painel", dados)
+    # ações (grupo xyz) em chave própria, que o site junta ao painel: se falharem, o de cripto sai igual
+    try:
+        dados_acoes = acoes.painel(hl, con, agora)
+    except Exception as e:
+        print("ERRO no painel das ações\n" + traceback.format_exc(), flush=True)
+        dados_acoes = {"erro": repr(e)[:300], "gerado": agora}
+    con.kv_gravar("painel_acoes", dados_acoes)
+    dados["acoes"] = dados_acoes
     html = MODELO.read_text(encoding="utf-8").replace("/*DADOS*/null", json.dumps(dados, ensure_ascii=False))
     SAIDA_HTML.write_text(html, encoding="utf-8")
     return SAIDA_HTML

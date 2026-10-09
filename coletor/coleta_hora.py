@@ -17,6 +17,7 @@ DADOS.mkdir(exist_ok=True)
 if sys.stdout is None:   # pythonw: sem console, tudo vai para o log
     sys.stdout = sys.stderr = open(DADOS / "hora.log", "a", encoding="utf-8", buffering=1)
 
+import acoes  # noqa: E402
 import contexto  # noqa: E402
 import fase2  # noqa: E402
 import fase4  # noqa: E402
@@ -193,6 +194,10 @@ def coletar(con):
             "SELECT DISTINCT endereco FROM posicoes WHERE moeda IN ('BTC','ETH','SOL','XRP','HYPE','NEAR')")]
         log(f"ordens: {fase2.coletar_ordens(hl, con, alvo, agora)} de {len(alvo)} carteiras")
         con.kv_gravar("ordens_em", agora)
+    try:   # ações (grupo xyz): um erro aqui não pode parar a coleta de cripto
+        log(f"ações: {acoes.coletar(hl, con, agora)}")
+    except Exception:
+        log("ERRO na coleta das ações (cripto segue normal)\n" + traceback.format_exc())
     novos, fechados = fase4.registrar_e_acompanhar(hl, con, precos, agora)
     log(f"swing: {len(novos)} sinais novos no Diário · {len(fechados)} fechados")
     avisar_swing(novos, fechados)

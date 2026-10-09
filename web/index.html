@@ -198,6 +198,12 @@ tr.avoid td { color: var(--muted); }
 .pilha { display: grid; gap: 16px; }
 table.clicavel tbody tr:hover { background: var(--surface-2); }
 table.clicavel tbody tr.sel { background: var(--accent-soft); }
+/* cripto | ações */
+.modo { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.seg.grande button { font: 600 14px var(--f-body); padding: 7px 18px; }
+.tabs .soon { align-self: center; font-size: 12px; color: var(--faint); padding: 0 10px; white-space: nowrap; }
+.asset .nome { font-size: 12px; color: var(--muted); line-height: 1.3; }
+.asset .setor { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
 .callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; font-size: 13px; color: var(--muted); }
 .callout b { color: var(--fg); }
 @media (prefers-reduced-motion: no-preference) { .panel { animation: fade .18s ease-out; } @keyframes fade { from { opacity: .4; } to { opacity: 1; } } }
@@ -214,18 +220,61 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
 
   <div class="info" id="info">Dados reais da Hyperliquid, da Coinbase e on-chain do BTC. Nada aqui é recomendação: os testes mostram o passado, e o Diário mostra se continua funcionando.</div>
 
+  <div class="modo">
+    <div class="seg grande" id="modo" role="group" aria-label="Mercado">
+      <button data-modo="cripto" aria-pressed="true">Cripto</button>
+      <button data-modo="acoes" aria-pressed="false">Ações</button>
+    </div>
+    <span class="small muted" id="modoNota"></span>
+  </div>
+
   <div class="tabs-scroll">
     <nav class="tabs" role="tablist" aria-label="Seções do radar">
-      <button class="tab" role="tab" data-tab="resumo">Resumo</button>
-      <button class="tab" role="tab" data-tab="carteiras">Carteiras</button>
-      <button class="tab" role="tab" data-tab="fluxo">Fluxo e alertas</button>
-      <button class="tab" role="tab" data-tab="liquidez">Stops e liquidações</button>
-      <button class="tab" role="tab" data-tab="sr">Suportes e resistências</button>
-      <button class="tab" role="tab" data-tab="sopr">SOPR e suportes</button>
-      <button class="tab" role="tab" data-tab="diario">Diário de sinais</button>
-      <button class="tab" role="tab" data-tab="swing">Swing trade</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="resumo">Resumo</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="carteiras">Carteiras</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="fluxo">Fluxo e alertas</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="liquidez">Stops e liquidações</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="sr">Suportes e resistências</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="sopr">SOPR e suportes</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="diario">Diário de sinais</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="swing">Swing trade</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-resumo" hidden>Resumo</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-liquidez" hidden>Stops e liquidações</button>
+      <span class="soon" data-modo="acoes" hidden>em breve: carteiras, fluxo e alertas, balanços, swing</span>
     </nav>
   </div>
+
+  <!-- AÇÕES: RESUMO -->
+  <section class="panel" id="p-a-resumo" role="tabpanel" hidden>
+    <div class="kpis" id="aKpis"></div>
+    <div class="box-head"><h2>Leitura rápida</h2><p>Contratos perpétuos de ações, índices e commodities da Hyperliquid (grupo xyz), os 20 mais líquidos. Negociam 24 h por dia, 7 dias por semana, mas a ação de verdade só negocia no pregão: fora dele o preço é só da Hyperliquid.</p></div>
+    <div class="seg" id="aSetores" role="group" aria-label="Filtrar por setor" style="justify-self:start"></div>
+    <div class="assets" id="aAssets"></div>
+    <p class="callout" id="aComoLer"></p>
+  </section>
+
+  <!-- AÇÕES: STOPS E LIQUIDAÇÕES -->
+  <section class="panel" id="p-a-liquidez" role="tabpanel" hidden>
+    <div class="box-head">
+      <div class="seg" id="aLiqAssets" role="group" aria-label="Escolher mercado"></div>
+      <span class="small muted" id="aLiqMeta"></span>
+    </div>
+    <div class="kpis" id="aLiqKpis"></div>
+    <div class="box">
+      <div class="box-head">
+        <h2 id="aLiqTitulo">Stops e liquidações por faixa de preço</h2>
+        <span class="chip warn">só carteiras lidas na Hyperliquid: use como mapa, não como alvo</span>
+      </div>
+      <p class="small muted">Abaixo do preço: stops de quem está comprado e liquidações de long, que viram venda a mercado se o preço cair. Acima: stops de quem está vendido e liquidações de short, que viram compra a mercado se o preço subir. Com a bolsa fechada, um salto na abertura pode pular faixas inteiras de uma vez.</p>
+      <div class="legend">
+        <span><i style="background:var(--down)"></i>stops de long</span>
+        <span><i style="background:var(--down);opacity:.5"></i>liquidações de long</span>
+        <span><i style="background:var(--up)"></i>stops de short</span>
+        <span><i style="background:var(--up);opacity:.5"></i>liquidações de short</span>
+      </div>
+      <svg id="aLiq" viewBox="0 0 720 470" role="img" aria-label="Volume de stops e liquidações por faixa de preço"></svg>
+    </div>
+  </section>
 
   <!-- RESUMO -->
   <section class="panel" id="p-resumo" role="tabpanel">
@@ -460,7 +509,7 @@ function renderReal(DADOS) {
   setTimeout(() => atualizarAoVivo(true), 0);
   const C = DADOS.coleta;
   const velho = (ms, h) => Date.now() - ms > h * 3600000;
-  $('#sub').textContent = `Hyperliquid · ${fmt(C.rastreadas)} carteiras rastreadas · BTC, ETH, SOL, XRP, HYPE, NEAR`;
+  SUB.cripto = `Hyperliquid · ${fmt(C.rastreadas)} carteiras rastreadas · BTC, ETH, SOL, XRP, HYPE, NEAR`;
   const proxColeta = (() => { const d = new Date(Math.max(Date.now(), C.ultima_foto)); d.setMinutes(7, 0, 0); if (d.getTime() <= Date.now()) d.setHours(d.getHours() + 1); return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); })();
   const soprAte = DADOS.sopr && DADOS.sopr.sopr_horario ? DADOS.sopr.sopr_horario.atualizado_ate : null;
   $('#fresh').innerHTML = '<span class="chip" id="aoVivo"><span class="dot"></span>preço ao vivo: conectando…</span>'
@@ -726,8 +775,13 @@ function renderReal(DADOS) {
       kpi('Lado mais carregado', tot ? (L.abaixo > L.acima ? 'Abaixo ↓' : 'Acima ↑') : '—', tot ? `${fmt(L.acima / tot * 100)}% acima · ${fmt(L.abaixo / tot * 100)}% abaixo` : 'sem dados') +
       kpi('Cobertura da amostra', L.cobertura == null ? '—' : fmt(L.cobertura * 100, 1) + '%', `${fmt(L.carteiras)} carteiras em ${t} (${fmt(L.longs || 0)} long / ${fmt(L.shorts || 0)} short) · ${fmt(L.com_stop)} com stop · OI ${usd(a.oi)}`);
     $('#liqTitulo').textContent = `${t} · stops e liquidações por faixa de preço`;
+    desenharMapa($('#liq'), L, px, F2[t].sr.vacuos || []);
+  }
 
-    const s = $('#liq'); s.innerHTML = '';
+  // mapa de stops e liquidações (cripto e ações): barras por faixa de ±10% do preço da foto
+  function desenharMapa(s, L, px, vacuos) {
+    s.innerHTML = '';
+    const p = L.passo;
     const lo = px * 0.9, hi = px * 1.1;
     const fx = L.faixas.filter(f => f.preco >= lo && f.preco <= hi);
     const linhas = []; for (let f = Math.floor(hi / p) * p; f >= lo; f -= p) linhas.push(Math.round(f / p) * p);
@@ -737,7 +791,7 @@ function renderReal(DADOS) {
     const total = f => f.stop_long + f.liq_long + f.stop_short + f.liq_short;
     const max = Math.max(1, ...fx.map(total));
     const yDe = preco => y0 + linhas.findIndex(l => l <= preco + 1e-9) * rh;
-    (F2[t].sr.vacuos || []).forEach(([va, vb]) => {
+    vacuos.forEach(([va, vb]) => {
       if (vb < lo || va > hi) return;
       const ya = yDe(Math.min(vb, hi)), yb = yDe(Math.max(va, lo)) + rh;
       svgEl('rect', { x: x0, y: ya, width: x1 - x0, height: Math.max(rh, yb - ya), fill: 'var(--surface-2)', stroke: 'var(--faint)', 'stroke-dasharray': '4 4', rx: 4 }, s);
@@ -812,6 +866,106 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
         : '<tr><td colspan="6" class="muted">Sem zonas ainda: aguardando a primeira leitura do livro.</td></tr>') + '</tbody>';
   }
   if (moedas2.length) { renderLiq(selLiq); renderSR(selSR); }
+
+  /* ---------- Ações (grupo xyz da Hyperliquid) ---------- */
+  renderAcoes(DADOS.acoes);
+  function renderAcoes(A) {
+    if (!A || !A.ativos) {
+      const msg = A && A.erro ? `O painel das ações falhou na última coleta (${A.erro}). Cripto segue normal.` : 'As ações aparecem depois da próxima coleta.';
+      $('#aAssets').innerHTML = `<p class="muted">${msg}</p>`;
+      $('#aLiqMeta').textContent = msg;
+      return;
+    }
+    const AM = A.amostra, base = A.funding_base;
+    // bolsas abertas ou fechadas agora, pelo relógio de quem está vendo (a foto pode ter horas)
+    const S = Object.fromEntries(Object.entries(SESSOES).map(([k, fn]) => [k, { aberta: fn(Date.now()), muda_em: proximaMudanca(fn, Date.now()) }]));
+    A.ativos.forEach(a => { a.aberta = S[a.sessao] ? S[a.sessao].aberta : a.aberta; });
+    const velhoA = Date.now() - A.gerado > 2 * 3600000;
+    $('#modoNota').innerHTML = `<span class="chip ${velhoA ? 'stale' : ''}"><span class="dot"></span>ações: foto de ${quando(A.gerado)} · ${ha(A.gerado)}</span>`;
+    const COR_SETOR = { 'Índices e ETFs': '--accent', 'Commodities': '--btc', 'Câmbio': '--xrp', 'Chips e memória': '--sol', 'Tecnologia': '--eth', 'Ações de cripto': '--hype', 'Outras': '--near' };
+    const quandoMuda = ms => { if (!ms) return '—'; const d = new Date(ms), hoje = new Date();
+      const dia = d.toDateString() === hoje.toDateString() ? 'hoje' : d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+      return `${dia} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`; };
+    const sesTxt = k => S[k].aberta ? `aberta · fecha ${quandoMuda(S[k].muda_em)}` : `fechada · abre ${quandoMuda(S[k].muda_em)}`;
+    SUB.acoes = `Hyperliquid · grupo xyz · ${A.ativos.length} mercados mais líquidos · ${fmt(AM.com_posicao_24h)} carteiras com posição`;
+
+    const ny = S['Nova York'];
+    const oiTot = A.ativos.reduce((s, a) => s + a.oi, 0), volTot = A.ativos.reduce((s, a) => s + a.vol24, 0);
+    const tend = A.ativos.reduce((o, a) => (o[a.D] = (o[a.D] || 0) + 1, o), {});
+    $('#aKpis').innerHTML =
+      kpi('Bolsa de Nova York', ny.aberta ? 'Aberta' : 'Fechada', `${ny.aberta ? 'fecha' : 'abre'} ${quandoMuda(ny.muda_em)} (seu horário) · feriados não entram na conta`, ny.aberta ? 'pos' : '') +
+      kpi('Mercados acompanhados', A.ativos.length, `OI somado ${usd(oiTot)} · volume 24 h ${usd(volTot)}`) +
+      kpi('Carteiras com posição', fmt(AM.com_posicao_24h), `lidas nas últimas 24 h: ${fmt(AM.lidas_24h)} de ${fmt(AM.pool)} contas em rodízio · ${fmt(AM.com_acao)} já vistas com ações`) +
+      kpi('Tendência no diário', `${tend.up || 0} · ${tend.flat || 0} · ${tend.down || 0}`, 'alta · lateral · baixa, entre os 20');
+
+    const setores = ['Todos', ...new Set(A.ativos.map(a => a.setor))];
+    let filtro = 'Todos';
+    const fundChip = f => {
+      const v = `funding ${fmt(f, 1)}% a.a.`, ext = Math.abs(f) >= 100 ? ' · extremo' : '';
+      return Math.abs(f - base) < 1.5 ? `<span class="chip flat">${v} · taxa fixa, neutro</span>`
+        : f >= 15 ? `<span class="chip warn">${v} · comprados pagando caro${ext}</span>`
+        : f < 0 ? `<span class="chip acc">${v} · vendidos pagando${ext}</span>`
+        : f > base ? `<span class="chip flat">${v} · um pouco acima da taxa fixa</span>`
+        : `<span class="chip acc">${v} · abaixo da taxa fixa</span>`;
+    };
+    const posChip = P => {
+      const n = P.L + P.S, v = P.vL + P.vS;
+      if (!n) return '<span class="chip">nenhuma carteira da amostra posicionada</span>';
+      const pl = v ? P.vL / v : P.L / n;
+      const txt = `amostra: ${fmt(pl * 100)}% do valor comprado · ${n} carteira${n > 1 ? 's' : ''} (${P.L} long / ${P.S} short)`;
+      return n < 10 ? `<span class="chip warn">${txt} · poucas</span>` : `<span class="chip ${pl >= 0.65 ? 'up' : pl <= 0.35 ? 'down' : 'flat'}">${txt}</span>`;
+    };
+    function renderCards() {
+      $('#aSetores').innerHTML = setores.map(s => `<button aria-pressed="${s === filtro}" data-s="${s}">${s}</button>`).join('');
+      $('#aSetores').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.s; renderCards(); }));
+      $('#aAssets').innerHTML = A.ativos.filter(a => filtro === 'Todos' || a.setor === filtro).map(a => {
+        const pos = a.hi > a.lo ? Math.max(0, Math.min(100, (a.px - a.lo) / (a.hi - a.lo) * 100)) : 50;
+        const fut = a.sessao === 'Futuros';
+        const ses = a.aberta ? `<span class="chip up">${fut ? 'futuros abertos (CME)' : 'pregão aberto · ' + a.sessao}</span>`
+          : `<span class="chip warn">${fut ? 'futuros fechados (CME)' : 'bolsa fechada (' + a.sessao + ')'} · abre ${quandoMuda(S[a.sessao].muda_em)}</span>`;
+        const vol = a.vol == null || !a.aberta ? '' : `<span class="chip ${a.vol < 10 ? 'acc' : ''}">volume 4h no ${a.vol}º percentil${a.vol < 10 ? ' · mercado parado' : ''}</span>`;
+        const curto = a.dias < 50 ? ` (só ${a.dias} dias de histórico)` : '';
+        return `<article class="asset">
+          <div class="name"><span class="tick"><span class="sw" style="background:var(${COR_SETOR[a.setor] || '--near'})"></span>${a.tk}</span>
+            ${a.nome ? `<span class="nome">${a.nome}</span>` : ''}<span class="setor">${a.setor}</span>
+            <span class="px" data-vivo="${a.t}" data-ontem="${a.px / (1 + a.ch / 100)}">${fmtPx(a.px)} <span class="${a.ch >= 0 ? 'pos' : 'neg'}">${a.ch >= 0 ? '+' : ''}${fmt(a.ch, 1)}%</span></span></div>
+          <div class="trend"><div class="t ${a.D}" title="${a.D_por_que}${curto}"><b>${TL[a.D]}</b><span>diário</span></div><div class="t ${a.H}"><b>${TL[a.H]}</b><span>4h</span></div></div>
+          <div class="read">
+            <p class="line1">${a.frase}${a.aberta ? '' : ' Bolsa fechada agora: o preço é só da Hyperliquid e pode abrir com salto.'}</p>
+            <div class="range" aria-label="Posição na faixa"><i style="left:calc(${pos}% - 1px)"></i><span class="lo">${fmtPx(a.lo)}</span><span class="hi">${fmtPx(a.hi)}</span></div>
+            <div class="facts" style="margin-top:12px">${ses}${fundChip(a.funding)}${posChip(a.pos)}${vol}<span>OI ${usd(a.oi)} · vol. 24 h ${usd(a.vol24)}</span></div>
+          </div></article>`;
+      }).join('');
+      atualizarAoVivo();
+    }
+    renderCards();
+    $('#aComoLer').innerHTML = `<b>Como ler:</b> funding normal no grupo xyz é a taxa fixa de ${fmt(base, 1)}% ao ano (no cripto o piso é ~11%). "Amostra" são as carteiras que o radar lê em rodízio (as mesmas contas do mapa de cripto e as do ranking): mostra para que lado está o dinheiro delas, não o mercado inteiro. Diário e 4h usam as velas da própria Hyperliquid, que incluem noites e fins de semana. Bolsas: Nova York ${sesTxt('Nova York')}; futuros ${sesTxt('Futuros')}; Seul ${sesTxt('Seul')}.`;
+
+    /* stops e liquidações das ações */
+    const LQ = A.liquidez || {};
+    const porT = Object.fromEntries(A.ativos.map(a => [a.t, a]));
+    const lista = A.ativos.map(a => a.t).filter(t => LQ[t]);
+    let selA = lista[0];
+    function renderLiqAcao(t) {
+      selA = t;
+      $('#aLiqAssets').innerHTML = lista.map(x => `<button aria-pressed="${x === t}" data-t="${x}">${porT[x].tk}</button>`).join('');
+      $('#aLiqAssets').querySelectorAll('button').forEach(b => b.addEventListener('click', () => renderLiqAcao(b.dataset.t)));
+      const L = LQ[t], a = porT[t], px = a.px, p = L.passo;
+      $('#aLiqMeta').innerHTML = `foto de ${quando(AM.tempo)} com preço ${fmtPx(px)} <span id="aLiqVivo"></span> · faixas de ${fmt(p, p >= 1 ? 0 : casas(p))}${a.aberta ? '' : ` · <b>bolsa fechada (${a.sessao})</b>`}<br>posições lidas nas últimas 24 h e ordens nas últimas 36 h (${fmt(AM.ordens_36h)} carteiras com ordens lidas). Stop "da posição inteira" conta pelo tamanho da posição.`;
+      aLiqAtual = { t, px };
+      atualizarAoVivo();
+      const dist = v => v == null ? '' : ` (${pctTxt((v + p / 2) / px - 1, 1)})`;
+      const tot = L.acima + L.abaixo;
+      $('#aLiqKpis').innerHTML =
+        kpi('Acima · compra forçada', usd(L.acima), L.ima_acima != null ? `ímã mais próximo ${faixaTxt(L.ima_acima, p)}${dist(L.ima_acima)}` : 'nenhum aglomerado até +5%', 'pos') +
+        kpi('Abaixo · venda forçada', usd(L.abaixo), L.ima_abaixo != null ? `ímã mais próximo ${faixaTxt(L.ima_abaixo, p)}${dist(L.ima_abaixo)}` : 'nenhum aglomerado até −5%', 'neg') +
+        kpi('Lado mais carregado', tot ? (L.abaixo > L.acima ? 'Abaixo ↓' : 'Acima ↑') : '—', tot ? `${fmt(L.acima / tot * 100)}% acima · ${fmt(L.abaixo / tot * 100)}% abaixo` : 'sem dados ainda') +
+        kpi('Cobertura da amostra', L.cobertura == null ? '—' : fmt(L.cobertura * 100, 1) + '%', `${fmt(L.carteiras)} carteiras em ${a.tk} (${fmt(L.longs || 0)} long / ${fmt(L.shorts || 0)} short) · ${fmt(L.com_stop)} com stop · OI ${usd(a.oi)}`);
+      $('#aLiqTitulo').textContent = `${a.tk} · stops e liquidações por faixa de preço`;
+      desenharMapa($('#aLiq'), L, px, []);
+    }
+    if (selA) renderLiqAcao(selA);
+  }
 
   /* ---------- SOPR do BTC (fase 3) ---------- */
   const S = DADOS.sopr;
@@ -1061,17 +1215,52 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
     datas.forEach((d, i) => { const [a, m, dia] = d.split('-'); if (dia === '01' && (+m - 1) % 3 === 0) svgEl('text', { x: X(i), y: y1 + 18, 'text-anchor': 'middle', class: 'ax' }, s, `${MES[+m - 1]}/${a.slice(2)}`); });
   }
   renderSoprAtivo(soprSel);
+  $('#sub').textContent = SUB[modoAtual] || SUB.cripto;
 }
 
-/* ---------- abas ---------- */
+/* ---------- horário das bolsas (o mesmo cálculo do coletor, acoes.py) ---------- */
+function horaNY(ms) {   // horário de verão dos EUA: do 2º domingo de março ao 1º de novembro
+  const a = new Date(ms).getUTCFullYear();
+  const domingo = (mes, n) => { const d = new Date(Date.UTC(a, mes, 1)).getUTCDay(); return Date.UTC(a, mes, 1 + (7 - d) % 7 + 7 * (n - 1)); };
+  const verao = ms >= domingo(2, 2) + 7 * 36e5 && ms < domingo(10, 1) + 6 * 36e5;
+  const t = new Date(ms - (verao ? 4 : 5) * 36e5);
+  return { d: t.getUTCDay(), h: t.getUTCHours() + t.getUTCMinutes() / 60 };   // d: 0 = domingo
+}
+const SESSOES = {
+  'Nova York': ms => { const { d, h } = horaNY(ms); return d >= 1 && d <= 5 && h >= 9.5 && h < 16; },
+  'Futuros': ms => { const { d, h } = horaNY(ms); if (d === 6 || (d === 0 && h < 18) || (d === 5 && h >= 17)) return false; return !(h >= 17 && h < 18); },
+  'Seul': ms => { const t = new Date(ms + 9 * 36e5), d = t.getUTCDay(), h = t.getUTCHours() + t.getUTCMinutes() / 60; return d >= 1 && d <= 5 && h >= 9 && h < 15.5; },
+};
+SESSOES['Tóquio'] = SESSOES['Seul'];
+function proximaMudanca(fn, ms) {
+  const agora = fn(ms);
+  for (let t = Math.floor(ms / 9e5 + 1) * 9e5, i = 0; i < 480; i++, t += 9e5) if (fn(t) !== agora) return t;
+  return null;
+}
+
+/* ---------- abas (cada mercado, Cripto ou Ações, tem as suas) ---------- */
 const tabs = [...document.querySelectorAll('.tab')];
+const SUB = { cripto: '', acoes: '' };
+let modoAtual = 'cripto';
 function show(id) {
   if (!document.getElementById('p-' + id)) id = 'resumo';
+  const modo = id.startsWith('a-') ? 'acoes' : 'cripto';
+  modoAtual = modo;
   tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === id)));
+  document.querySelectorAll('.tabs [data-modo]').forEach(t => { t.hidden = t.dataset.modo !== modo; });
+  document.querySelectorAll('#modo button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.modo === modo)));
   document.querySelectorAll('.panel').forEach(p => { p.hidden = p.id !== 'p-' + id; });
-  try { localStorage.setItem('radar-tab', id); } catch (e) {}
+  if (SUB[modo]) $('#sub').textContent = SUB[modo];
+  $('#modoNota').hidden = modo !== 'acoes';
+  try { localStorage.setItem('radar-tab', id); localStorage.setItem('radar-tab-' + modo, id); } catch (e) {}
 }
 tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab)));
+window.addEventListener('hashchange', () => { if (location.hash.length > 1) show(location.hash.slice(1)); });
+document.querySelectorAll('#modo button').forEach(b => b.addEventListener('click', () => {
+  let id = b.dataset.modo === 'acoes' ? 'a-resumo' : 'resumo';
+  try { id = localStorage.getItem('radar-tab-' + b.dataset.modo) || id; } catch (e) {}
+  show(id);
+}));
 let start = location.hash.slice(1);
 if (!start) { try { start = localStorage.getItem('radar-tab') || 'resumo'; } catch (e) { start = 'resumo'; } }
 show(start);
@@ -1109,13 +1298,15 @@ async function carregar(senhaDigitada) {
   aviso(`Não consegui buscar os dados (erro ${r.status}). Tente de novo em alguns minutos.`);
 }
 /* ---------- preço ao vivo, a cada 30 s, direto da Hyperliquid ---------- */
-let liqAtual = null, ultimosMids = null;
+let liqAtual = null, aLiqAtual = null, ultimosMids = null;
 async function atualizarAoVivo(buscar) {
   if (buscar || !ultimosMids) {
     try {
-      const r = await fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"type":"allMids"}' });
+      const pedir = corpo => fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: corpo });
+      // cripto (grupo principal) e ações (grupo xyz, nomes "xyz:MU") vêm em pedidos separados
+      const [r, rx] = await Promise.all([pedir('{"type":"allMids"}'), pedir('{"type":"allMids","dex":"xyz"}').catch(() => null)]);
       if (!r.ok) throw new Error(r.status);
-      ultimosMids = await r.json();
+      ultimosMids = Object.assign({}, await r.json(), rx && rx.ok ? await rx.json() : {});
       const chip = document.getElementById('aoVivo');
       if (chip) chip.innerHTML = `<span class="dot"></span>preço ao vivo ${new Date().toLocaleTimeString('pt-BR')} · a cada 30 s`;
     } catch (e) {
@@ -1134,6 +1325,11 @@ async function atualizarAoVivo(buscar) {
   if (lv && liqAtual && ultimosMids[liqAtual.t]) {
     const v = +ultimosMids[liqAtual.t], d = v / liqAtual.px - 1;
     lv.innerHTML = `· <b>agora ${fmtPx(v)}</b> (${d >= 0 ? '+' : ''}${fmt(d * 100, 1)}% desde a foto)`;
+  }
+  const alv = document.getElementById('aLiqVivo');
+  if (alv && aLiqAtual && ultimosMids[aLiqAtual.t]) {
+    const v = +ultimosMids[aLiqAtual.t], d = v / aLiqAtual.px - 1;
+    alv.innerHTML = `· <b>agora ${fmtPx(v)}</b> (${d >= 0 ? '+' : ''}${fmt(d * 100, 1)}% desde a foto)`;
   }
 }
 setInterval(() => { if (!document.hidden) atualizarAoVivo(true); }, 30000);

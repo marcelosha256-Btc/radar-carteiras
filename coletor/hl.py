@@ -103,11 +103,18 @@ class Hyperliquid:
             cursor = ultimo + 1
         return saida
 
-    def estado(self, carteira):
-        return self.info({"type": "clearinghouseState", "user": carteira})
+    def estado(self, carteira, dex=None):
+        """dex=None é o grupo principal (cripto); dex="xyz" traz as posições em ações e commodities."""
+        corpo = {"type": "clearinghouseState", "user": carteira}
+        if dex:
+            corpo["dex"] = dex
+        return self.info(corpo)
 
-    def ordens(self, carteira):
-        return self.info({"type": "frontendOpenOrders", "user": carteira})
+    def ordens(self, carteira, dex=None):
+        corpo = {"type": "frontendOpenOrders", "user": carteira}
+        if dex:
+            corpo["dex"] = dex
+        return self.info(corpo)
 
     def livro(self, moeda, sig=None):
         corpo = {"type": "l2Book", "coin": moeda}
