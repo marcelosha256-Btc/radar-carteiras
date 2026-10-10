@@ -174,6 +174,13 @@ CREATE TABLE IF NOT EXISTS acoes_sinais (
   endereco TEXT, moeda TEXT, lado TEXT, aberto_em BIGINT, preco_abertura DOUBLE PRECISION,
   fechado_em BIGINT, preco_fechamento DOUBLE PRECISION, retorno DOUBLE PRECISION
 );
+CREATE TABLE IF NOT EXISTS acoes_swing_sinais (
+  id {ID},                          -- Diário: sinais dos setups de swing aprovados nas ações
+  origem TEXT,                      -- setup + pregão do sinal (evita registrar o mesmo sinal duas vezes)
+  setup TEXT, moeda TEXT, lado TEXT, aberto_em BIGINT, preco_abertura DOUBLE PRECISION,
+  stop DOUBLE PRECISION, alvo DOUBLE PRECISION,
+  fechado_em BIGINT, preco_fechamento DOUBLE PRECISION, retorno DOUBLE PRECISION, r DOUBLE PRECISION
+);
 CREATE TABLE IF NOT EXISTS balancos (
   simbolo TEXT, data TEXT,          -- data do anúncio (AAAA-MM-DD, calendário de balanços da Nasdaq)
   hora TEXT,                        -- antes | depois (da sessão) | NULL quando a Nasdaq não informa

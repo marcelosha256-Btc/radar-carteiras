@@ -114,11 +114,11 @@ def atr(h, l, c, n=14):
     return out
 
 
-def rsi_semanal(ts, c, n=14):
-    """RSI de 14 semanas, só nos dias que fecham a semana (domingo, UTC); nos outros dias, None.
-    Usa só semanas fechadas: não olha o futuro."""
+def rsi_semanal(ts, c, n=14, fim=6):
+    """RSI de 14 semanas, só nos dias que fecham a semana (domingo no cripto, sexta nas ações;
+    `fim` = dia da semana, 0 = segunda); nos outros dias, None. Usa só semanas fechadas."""
     out = [None] * len(c)
-    dom = [k for k, t in enumerate(ts) if datetime.fromtimestamp(t, timezone.utc).weekday() == 6]
+    dom = [k for k, t in enumerate(ts) if datetime.fromtimestamp(t, timezone.utc).weekday() == fim]
     r = rsi([c[k] for k in dom], n)
     for k, v in zip(dom, r):
         out[k] = v
@@ -152,7 +152,7 @@ def indicadores(d):
     c, h, l = d["c"], d["h"], d["l"]
     n = len(c)
     ind = {"c": c, "h": h, "l": l, "o": d["o"], "sma20": sma(c, 20), "sma50": sma(c, 50), "sma200": sma(c, 200),
-           "rsi2": rsi(c, 2), "rsi14": rsi(c, 14), "atr": atr(h, l, c), "rsi_sem": rsi_semanal(d["ts"], c)}
+           "rsi2": rsi(c, 2), "rsi14": rsi(c, 14), "atr": atr(h, l, c), "rsi_sem": rsi_semanal(d["ts"], c, fim=d.get("fim_semana", 6))}
     max20 = [None] * n
     min20 = [None] * n
     largura = [None] * n
@@ -211,13 +211,14 @@ QUALQUER_DIA = {"id": "referencia", "nome": "Referência: comprar em qualquer di
 
 # ---------- teste ----------
 
-def testar(setup, ind, ts):
+def testar(setup, ind, ts, bloqueado=None):
+    """`bloqueado`: índices de barras em que não se entra (ações: perto de balanço)."""
     o, h, l, c, a = ind["o"], ind["h"], ind["l"], ind["c"], ind["atr"]
     n = len(c)
     long = setup["lado"] == "long"
     ops, i = [], AQUECIMENTO
     while i < n - 1:
-        if a[i] and setup["cond"](ind, i):
+        if a[i] and not (bloqueado and i in bloqueado) and setup["cond"](ind, i):
             e = o[i + 1]
             risco = STOP_ATR * a[i]
             stop = e - risco if long else e + risco
@@ -266,10 +267,13 @@ def gatilho(setup, d, px):
     """Preço de fechamento de hoje que dispararia o setup (busca numa grade de ±25%)."""
     base = {k: d[k][-400:] for k in ("o", "h", "l", "c")}
     ult = base["c"][-1]
+    fim = d.get("fim_semana", 6)
     amanha = d["ts"][-1] + DIA_S
+    while fim == 4 and datetime.fromtimestamp(amanha, timezone.utc).weekday() > 4:
+        amanha += DIA_S      # ações: o próximo pregão
     semanal = setup["id"] == "rsi_semanal_60"
-    if semanal and datetime.fromtimestamp(amanha, timezone.utc).weekday() != 6:
-        return None          # só pode disparar no fechamento de domingo
+    if semanal and datetime.fromtimestamp(amanha, timezone.utc).weekday() != fim:
+        return None          # só pode disparar no fechamento da semana
     melhor = None
     passos = [k * 0.0025 for k in range(0, 101)]
     for p in passos:
@@ -278,7 +282,7 @@ def gatilho(setup, d, px):
                  "l": base["l"] + [min(ult, preco)], "c": base["c"] + [preco]}
         ind = indicadores_rapidos(teste)
         if semanal:
-            ind["rsi_sem"][-1] = rsi_semanal(d["ts"] + [amanha], d["c"] + [preco])[-1]
+            ind["rsi_sem"][-1] = rsi_semanal(d["ts"] + [amanha], d["c"] + [preco], fim=fim)[-1]
         if setup["cond"](ind, len(teste["c"]) - 1):
             melhor = preco
             break
@@ -435,20 +439,21 @@ def registrar_e_acompanhar(hl, con, precos, agora):
 
 # ---------- painel ----------
 
-def painel(con, ativos, f2):
-    base = con.kv_ler("swing_base")
+def painel(con, ativos, f2, base=None, ordem=None):
+    """`base` e `ordem`: as ações usam a mesma montagem com a base delas (acoes_swing.py)."""
+    base = base or con.kv_ler("swing_base")
     if not base:
         return None
     px = {a["t"]: a["px"] for a in ativos}
     hoje = {a["t"]: (a.get("lo_hoje"), a.get("hi_hoje")) for a in ativos}
     out = {"dia": base["dia"], "criterio": base["criterio"], "regras": base["regras"], "testes": base["testes"],
            "passam": base["passam"], "ativos": []}
-    for m in ATIVOS:
+    for m in ordem or ATIVOS:
         a = base["ativos"].get(m)
         if not a:
             continue
         if "erro" in a:
-            out["ativos"].append({"t": m, "erro": a["erro"]})
+            out["ativos"].append({"t": m, "erro": a["erro"], "fonte": a.get("fonte")})
             continue
         p = px.get(m, a["ultimo_fechamento"])
         setups = a["setups"]
@@ -478,6 +483,6 @@ def painel(con, ativos, f2):
                  "stop_curto": curto, "curto_pego": principal["curto_pego"], "stopado": principal["stopado"],
                  "atr": ctx["atr"], "atr_pct": ctx["atr_pct"]}
         out["ativos"].append({"t": m, "px": p, "fonte": a["fonte"], "desde": a["desde"], "contexto": ctx,
-                              "referencia": a.get("referencia"),
+                              "referencia": a.get("referencia"), "balanco": a.get("balanco"),
                               "setups": setups, "principal": principal["id"], "plano": plano})
     return out

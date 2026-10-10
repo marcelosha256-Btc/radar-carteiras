@@ -243,8 +243,9 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-fluxo" hidden>Fluxo e alertas</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-liquidez" hidden>Stops e liquidações</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-eventos" hidden>Balanços e eventos</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-forca" hidden>Setores e força</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-diario" hidden>Diário de sinais</button>
-      <span class="soon" data-modo="acoes" hidden>em breve: swing, setores e força</span>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-swing" hidden>Swing trade</button>
     </nav>
   </div>
 
@@ -330,6 +331,40 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
     <div class="box">
       <div class="box-head"><h2>Cópia das carteiras confiáveis em ações</h2><p>Quando uma carteira confiável em ações abre posição, o radar registra a entrada no preço daquele momento, até 1 h depois dela. Fecha quando ela fecha. Nada é apagado nem recalculado. Separado do Diário de cripto.</p></div>
       <div class="tbl-wrap"><table id="aSignals"></table></div>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Sinais dos setups de swing em ações</h2><p>Quando um setup aprovado dispara no fechamento do pregão (e não há balanço nos próximos dias), o radar registra a entrada no preço do contrato naquele momento, com o stop e o alvo do teste, e acompanha vela a vela de 1 h até bater um dos dois ou completar 20 pregões.</p></div>
+      <div class="tbl-wrap"><table id="aSwingSignals"></table></div>
+    </div>
+  </section>
+
+  <!-- AÇÕES: SWING -->
+  <section class="panel" id="p-a-swing" role="tabpanel" hidden>
+    <div class="box-head"><h2>Swing trade · ações</h2><p id="a-swingNota"></p></div>
+    <p class="callout" id="a-swingAviso"></p>
+    <div class="swing-grid" id="a-swingCards"></div>
+    <div class="box" id="a-plan"></div>
+    <div class="box">
+      <div class="box-head"><h2 id="a-swingTodosTit">Todos os setups testados</h2><p>Cada linha é um teste em 10 anos de pregões da bolsa (Yahoo). "Fora da amostra" é a média dos 30% finais, que o filtro não usou para escolher. "Só carona na alta" = passa no filtro, mas não ganha de comprar em qualquer dia.</p></div>
+      <div class="tbl-wrap"><table id="a-swingTodos"></table></div>
+    </div>
+  </section>
+
+  <!-- AÇÕES: SETORES E FORÇA -->
+  <section class="panel" id="p-a-forca" role="tabpanel" hidden>
+    <div class="box-head"><h2>Setores e força relativa</h2><p id="aForcaNota"></p></div>
+    <div class="kpis" id="aForcaKpis"></div>
+    <div class="box">
+      <div class="box-head"><h2>Setores</h2><p>Mediana dos papéis de cada setor no grupo xyz. Força de 1 a 99: posição do papel entre todos os do grupo (99 = o mais forte contra o S&amp;P 500).</p></div>
+      <div class="tbl-wrap"><table id="aForcaSetores"></table></div>
+    </div>
+    <div class="box">
+      <div class="box-head"><div class="seg" id="aForcaFiltro" role="group" aria-label="Filtrar por setor"></div><span class="small muted" id="aForcaMeta"></span></div>
+      <div class="tbl-wrap"><table id="aForcaTabela"></table></div>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Teste: quem estava mais forte continuou mais forte?</h2><span class="chip warn">viés de sobrevivência</span></div>
+      <p class="small" id="aForcaTeste"></p>
     </div>
   </section>
 
@@ -713,29 +748,29 @@ function renderReal(DADOS) {
 
 
   /* ---------- Swing trade (fase 4) ---------- */
-  const W = DADOS.swing;
-  const nomeSetup = {};
-  if (W) {
+  // a mesma tela serve ao cripto (pre = '') e às ações (pre = 'a-'); op muda nomes, cores e horário
+  function montarSwing(W, pre, op) {
+    const q = id => document.getElementById(pre + id);
     const rg = W.regras, cr = W.criterio;
-    W.ativos.forEach(a => (a.setups || []).forEach(s => { nomeSetup[s.id] = s.nome; }));
-    $('#swingNota').textContent = `Só opere quando um setup testado estiver ativo e passar no filtro: ${cr.n}+ operações, acerto de ${fmt(cr.acerto * 100)}% ou mais, mediana de +${fmt(cr.mediana, 2)}R ou mais e resultado positivo fora da amostra. Regras simuladas: sinal no fechamento diário, entrada na abertura seguinte, stop a ${fmt(rg.stop_atr)} ATR, alvo em ${fmt(rg.alvo_r, 1)}R, saída por tempo em ${rg.max_dias} dias e custo de ${fmt(rg.custo * 100, 1)}%.`;
-    $('#swingAviso').innerHTML = `<b>${W.passam} de ${W.testes} testes passam no filtro.</b> Com tantos testes, alguns passam por sorte. Por isso todo sinal de um setup aprovado vai para o Diário, que mostra se ele funciona daqui para a frente.`;
+    q('swingNota').textContent = `Só opere quando um setup testado estiver ativo e passar no filtro: ${cr.n}+ operações, acerto de ${fmt(cr.acerto * 100)}% ou mais, mediana de +${fmt(cr.mediana, 2)}R ou mais e resultado positivo fora da amostra. Regras simuladas: sinal no fechamento diário, entrada na abertura seguinte, stop a ${fmt(rg.stop_atr)} ATR, alvo em ${fmt(rg.alvo_r, 1)}R, saída por tempo em ${rg.max_dias} dias e custo de ${fmt(rg.custo * 100, 1)}%.`;
+    q('swingAviso').innerHTML = `<b>${W.passam} de ${W.testes} testes passam no filtro.</b> Com tantos testes, alguns passam por sorte. Por isso todo sinal de um setup aprovado vai para o Diário, que mostra se ele funciona daqui para a frente.`;
     const ativosW = W.ativos.filter(a => !a.erro);
     let swingSel = ativosW.length ? ativosW[0].t : null;
     const Rtxt = v => v == null ? '—' : (v >= 0 ? '+' : '') + fmt(v, 2) + 'R';
     const pctN = v => v == null ? '—' : fmt(v * 100) + '%';
 
     const cardSwing = a => {
-      if (a.erro) return `<div class="scard"><div class="hd"><span class="tick"><span class="sw" style="background:var(${CORES[a.t]})"></span>${a.t}</span><span class="chip flat">sem teste</span></div><p>${a.erro}</p></div>`;
+      if (a.erro) return `<div class="scard"><div class="hd"><span class="tick"><span class="sw" style="background:${op.cor(a)}"></span>${op.nome(a)}</span><span class="chip flat">sem teste</span></div><p>${a.erro}</p></div>`;
       const s = a.setups.find(x => x.id === a.principal), c = a.contexto, long = s.lado === 'long';
-      const status = s.ativo_ontem ? (s.passa ? '<span class="chip up">sinal ativo</span>' : '<span class="chip warn">ativo, não passa</span>')
+      const bloq = a.balanco && a.balanco.bloqueado;
+      const status = bloq ? '<span class="chip warn">balanço perto: sem entrada</span>' : s.ativo_ontem ? (s.passa ? '<span class="chip up">sinal ativo</span>' : '<span class="chip warn">ativo, não passa</span>')
         : s.passa ? '<span class="chip acc">aguardar gatilho</span>' : '<span class="chip flat">nenhum setup passa</span>';
       const gat = s.ativo_ontem ? 'disparou no fechamento de ontem'
         : !s.gatilho ? 'sem gatilho até ±25% do preço'
-        : Math.abs(s.dist) < 0.003 ? `<b>já está na zona:</b> dispara se o dia fechar (21h de Brasília) ${s.sentido < 0 ? 'abaixo' : 'acima'} de <b class="mono">${fmtPx(s.gatilho)}</b>`
-        : `se o dia fechar (21h de Brasília) ${s.sentido < 0 ? 'abaixo' : 'acima'} de <b class="mono">${fmtPx(s.gatilho)}</b> (${pctTxt(s.dist, 1)})`;
+        : Math.abs(s.dist) < 0.003 ? `<b>já está na zona:</b> dispara se ${op.fecha} ${s.sentido < 0 ? 'abaixo' : 'acima'} de <b class="mono">${fmtPx(s.gatilho)}</b>`
+        : `se ${op.fecha} ${s.sentido < 0 ? 'abaixo' : 'acima'} de <b class="mono">${fmtPx(s.gatilho)}</b> (${pctTxt(s.dist, 1)})`;
       return `<button class="scard" aria-pressed="${a.t === swingSel}" data-t="${a.t}">
-        <div class="hd"><span class="tick"><span class="sw" style="background:var(${CORES[a.t]})"></span>${a.t}</span>${status}</div>
+        <div class="hd"><span class="tick"><span class="sw" style="background:${op.cor(a)}"></span>${op.nome(a)}</span>${status}</div>
         <p>Tendência de <b>${c.estado}</b> há <b>${c.dias} dias</b> · <b>${c.semanas_acima}</b> semanas fechando acima da média de 20 semanas · ${pctTxt(c.dist_topo, 1)} do topo</p>
         <p><b class="${long ? 'pos' : 'neg'}">${s.lado.toUpperCase()}</b> · ${s.nome}: ${gat}</p>
         <div class="stats">
@@ -749,14 +784,14 @@ function renderReal(DADOS) {
 
     const renderPlano = () => {
       const a = ativosW.find(x => x.t === swingSel);
-      if (!a) { $('#plan').innerHTML = ''; return; }
+      if (!a) { q('plan').innerHTML = ''; return; }
       const s = a.setups.find(x => x.id === a.principal), P = a.plano, long = s.lado === 'long';
       const risco = Math.abs(P.entrada - P.stop), Rv = p => (long ? p - P.entrada : P.entrada - p) / risco;
       const lin = (lab, p, nota, cls = '') => `<tr class="${cls}"><td>${lab}</td><td class="n"><b>${fmtPx(p)}</b></td>
         <td class="n ${p === P.entrada ? '' : sinalCls(Rv(p))}">${p === P.entrada ? '—' : Rtxt(Rv(p))}</td>
         <td class="n muted">${pctTxt(p / P.entrada - 1, 1)}</td><td class="muted" style="white-space:normal">${nota}</td></tr>`;
-      $('#plan').innerHTML = `
-        <div class="box-head"><h2>Plano · ${a.t} ${s.lado.toUpperCase()} · ${s.nome}</h2>
+      q('plan').innerHTML = `
+        <div class="box-head"><h2>Plano · ${op.nome(a)} ${s.lado.toUpperCase()} · ${s.nome}</h2>
           ${s.passa ? '<span class="chip up">passa no filtro</span>' : '<span class="chip warn">não passa no filtro: só para estudo</span>'}</div>
         <div class="plan-grid">
           <div class="tbl-wrap"><table>
@@ -769,46 +804,52 @@ function renderReal(DADOS) {
             </tbody></table></div>
           <div class="sizer">
             <h3>Tamanho da posição</h3>
-            <label for="banca">Banca (US$)<input id="banca" type="number" min="0" step="100" value="10000"></label>
-            <label for="risco">Risco por operação (% da banca)<input id="risco" type="number" min="0.1" max="5" step="0.1" value="1"></label>
-            <div class="out" id="sizeOut"></div>
+            <label for="${pre}banca">Banca (US$)<input id="${pre}banca" type="number" min="0" step="100" value="10000"></label>
+            <label for="${pre}risco">Risco por operação (% da banca)<input id="${pre}risco" type="number" min="0.1" max="5" step="0.1" value="1"></label>
+            <div class="out" id="${pre}sizeOut"></div>
           </div>
         </div>`;
       const calc = () => {
-        const banca = +$('#banca').value || 0, r = (+$('#risco').value || 0) / 100;
+        const banca = +q('banca').value || 0, r = (+q('risco').value || 0) / 100;
         const perda = banca * r, notional = perda / (risco / P.entrada), lev = banca ? notional / banca : 0;
-        $('#sizeOut').innerHTML = `<div><span>Perda se bater o stop</span><b>US$ ${fmt(perda, 0)}</b></div>
+        q('sizeOut').innerHTML = `<div><span>Perda se bater o stop</span><b>US$ ${fmt(perda, 0)}</b></div>
           <div><span>Tamanho da posição</span><b>US$ ${fmt(notional, 0)}</b></div>
-          <div><span>Quantidade</span><b>${fmt(notional / P.entrada, P.entrada > 1000 ? 4 : 2)} ${a.t}</b></div>
+          <div><span>Quantidade</span><b>${fmt(notional / P.entrada, P.entrada > 1000 ? 4 : 2)} ${op.nome(a)}</b></div>
           <div><span>Alavancagem necessária</span><b class="${lev > 5 ? 'neg' : ''}">${fmt(lev, 1)}x</b></div>
           <div><span>Ganho no alvo 1</span><b class="pos">US$ ${fmt(perda * Rv(P.alvo1), 0)}</b></div>`;
       };
-      $('#banca').addEventListener('input', calc); $('#risco').addEventListener('input', calc); calc();
+      q('banca').addEventListener('input', calc); q('risco').addEventListener('input', calc); calc();
     };
 
     const renderTodos = () => {
       const a = ativosW.find(x => x.t === swingSel);
       if (!a) return;
-      $('#swingTodosTit').textContent = `Todos os setups testados · ${a.t} (${a.fonte}, desde ${a.desde.split('-').reverse().join('/')})`;
-      $('#swingTodos').innerHTML = '<thead><tr><th>Setup</th><th class="n">Operações</th><th class="n">Acerto</th><th class="n">Mediana</th><th class="n">Média</th><th class="n">Fora da amostra</th><th class="n">Stopado</th><th>Agora</th><th>Filtro</th></tr></thead><tbody>' +
+      q('swingTodosTit').textContent = `Todos os setups testados · ${op.nome(a)} (${a.fonte}, desde ${a.desde.split('-').reverse().join('/')})`;
+      q('swingTodos').innerHTML = '<thead><tr><th>Setup</th><th class="n">Operações</th><th class="n">Acerto</th><th class="n">Mediana</th><th class="n">Média</th><th class="n">Fora da amostra</th><th class="n">Stopado</th><th>Agora</th><th>Filtro</th></tr></thead><tbody>' +
         a.setups.map(s => `<tr><td><span class="chip ${s.lado === 'long' ? 'up' : 'down'}">${s.lado.toUpperCase()}</span> ${s.nome}</td>
           <td class="n">${s.n}</td><td class="n">${pctN(s.acerto)}</td><td class="n ${sinalCls(s.mediana)}">${Rtxt(s.mediana)}</td>
           <td class="n ${sinalCls(s.media)}">${Rtxt(s.media)}</td><td class="n ${sinalCls(s.media_fora)}">${Rtxt(s.media_fora)} <span class="muted small">n=${s.n_fora}</span></td>
           <td class="n">${pctN(s.stopado)}</td>
           <td>${s.ativo_ontem ? '<span class="chip up">disparou ontem</span>' : s.gatilho ? `${fmtPx(s.gatilho)} <span class="muted small">(${pctTxt(s.dist, 1)})</span>` : `<span class="muted small">${s.nota || 'longe'}</span>`}</td>
-          <td>${s.passa ? '<span class="chip up">passa</span>' : '<span class="chip flat">não passa</span>'}</td></tr>`).join('') +
+          <td>${s.passa ? '<span class="chip up">passa</span>' : s.filtro_basico ? '<span class="chip warn" title="passa no filtro, mas não ganha de comprar em qualquer dia">só carona na alta</span>' : '<span class="chip flat">não passa</span>'}</td></tr>`).join('') +
         (a.referencia ? (r => `<tr class="muted"><td><i>${r.nome}</i></td><td class="n">${r.n}</td><td class="n">${pctN(r.acerto)}</td>
           <td class="n">${Rtxt(r.mediana)}</td><td class="n">${Rtxt(r.media)}</td><td class="n">${Rtxt(r.media_fora)} <span class="small">n=${r.n_fora}</span></td>
           <td class="n">${pctN(r.stopado)}</td><td colspan="2" class="small">base: o long precisa ganhar dela</td></tr>`)(a.referencia) : '') + '</tbody>';
     };
 
     const renderSwing = () => {
-      $('#swingCards').innerHTML = W.ativos.map(cardSwing).join('');
-      document.querySelectorAll('#swingCards button.scard').forEach(b => b.addEventListener('click', () => { swingSel = b.dataset.t; renderSwing(); }));
+      q('swingCards').innerHTML = W.ativos.map(cardSwing).join('');
+      q('swingCards').querySelectorAll('button.scard').forEach(b => b.addEventListener('click', () => { swingSel = b.dataset.t; renderSwing(); }));
       renderPlano();
       renderTodos();
     };
     renderSwing();
+  }
+  const W = DADOS.swing;
+  const nomeSetup = {};
+  if (W) {
+    W.ativos.forEach(a => (a.setups || []).forEach(s => { nomeSetup[s.id] = s.nome; }));
+    montarSwing(W, '', { nome: a => a.t, cor: a => `var(${CORES[a.t]})`, fecha: 'o dia fechar (21h de Brasília)' });
   }
 
   /* ---------- Diário: sinais dos setups de swing e registro do regime ---------- */
@@ -1139,6 +1180,71 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
       desenharMapa($('#aLiq'), L, px, []);
     }
     if (selA) renderLiqAcao(selA);
+
+    /* swing das ações (mesma tela do cripto) */
+    const WA = A.swing;
+    const nomeSetupA = {};
+    if (WA && WA.ativos) {
+      WA.ativos.forEach(a => (a.setups || []).forEach(s => { nomeSetupA[s.id] = s.nome; }));
+      montarSwing(WA, 'a-', { nome: a => a.tk || a.t.split(':').pop(), cor: () => 'var(--accent)',
+        fecha: 'o pregão fechar (17h de Brasília no horário de verão dos EUA)' });
+      const rgA = WA.regras;
+      $('#a-swingNota').textContent += ` Nas ações: 10 anos de pregões da bolsa (Yahoo), nenhuma entrada de ${rgA.balanco_antes} pregões antes de um balanço até ${rgA.balanco_depois} depois, e um setup de compra só passa se também ganhar de comprar em qualquer dia. Níveis já convertidos para o preço do contrato da Hyperliquid.`;
+      $('#a-swingAviso').innerHTML += ' A SK hynix aparece duas vezes (ação na Coreia e ADR) com o mesmo histórico: conte como um teste só.';
+    } else {
+      $('#a-swingNota').textContent = WA && WA.erro ? `O swing das ações falhou (${WA.erro}).` : 'O swing das ações sai depois do primeiro processamento diário.';
+    }
+    const sinaisSw = (WA && WA.sinais) || [];
+    $('#aSwingSignals').innerHTML = '<thead><tr><th>Aberto em</th><th>Ativo</th><th>Setup</th><th class="n">Entrada</th><th class="n">Stop</th><th class="n">Alvo</th><th>Situação</th><th class="n">Resultado</th></tr></thead><tbody>' +
+      (sinaisSw.length ? sinaisSw.map(s => {
+        const aberto = s.fechado_em == null;
+        const sit = aberto ? '<span class="chip acc">aberto</span>' : (s.r ?? 0) > 0 ? '<span class="chip up">ganho</span>' : '<span class="chip down">perda</span>';
+        const res = aberto ? `${pctTxt(s.agora)} <span class="muted small">agora</span>` : `${(s.r >= 0 ? '+' : '') + fmt(s.r, 2)}R <span class="muted small">${pctTxt(s.retorno, 1)}</span>`;
+        return `<tr><td class="mono muted">${quando(s.aberto_em)}</td><td><b>${s.moeda}</b> <span class="chip ${s.lado === 'long' ? 'up' : 'down'}">${s.lado.toUpperCase()}</span></td>
+          <td>${nomeSetupA[s.setup] || s.setup}</td><td class="n">${fmtPx(s.preco_abertura)}</td><td class="n">${fmtPx(s.stop)}</td><td class="n">${fmtPx(s.alvo)}</td>
+          <td>${sit}</td><td class="n ${sinalCls(aberto ? s.agora : s.r)}">${res}</td></tr>`;
+      }).join('') : '<tr><td colspan="8" class="muted">Nenhum sinal ainda. Aparece aqui quando um setup aprovado disparar no fechamento do pregão.</td></tr>') + '</tbody>';
+
+    /* setores e força */
+    const FO = A.forca;
+    if (FO && FO.papeis) {
+      const SP = FO.sp500, pc = v => v == null ? '—' : pctTxt(v, 1);
+      const dBR = d => d ? d.split('-').reverse().join('/') : '—';
+      $('#aForcaNota').textContent = `Força relativa = quanto o papel subiu acima do S&P 500 em 3, 6, 9 e 12 meses, com peso dobrado nos últimos 3 meses. Preços da bolsa (Yahoo), fechamento de ${dBR(SP.ultimo)}. Mostra quem está liderando, não para onde vai: o teste no fim da página diz quanto isso valeu no passado.`;
+      $('#aForcaKpis').innerHTML =
+        kpi('S&amp;P 500 · 1 mês', pc(SP.ret_1m), 'régua da força relativa', sinalCls(SP.ret_1m)) +
+        kpi('S&amp;P 500 · 3 meses', pc(SP.ret_3m), SP.acima_200 ? 'acima da média de 200 dias' : 'abaixo da média de 200 dias', sinalCls(SP.ret_3m)) +
+        kpi('S&amp;P 500 · 12 meses', pc(SP.ret_12m), 'para comparar com os papéis', sinalCls(SP.ret_12m)) +
+        kpi('Setor mais forte', FO.setores[0] ? FO.setores[0].setor : '—', FO.setores[0] ? `força mediana ${fmt(FO.setores[0].forca_mediana)} · líder ${FO.setores[0].lider}` : '');
+      $('#aForcaSetores').innerHTML = '<thead><tr><th>Setor</th><th class="n">Papéis</th><th class="n">Força mediana</th><th class="n">vs S&amp;P em 3 meses</th><th class="n">Acima da média de 200 dias</th><th>Líder</th></tr></thead><tbody>' +
+        FO.setores.map(x => `<tr><td><b>${x.setor}</b></td><td class="n">${x.n}</td><td class="n"><b>${x.forca_mediana == null ? '—' : fmt(x.forca_mediana)}</b></td>
+          <td class="n ${sinalCls(x.rel_3m_mediana)}">${pc(x.rel_3m_mediana)}</td><td class="n">${x.acima_200 == null ? '—' : fmt(x.acima_200 * 100) + '%'}</td><td>${x.lider || '—'}</td></tr>`).join('') + '</tbody>';
+      let filtro = 'Todos';
+      const setoresF = ['Todos', ...FO.setores.map(x => x.setor)];
+      const universoA = new Set(A.ativos.map(a => a.tk));
+      const barra = f => f == null ? '—' : `<span style="display:inline-block;width:60px;height:8px;border-radius:4px;background:var(--surface-2);vertical-align:middle;margin-right:6px"><span style="display:block;height:8px;border-radius:4px;width:${f * 0.6}px;background:${f >= 70 ? 'var(--up)' : f <= 30 ? 'var(--down)' : 'var(--faint)'}"></span></span><b>${fmt(f)}</b>`;
+      const chipMedia = v => v == null ? '<span class="muted small">—</span>' : v ? '<span class="chip up">acima</span>' : '<span class="chip down">abaixo</span>';
+      const renderForca = () => {
+        $('#aForcaFiltro').innerHTML = setoresF.map(x => `<button aria-pressed="${x === filtro}" data-s="${x}">${x}</button>`).join('');
+        $('#aForcaFiltro').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.s; renderForca(); }));
+        const lista = FO.papeis.filter(p => filtro === 'Todos' || p.setor === filtro);
+        $('#aForcaMeta').textContent = `${lista.length} papéis · em negrito, os ${universoA.size} mercados acompanhados no radar`;
+        $('#aForcaTabela').innerHTML = '<thead><tr><th>Papel</th><th>Setor</th><th>Força</th><th class="n">vs S&amp;P 1 mês</th><th class="n">3 meses</th><th class="n">12 meses</th><th>Média 50 / 200 dias</th><th class="n">Do topo de 1 ano</th></tr></thead><tbody>' +
+          lista.map(p => p.erro ? `<tr class="muted"><td>${p.tk}</td><td class="small">${p.setor}</td><td colspan="6" class="small">${p.erro}</td></tr>` :
+            `<tr><td>${universoA.has(p.tk) ? `<b>${p.tk}</b>` : p.tk} <span class="muted small">${p.nome || ''}</span></td><td class="small muted">${p.setor}</td><td style="white-space:nowrap">${barra(p.forca)}</td>
+            <td class="n ${sinalCls(p.rel_1m)}">${pc(p.rel_1m)}</td><td class="n ${sinalCls(p.rel_3m)}">${pc(p.rel_3m)}</td><td class="n ${sinalCls(p.rel_12m)}">${pc(p.rel_12m)}</td>
+            <td style="white-space:nowrap">${chipMedia(p.acima_50)} ${chipMedia(p.acima_200)}</td>
+            <td class="n">${pc(p.do_topo)}</td></tr>`).join('') + '</tbody>';
+      };
+      renderForca();
+      const T = FO.teste;
+      $('#aForcaTeste').innerHTML = T ? `Todo mês desde ${dBR(T.desde)} (${T.meses} meses, mediana de ${fmt(T.papeis_mediana)} papéis com 1 ano de histórico; sem commodities e câmbio), o radar ordenou os papéis pela força daquele dia e mediu o mês seguinte, já descontado o S&amp;P 500. ` +
+        `O terço mais forte rendeu <b>${pctTxt(T.fortes_media, 1)}</b> por mês em média e o terço mais fraco <b>${pctTxt(T.fracos_media, 1)}</b>: diferença mediana de <b>${pctTxt(T.dif_mediana, 1)}</b> por mês, com os fortes na frente em <b>${fmt(T.fortes_ganham * 100)}%</b> dos meses. Nos 30% finais do período (${T.n_fora} meses): ${pctTxt(T.dif_media_fora, 1)} por mês. ` +
+        `<br><b>Cuidado:</b> a lista é a de hoje. Papéis que afundaram e saíram da bolsa (ou nunca entraram no grupo xyz) não estão no teste, e quem está aqui hoje costuma ser quem subiu muito, o que infla o resultado dos "fortes". Use como contexto para escolher onde procurar setups, não como sinal de compra sozinho.`
+        : 'Teste ainda não calculado.';
+    } else {
+      $('#aForcaNota').textContent = 'Setores e força saem depois do primeiro processamento diário.';
+    }
 
     /* carteiras, fluxo e alertas, Diário das ações */
     const CA = A.carteiras;

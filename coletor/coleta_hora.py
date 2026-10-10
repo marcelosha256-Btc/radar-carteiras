@@ -20,6 +20,7 @@ if sys.stdout is None:   # pythonw: sem console, tudo vai para o log
 import acoes  # noqa: E402
 import acoes_eventos  # noqa: E402
 import acoes_ranking  # noqa: E402
+import acoes_swing  # noqa: E402
 import contexto  # noqa: E402
 import fase2  # noqa: E402
 import fase4  # noqa: E402
@@ -132,7 +133,7 @@ def _px(v):
     return f"{v:,.0f}".replace(",", ".") if v >= 1000 else f"{v:.4g}".replace(".", ",")
 
 
-def avisar_swing(novos, fechados):
+def avisar_swing(novos, fechados, prefixo=""):
     pct = lambda v: "—" if v is None else f"{v * 100:.0f}%"
     rr = lambda v: "—" if v is None else f"{v:+.2f}R".replace(".", ",")
     for s in novos:
@@ -149,9 +150,9 @@ def avisar_swing(novos, fechados):
             f"fora da amostra {rr(s['media_fora'])}. Isto não é recomendação: o Diário existe para medir "
             "se o setup funciona daqui para a frente.",
         ])
-        avisar(f"Sinal de swing: {s['moeda']} {s['lado'].upper()} · {s['nome']}", corpo, rotulo="sinal")
+        avisar(f"{prefixo}Sinal de swing: {s['moeda']} {s['lado'].upper()} · {s['nome']}", corpo, rotulo="sinal")
     for s in fechados:
-        avisar(f"Sinal encerrado: {s['moeda']} {s['lado'].upper()} por {s['motivo']} ({rr(s['r'])})",
+        avisar(f"{prefixo}Sinal encerrado: {s['moeda']} {s['lado'].upper()} por {s['motivo']} ({rr(s['r'])})",
                f"Entrada {_px(s['entrada'])} · saída {_px(s['saida'])} · resultado {rr(s['r'])} "
                f"({s['retorno'] * 100:+.1f}%".replace(".", ",") + " sem alavancagem, com custos).", rotulo="sinal")
 
@@ -175,6 +176,13 @@ def coletar(con):
                 acoes_eventos.executar(con)
             except Exception:
                 log("ERRO em balanços e eventos (o resto segue normal)\n" + traceback.format_exc())
+        sw = con.kv_ler("acoes_swing_base")
+        if not sw or time.time() * 1000 - sw.get("gerado", 0) > 30 * 3_600_000:
+            try:
+                log("swing e força das ações atrasados; refazendo aqui no PC")
+                acoes_swing.executar(con)
+            except Exception:
+                log("ERRO no swing das ações (o resto segue normal)\n" + traceback.format_exc())
     u = con.kv_ler("ultima_coleta")
     janela = (50 if NA_NUVEM else 100) * 60_000
     if u and time.time() * 1000 - u["tempo"] < janela:
@@ -215,6 +223,12 @@ def coletar(con):
         log(f"ações: {acoes.coletar(hl, con, agora)}")
     except Exception:
         log("ERRO na coleta das ações (cripto segue normal)\n" + traceback.format_exc())
+    try:
+        novos_a, fechados_a = acoes_swing.registrar_e_acompanhar(hl, con, agora)
+        log(f"swing ações: {len(novos_a)} sinais novos no Diário · {len(fechados_a)} fechados")
+        avisar_swing(novos_a, fechados_a, prefixo="[Ações] ")
+    except Exception:
+        log("ERRO no Diário de swing das ações (cripto segue normal)\n" + traceback.format_exc())
     novos, fechados = fase4.registrar_e_acompanhar(hl, con, precos, agora)
     log(f"swing: {len(novos)} sinais novos no Diário · {len(fechados)} fechados")
     avisar_swing(novos, fechados)

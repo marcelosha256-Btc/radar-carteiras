@@ -503,7 +503,12 @@ def painel(hl, con, agora):
     con.executemany("INSERT INTO mercado_hist VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING", hist)
     con.executemany("INSERT INTO liquidez_hist VALUES (?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", liq_hist)
     con.commit()
+    try:   # aba Swing das ações (acoes_swing.py); um erro aqui não derruba o resto do painel
+        import acoes_swing
+        swing = acoes_swing.painel(con, ativos, mapas, ctx)
+    except Exception as e:
+        swing = {"erro": repr(e)[:300]}
     return {"gerado": agora, "ativos": ativos, "liquidez": mapas, "sessoes": sessoes, "carteiras": carteiras,
-            "eventos": eventos,
+            "eventos": eventos, "swing": swing, "forca": con.kv_ler("acoes_forca"),
             "funding_base": FUNDING_BASE, "amostra": _amostra(con, agora),
             "universo_dia": (con.kv_ler("acoes_universo") or {}).get("dia")}
