@@ -442,7 +442,8 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
     </div>
     <div class="box">
       <div class="box-head"><h2>Funding na Hyperliquid agora</h2><p>A Hyperliquid cobra um piso fixo de juros (cerca de 11% ao ano). Igual ao piso não diz nada; acima dele, os comprados pagam caro para ficar na posição; abaixo de zero, são os vendidos que pagam.</p></div>
-      <svg id="funding" viewBox="0 0 720 210" role="img" aria-label="Funding anualizado por ativo comparado ao piso de 11%"></svg>
+      <svg id="funding" viewBox="0 0 720 206" role="img" aria-label="Funding anualizado por ativo comparado ao piso de 11%"></svg>
+      <div class="legend" id="fundingLegenda"></div>
     </div>
     <div class="box">
       <div class="box-head"><h2>Formadores de mercado</h2><span class="chip warn">tese em teste</span></div>
@@ -452,7 +453,11 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
     <div class="box">
       <div class="box-head"><h2>Open interest e funding</h2><div class="seg" id="oiAtivos" role="group" aria-label="Escolher ativo"></div></div>
       <p class="small muted" id="oiNota"></p>
+      <div class="fluxo-total" id="oiAgora"></div>
       <svg id="oiChart" viewBox="0 0 720 230" role="img" aria-label="Histórico de open interest e funding"></svg>
+      <div class="legend"><span><i style="background:var(--accent);height:3px"></i>open interest (eixo da esquerda)</span>
+        <span><i style="background:var(--faint)"></i>funding perto do piso</span><span><i style="background:var(--warn)"></i>funding acima de 13% a.a.</span>
+        <span><i style="background:var(--down)"></i>funding negativo</span><span><i style="background:none;border-top:1px dashed var(--faint);height:0"></i>piso do funding (eixo da direita)</span><span>linha interrompida = mais de 3 h sem coleta</span></div>
     </div>
   </section>
 
@@ -728,19 +733,28 @@ function renderReal(DADOS) {
     : '<p class="muted">Nenhum alerta das confiáveis nas últimas 48 h.</p>';
 
   (function funding() {
-    const s = $('#funding'), F = DADOS.ativos.map(a => [a.t, a.funding]);
-    const lo = Math.min(0, Math.floor(Math.min(...F.map(f => f[1])) / 10) * 10), hi = Math.max(30, Math.ceil(Math.max(...F.map(f => f[1])) / 10) * 10);
-    const x0 = 60, x1 = 700, y0 = 20, y1 = 170, bw = (x1 - x0) / F.length;
+    const s = $('#funding'), F = DADOS.ativos.map(a => [a.t, a.funding]), PISO = 10.95, FAIXA = 2;
+    // escala justa: do menor valor (ou zero) até um pouco acima do maior (ou do piso)
+    const lo = Math.min(0, Math.floor(Math.min(...F.map(f => f[1])) / 5) * 5);
+    const hi = Math.max(15, Math.ceil((Math.max(...F.map(f => f[1])) + 2) / 5) * 5);
+    const passo = hi - lo > 40 ? 10 : 5;
+    const x0 = 56, x1 = 704, y0 = 12, y1 = 160, bw = (x1 - x0) / F.length;
     const y = v => y1 - (v - lo) / (hi - lo) * (y1 - y0);
-    for (let v = lo; v <= hi; v += 10) { svgEl('line', { x1: x0, x2: x1, y1: y(v), y2: y(v), class: 'grid-ln' }, s); svgEl('text', { x: x0 - 8, y: y(v) + 4, 'text-anchor': 'end', class: 'ax' }, s, v + '%'); }
+    // faixa neutra: até 2 pontos do piso, o funding não diz nada
+    svgEl('rect', { x: x0, y: y(PISO + FAIXA), width: x1 - x0, height: y(PISO - FAIXA) - y(PISO + FAIXA), fill: 'var(--accent-soft)', opacity: 0.6 }, s);
+    for (let v = lo; v <= hi; v += passo) { svgEl('line', { x1: x0, x2: x1, y1: y(v), y2: y(v), class: 'grid-ln' }, s); svgEl('text', { x: x0 - 8, y: y(v) + 4, 'text-anchor': 'end', class: 'ax' }, s, v + '%'); }
+    svgEl('line', { x1: x0, x2: x1, y1: y(PISO), y2: y(PISO), stroke: 'var(--accent)', 'stroke-dasharray': '5 4', 'stroke-width': 1.5 }, s);
+    const cor = v => v >= PISO + FAIXA ? 'var(--warn)' : v < 0 ? 'var(--down)' : v < PISO - FAIXA ? 'var(--up)' : 'var(--faint)';
     F.forEach(([t, v], i) => {
       const cx = x0 + bw * i + bw / 2, top = Math.min(y(v), y(0)), h = Math.max(2, Math.abs(y(v) - y(0)));
-      svgEl('rect', { x: cx - 22, y: top, width: 44, height: h, rx: 4, fill: v >= 13 ? 'var(--warn)' : v < 0 ? 'var(--accent)' : 'var(--flat-soft)' }, s);
-      svgEl('text', { x: cx, y: (v >= 0 ? y(v) - 6 : y(v) + 14), 'text-anchor': 'middle', class: 'ax' }, s, fmt(v, 1) + '%');
-      svgEl('text', { x: cx, y: y1 + 18 + (lo < 0 ? 0 : 0), 'text-anchor': 'middle', class: 'ax-l' }, s, t);
+      svgEl('rect', { x: cx - 20, y: top, width: 40, height: h, rx: 4, fill: cor(v), opacity: 0.75 }, s);
+      // nome e valor embaixo do eixo: nada fica em cima da linha do piso
+      svgEl('text', { x: cx, y: y1 + 20, 'text-anchor': 'middle', class: 'ax-l' }, s, t);
+      svgEl('text', { x: cx, y: y1 + 38, 'text-anchor': 'middle', class: 'ax', style: `fill:${cor(v) === 'var(--faint)' ? 'var(--muted)' : cor(v)};font-weight:600` }, s, fmt(v, 1) + '%');
     });
-    svgEl('line', { x1: x0, x2: x1, y1: y(10.95), y2: y(10.95), stroke: 'var(--accent)', 'stroke-dasharray': '5 4', 'stroke-width': 1.5 }, s);
-    svgEl('text', { x: x1, y: y(10.95) - 6, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--accent)' }, s, 'piso fixo ≈ 10,95%');
+    $('#fundingLegenda').innerHTML = `<span><i style="background:var(--accent);height:2px"></i>piso fixo ≈ ${fmt(PISO, 2)}% a.a. (faixa clara: ±${FAIXA} pontos, neutro)</span>
+      <span><i style="background:var(--warn)"></i>acima: comprados pagando caro</span><span><i style="background:var(--up)"></i>abaixo do piso: pouca procura por compra</span>
+      <span><i style="background:var(--down)"></i>negativo: vendidos pagam</span>`;
   })();
 
   /* ---------- Diário ---------- */
@@ -1432,6 +1446,7 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
       const pts = OI.series[t] || [], s = $('#oiChart'); s.innerHTML = '';
       const dias = pts.length ? (pts[pts.length - 1][0] - pts[0][0]) / 864e5 : 0;
       $('#oiNota').textContent = `Open interest (contratos abertos, linha) e funding anualizado (barras) de ${t} na Hyperliquid. A Hyperliquid não guarda esse histórico; estamos gravando a cada coleta desde ${OI.desde ? quando(OI.desde) : 'agora'} (${fmt(dias, 1)} dias até aqui). Tese do vídeo: picos de open interest marcam o fim do movimento. Também entra na revisão de 06/11.`;
+      $('#oiAgora').innerHTML = '';
       if (pts.length < 2) { svgEl('text', { x: 360, y: 120, 'text-anchor': 'middle', class: 'ax-l' }, s, 'Acumulando dados: o gráfico aparece a partir da segunda coleta.'); return; }
       const x0 = 70, x1 = 650, y0 = 14, y1 = 200;
       const t0 = pts[0][0], t1 = pts[pts.length - 1][0], X = tt => x0 + (tt - t0) / (t1 - t0 || 1) * (x1 - x0);
@@ -1442,13 +1457,21 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
       [lo, (lo + hi) / 2, hi].forEach(v => { svgEl('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), class: 'grid-ln' }, s); svgEl('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'ax' }, s, usd(v).replace('US$ ', '')); });
       const bw = Math.max(1.5, (x1 - x0) / pts.length - 1);
       pts.forEach(p => { const yv = Yf(p[2]), ym = Yf(0);
-        svgEl('rect', { x: X(p[0]) - bw / 2, y: Math.min(yv, ym), width: bw, height: Math.max(1, Math.abs(yv - ym)), fill: p[2] >= 13 ? 'var(--warn)' : p[2] < 0 ? 'var(--accent)' : 'var(--flat-soft)', opacity: 0.8 }, s); });
-      svgEl('path', { d: pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' '), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 }, s);
-      svgEl('text', { x: x1 + 6, y: Yf(fmax) + 10, class: 'ax' }, s, `+${fmt(fmax)}%`);
-      svgEl('text', { x: x1 + 6, y: Yf(0) + 4, class: 'ax' }, s, '0%');
-      [t0, t1].forEach((tt, k) => svgEl('text', { x: X(tt), y: y1 + 18, 'text-anchor': k ? 'end' : 'start', class: 'ax' }, s, quando(tt)));
+        svgEl('rect', { x: X(p[0]) - bw / 2, y: Math.min(yv, ym), width: bw, height: Math.max(1, Math.abs(yv - ym)), fill: p[2] >= 13 ? 'var(--warn)' : p[2] < 0 ? 'var(--down)' : 'var(--faint)', opacity: p[2] >= 13 || p[2] < 0 ? 0.55 : 0.25 }, s); });
+      svgEl('line', { x1: x0, x2: x1, y1: Yf(10.95), y2: Yf(10.95), stroke: 'var(--faint)', 'stroke-dasharray': '3 4', 'stroke-width': 1 }, s);
+      svgEl('path', { d: pts.map((p, i) => (i && p[0] - pts[i - 1][0] <= 3 * 36e5 ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' '), fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2.2 }, s);   // buraco de coleta > 3 h = linha interrompida
+      const gap = (a, b) => !a || !b || Math.abs(b[0] - a[0]) > 3 * 36e5;
+      pts.forEach((p, i) => { if (gap(pts[i - 1], p) && gap(p, pts[i + 1])) svgEl('circle', { cx: X(p[0]), cy: Y(p[1]), r: 2.5, fill: 'var(--accent)' }, s); });   // coleta isolada
+      [[fmax, `+${fmt(fmax)}%`], [10.95, 'piso'], [0, '0%'], [-fmax, `−${fmt(fmax)}%`]].forEach(([v, txt]) => svgEl('text', { x: x1 + 8, y: Yf(v) + 4, class: 'ax' }, s, txt));
+      const meio = t0 + (t1 - t0) / 2;
+      [[t0, 'start'], [meio, 'middle'], [t1, 'end']].forEach(([tt, al]) => svgEl('text', { x: X(tt), y: y1 + 18, 'text-anchor': al, class: 'ax' }, s, quando(tt)));
       const u = pts[pts.length - 1];
-      svgEl('text', { x: X(u[0]) - 4, y: Y(u[1]) - 8, 'text-anchor': 'end', class: 'ax', style: 'fill:var(--accent)' }, s, `OI ${usd(u[1])} · funding ${fmt(u[2], 1)}%`);
+      svgEl('circle', { cx: X(u[0]), cy: Y(u[1]), r: 4, fill: 'var(--accent)', stroke: 'var(--surface)', 'stroke-width': 2 }, s);
+      // leitura de agora fora do gráfico, com a variação em 24 h
+      const antes = [...pts].reverse().find(p => p[0] <= u[0] - 864e5 + 36e5);
+      const var24 = antes ? u[1] / antes[1] - 1 : null;
+      $('#oiAgora').innerHTML = `<span>Agora: open interest <b>${usd(u[1])}</b>${var24 == null ? '' : ` <span class="${sinalCls(var24)}">(${pctTxt(var24, 1)} em 24 h)</span>`}</span>
+        <span>funding <b class="${u[2] >= 13 ? 'neg' : u[2] < 0 ? 'pos' : ''}">${fmt(u[2], 1)}% a.a.</b></span><span class="muted">máximo do período ${usd(Math.max(...ois))} · mínimo ${usd(Math.min(...ois))}</span>`;
     };
     renderOI(selOI);
   }
