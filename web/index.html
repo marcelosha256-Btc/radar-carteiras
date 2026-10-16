@@ -546,7 +546,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
     </div>
     <div class="box" id="liqVivoBox">
       <div class="box-head"><h2>Liquidações acontecendo agora</h2><span id="liqVivoStatus"></span></div>
-      <p class="small muted">Direto da Binance para o seu navegador, em tempo real (no mapa acima: ▼ long liquidado, ▲ short liquidado, últimos 15 min). A Binance manda no máximo uma liquidação por segundo de cada moeda, então os valores são uma amostra, menor que o total. Conta só a partir de quando a página abriu.</p>
+      <p class="small muted">Duas fontes, buscadas pelo seu navegador: a OKX, com a lista completa das últimas 100 liquidações de cada moeda (atualiza a cada minuto), e a Binance, ao vivo desde que a página abriu (ela manda no máximo uma liquidação por segundo de cada moeda, então é uma amostra). No mapa acima: ▼ long liquidado, ▲ short liquidado, últimos 15 min. Em mercado calmo é normal passar vários minutos sem liquidação nas moedas grandes.</p>
       <div class="kpis" id="liqVivoKpis"></div>
       <div class="alerts" id="liqVivoLista"></div>
     </div>
@@ -1760,48 +1760,78 @@ function renderChance(pxVivo) {
     ` Mostra o quanto o preço costuma andar, <b>não para onde vai</b>.`;
 }
 
-/* ---------- liquidações ao vivo (Binance, direto do navegador) ---------- */
+/* ---------- liquidações: OKX (histórico recente, completo) + Binance (ao vivo), direto do navegador ---------- */
 const LIQ_PAR = { BTC: 'btcusdt', ETH: 'ethusdt', SOL: 'solusdt', XRP: 'xrpusdt', HYPE: 'hypeusdt', NEAR: 'nearusdt' };
 const liqAoVivo = Object.fromEntries(Object.keys(LIQ_PAR).map(k => [k, []]));
+const okxLiq = {}, okxCt = {}, okxBuscando = {};
+const mercadoTodo = { n: 0, desde: null };
 let liqSocket = null, liqGeo = null, liqConectada = false;
 function conectarLiquidacoes() {
   if (liqSocket && liqSocket.readyState <= 1) return;
-  try {
-    liqSocket = new WebSocket('wss://fstream.binance.com/market/stream?streams=' + Object.values(LIQ_PAR).map(s => s + '@forceOrder').join('/'));
-  } catch (e) { return; }
-  liqSocket.onopen = () => { liqConectada = true; renderLiqVivo(); };
+  // canal do mercado inteiro: filtra as 6 moedas e conta o resto (prova de que a conexão está viva)
+  try { liqSocket = new WebSocket('wss://fstream.binance.com/market/ws/!forceOrder@arr'); } catch (e) { return; }
+  liqSocket.onopen = () => { liqConectada = true; mercadoTodo.desde = mercadoTodo.desde || Date.now(); renderLiqVivo(); };
   liqSocket.onmessage = m => {
-    let o; try { o = JSON.parse(m.data).data.o; } catch (e) { return; }
+    let o; try { o = JSON.parse(m.data).o; } catch (e) { return; }
+    if (!o) return;
+    mercadoTodo.n++;
     const ativo = Object.keys(LIQ_PAR).find(k => LIQ_PAR[k].toUpperCase() === o.s);
     if (!ativo) return;
     // ordem de VENDA forçada = um comprado (long) foi liquidado; COMPRA forçada = um vendido (short)
-    liqAoVivo[ativo].push({ t: o.T, lado: o.S === 'SELL' ? 'long' : 'short', px: +o.ap || +o.p, usd: (+o.ap || +o.p) * +o.z });
-    const corte = Date.now() - 3600e3;
-    liqAoVivo[ativo] = liqAoVivo[ativo].filter(x => x.t >= corte);
+    liqAoVivo[ativo].push({ t: o.T, lado: o.S === 'SELL' ? 'long' : 'short', px: +o.ap || +o.p, usd: (+o.ap || +o.p) * +o.z, fonte: 'Binance' });
+    liqAoVivo[ativo] = liqAoVivo[ativo].filter(x => x.t >= Date.now() - 3 * 3600e3);
     if (chanceAtual && chanceAtual.t === ativo) renderLiqVivo();
   };
   liqSocket.onclose = () => { liqConectada = false; renderLiqVivo(); setTimeout(() => { if (!document.hidden) conectarLiquidacoes(); }, 5000); };
 }
+async function buscarOkx(ativo) {
+  // as últimas 100 liquidações da moeda na OKX (lista completa, sem o limite de 1 por segundo da Binance)
+  if (okxBuscando[ativo] || (okxLiq[ativo] && Date.now() - okxLiq[ativo].t < 60e3)) return;
+  okxBuscando[ativo] = true;
+  try {
+    const inst = `${ativo}-USDT-SWAP`;
+    if (!okxCt[ativo]) {
+      const j = await fetch(`https://www.okx.com/api/v5/public/instruments?instType=SWAP&instId=${inst}`).then(r => r.json());
+      okxCt[ativo] = +((j.data || [])[0] || {}).ctVal || 0;
+    }
+    const j = await fetch(`https://www.okx.com/api/v5/public/liquidation-orders?instType=SWAP&uly=${ativo}-USDT&state=filled&limit=100`).then(r => r.json());
+    const det = (((j.data || [])[0]) || {}).details || [];
+    okxLiq[ativo] = { t: Date.now(), ok: true, ev: det.map(d => ({ t: +d.ts, px: +d.bkPx, usd: +d.sz * okxCt[ativo] * +d.bkPx, fonte: 'OKX',
+      lado: d.posSide === 'long' || (d.posSide === 'net' && d.side === 'sell') ? 'long' : 'short' })) };
+  } catch (e) {
+    okxLiq[ativo] = { t: Date.now(), ok: false, ev: (okxLiq[ativo] || {}).ev || [] };
+  }
+  okxBuscando[ativo] = false;
+  if (chanceAtual && chanceAtual.t === ativo) renderLiqVivo();
+}
 function renderLiqVivo() {
   const box = document.getElementById('liqVivoBox');
   if (!box || !chanceAtual) return;
-  const t = chanceAtual.t, xs = liqAoVivo[t] || [], agora = Date.now();
+  const t = chanceAtual.t, agora = Date.now();
+  if (LIQ_PAR[t]) buscarOkx(t);
+  const ok = okxLiq[t];
+  const xs = [...(liqAoVivo[t] || []), ...((ok && ok.ev) || [])].sort((a, b) => a.t - b.t);
+  const desdeOkx = ok && ok.ev.length ? Math.min(...ok.ev.map(x => x.t)) : null;
   const soma = (min, lado) => xs.filter(x => x.t >= agora - min * 60e3 && x.lado === lado).reduce((a, x) => a + x.usd, 0);
-  document.getElementById('liqVivoStatus').innerHTML = liqConectada ? '<span class="chip up">conectado</span>' : '<span class="chip warn">conectando…</span>';
+  document.getElementById('liqVivoStatus').innerHTML = (liqConectada ? '<span class="chip up">Binance ao vivo</span>' : '<span class="chip warn">Binance conectando…</span>') + ' ' +
+    (!ok ? '<span class="chip">OKX buscando…</span>' : ok.ok ? '<span class="chip up">OKX</span>' : '<span class="chip warn">OKX indisponível</span>');
+  const parcial = min => desdeOkx && desdeOkx > agora - min * 60e3 ? ' · lista da OKX cobre só os últimos ' + fmt((agora - desdeOkx) / 60e3) + ' min' : '';
   document.getElementById('liqVivoKpis').innerHTML = [15, 60].map(min =>
-    `<div class="kpi"><span class="lab">Últimos ${min} min · ${t}</span><span class="val"><span class="neg">${usdCurto(soma(min, 'long'))}</span> <span class="muted small">longs</span></span><span class="note"><span class="pos">${usdCurto(soma(min, 'short'))}</span> de shorts liquidados</span></div>`).join('');
-  const ult = [...xs].reverse().slice(0, 12);
-  document.getElementById('liqVivoLista').innerHTML = ult.length ? ult.map(x => `<div class="alert"><time>${new Date(x.t).toLocaleTimeString('pt-BR')}</time>
-      <span><span class="chip ${x.lado === 'long' ? 'down' : 'up'}">${x.lado === 'long' ? '▼ long liquidado (venda forçada)' : '▲ short liquidado (compra forçada)'}</span></span>
+    `<div class="kpi"><span class="lab">Últimos ${min} min · ${t}</span><span class="val"><span class="neg">${usdCurto(soma(min, 'long'))}</span> <span class="muted small">longs</span></span><span class="note"><span class="pos">${usdCurto(soma(min, 'short'))}</span> de shorts liquidados${parcial(min)}</span></div>`).join('') +
+    `<div class="kpi"><span class="lab">Binance, mercado todo</span><span class="val">${fmt(mercadoTodo.n)}</span><span class="note">liquidações em todas as moedas desde ${mercadoTodo.desde ? new Date(mercadoTodo.desde).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}: se este número sobe, a conexão está viva</span></div>`;
+  const ult = [...xs].reverse().slice(0, 15);
+  const quandoLiq = ms => (agora - ms < 864e5 ? '' : new Date(ms).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ') + new Date(ms).toLocaleTimeString('pt-BR');
+  document.getElementById('liqVivoLista').innerHTML = ult.length ? ult.map(x => `<div class="alert"><time>${quandoLiq(x.t)}</time>
+      <span><span class="chip ${x.lado === 'long' ? 'down' : 'up'}">${x.lado === 'long' ? '▼ long liquidado (venda forçada)' : '▲ short liquidado (compra forçada)'}</span> <span class="muted small">${x.fonte}</span></span>
       <span class="mono">${fmtPx(x.px)} · ${usdCurto(x.usd)}</span></div>`).join('')
-    : `<p class="muted small">Nenhuma liquidação de ${t} na Binance desde que a página abriu${liqConectada ? '' : ' (conectando)'}.</p>`;
+    : `<p class="muted small">Nenhuma liquidação de ${t} encontrada na OKX nem na Binance${liqConectada ? '' : ' (conectando)'}.</p>`;
   // marcas no mapa: ▲/▼ na altura do preço das liquidações dos últimos 15 min
   const svg = document.getElementById('liq'); if (!svg || !liqGeo || liqGeo.t !== t) return;
   svg.querySelectorAll('.marca-liq').forEach(e => e.remove());
-  xs.filter(x => x.t >= agora - 15 * 60e3 && x.px >= liqGeo.lo && x.px <= liqGeo.hi).forEach((x, i) => {
+  xs.filter(x => x.t >= agora - 15 * 60e3 && x.px >= liqGeo.lo && x.px <= liqGeo.hi).slice(-24).forEach((x, i) => {
     const y = liqGeo.y(x.px);
     const g = svgEl('text', { x: liqGeo.x + (i % 8) * 10, y: y + 4, class: 'marca-liq', 'font-size': 11, fill: x.lado === 'long' ? 'var(--down)' : 'var(--up)' }, svg, x.lado === 'long' ? '▼' : '▲');
-    svgEl('title', {}, g, `${new Date(x.t).toLocaleTimeString('pt-BR')} · ${x.lado} liquidado em ${fmtPx(x.px)} · ${usdCurto(x.usd)} (Binance)`);
+    svgEl('title', {}, g, `${new Date(x.t).toLocaleTimeString('pt-BR')} · ${x.lado} liquidado em ${fmtPx(x.px)} · ${usdCurto(x.usd)} (${x.fonte})`);
   });
 }
 setInterval(() => { if (!document.hidden) renderLiqVivo(); }, 15000);
