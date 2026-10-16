@@ -531,6 +531,18 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       </div>
       <svg id="liq" viewBox="0 0 720 470" role="img" aria-label="Volume de stops e liquidações por faixa de preço"></svg>
     </div>
+    <div class="box" id="chanceBox" hidden>
+      <div class="box-head"><h2>Chance de o preço tocar as zonas</h2><span class="chip acc">conferida no histórico</span></div>
+      <div class="kpis" id="chanceKpis"></div>
+      <div class="tbl-wrap"><table id="chanceTabela"></table></div>
+      <p class="small muted" id="chanceNota"></p>
+    </div>
+    <div class="box" id="liqVivoBox">
+      <div class="box-head"><h2>Liquidações acontecendo agora</h2><span id="liqVivoStatus"></span></div>
+      <p class="small muted">Direto da Binance para o seu navegador, em tempo real (no mapa acima: ▼ long liquidado, ▲ short liquidado, últimos 15 min). A Binance manda no máximo uma liquidação por segundo de cada moeda, então os valores são uma amostra, menor que o total. Conta só a partir de quando a página abriu.</p>
+      <div class="kpis" id="liqVivoKpis"></div>
+      <div class="alerts" id="liqVivoLista"></div>
+    </div>
     <div class="box">
       <div class="box-head"><h2>Teste da tese: o preço vai para o lado mais carregado?</h2><span class="chip warn">em teste</span></div>
       <p class="small muted" id="teseNota"></p>
@@ -915,7 +927,9 @@ function renderReal(DADOS) {
     const AM = F2._amostra || {};
     $('#liqMeta').innerHTML = `foto de ${quando(AM.tempo || DADOS.gerado)} com preço ${fmtPx(px)} <span id="liqVivo"></span> · faixas de ${fmt(p, p >= 1 ? 0 : casas(p))}<br>amostra das últimas 24 h: ${fmt(AM.ranking || 0)} carteiras do ranking + ${fmt(AM.varejo_24h || 0)} da amostra ampla (de ${fmt(AM.varejo_total || 0)} contas de US$ 1 mil a 1 milhão sorteadas, lidas em rodízio de ~800 por hora). Stop "da posição inteira" conta pelo tamanho da posição (desde 09/10; antes valia zero).`;
     liqAtual = { t, px };
+    chanceAtual = { t, C: F2[t].chance };
     atualizarAoVivo();
+    renderChance(ultimosMids && +ultimosMids[t]);
     const dist = v => v == null ? '' : ` (${pctTxt((v + p / 2) / px - 1, 1)})`;
     const tot = L.acima + L.abaixo;
     $('#liqKpis').innerHTML =
@@ -969,6 +983,10 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
     });
     const iPx = linhas.findIndex(l => l <= px);
     const py = y0 + iPx * rh + rh * (1 - (px - linhas[iPx]) / p);
+    if (s.id === 'liq') {   // mapa do cripto: guarda a geometria para as marcas das liquidações ao vivo
+      liqGeo = { t: liqAtual && liqAtual.t, lo, hi, x: x1 - 175, y: v => { const i = Math.max(0, linhas.findIndex(l => l <= v)); return y0 + i * rh + rh * (1 - (v - linhas[i]) / p); } };
+      setTimeout(renderLiqVivo, 0);
+    }
     svgEl('line', { x1: x0, x2: x1, y1: py, y2: py, stroke: 'var(--fg)', 'stroke-dasharray': '6 4', 'stroke-width': 1.2 }, s);
     // etiqueta do preço na coluna livre da direita, com fundo próprio para não encavalar com os rótulos das barras
     const etq = 'na foto ' + fmtPx(px), we = etq.length * 6.7 + 16;
@@ -1687,6 +1705,100 @@ async function carregar(senhaDigitada) {
   aviso(`Não consegui buscar os dados (erro ${r.status}). Tente de novo em alguns minutos.`);
 }
 /* ---------- preço ao vivo, a cada 30 s, direto da Hyperliquid ---------- */
+/* ---------- chance de tocar as zonas (recalcula com o preço ao vivo) ---------- */
+let chanceAtual = null;
+const usdCurto = v => v >= 1e9 ? `US$ ${fmt(v / 1e9, 2)} bi` : v >= 1e6 ? `US$ ${fmt(v / 1e6, 1)} mi` : v >= 1e3 ? `US$ ${fmt(v / 1e3, 0)} mil` : `US$ ${fmt(v, 0)}`;
+function probToque(qs, x) {   // fração da história com excursão ≥ x (qs = quantis ordenados)
+  if (x <= 0) return 1;
+  let lo = 0, hi = qs.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (qs[m] < x) lo = m + 1; else hi = m; }
+  return Math.max(0, Math.min(1, 1 - lo / (qs.length - 1)));
+}
+function renderChance(pxVivo) {
+  const box = document.getElementById('chanceBox');
+  if (!box) return;
+  if (!chanceAtual || !chanceAtual.C) { box.hidden = true; return; }
+  box.hidden = false;
+  const { t, C } = chanceAtual, px = pxVivo || C.px;
+  const zs = C.zonas.map(z => {
+    const tocou = z.lado === 'acima' ? px >= z.borda : px <= z.borda;
+    const d = Math.abs(z.borda / px - 1), q = z.lado === 'acima' ? 'up' : 'dn';
+    return { ...z, tocou, dist: z.borda / px - 1, p4: tocou ? 1 : probToque(C.quantis['4'][q], d / C.vol), p24: tocou ? 1 : probToque(C.quantis['24'][q], d / C.vol) };
+  });
+  const vivas = zs.filter(z => !z.tocou);
+  const pc = vivas.filter(z => z.lado === 'acima').sort((a, b) => a.dist - b.dist)[0];
+  const pb = vivas.filter(z => z.lado === 'abaixo').sort((a, b) => b.dist - a.dist)[0];
+  const faixa = z => `${fmtPx(z.de)}–${fmtPx(z.ate)}`;
+  let prim = '';
+  if (pc && pb) {
+    const du = Math.abs(pc.dist), dd = Math.abs(pb.dist), cima = dd / (du + dd);
+    prim = `<div class="kpi"><span class="lab">Acima primeiro</span><span class="val pos">${fmt(cima * 100)}%</span><span class="note">${faixa(pc)} (${pctTxt(pc.dist, 1)})</span></div>
+      <div class="kpi"><span class="lab">Abaixo primeiro</span><span class="val neg">${fmt((1 - cima) * 100)}%</span><span class="note">${faixa(pb)} (${pctTxt(pb.dist, 1)})</span></div>`;
+  }
+  document.getElementById('chanceKpis').innerHTML = prim +
+    `<div class="kpi"><span class="lab">Volatilidade agora</span><span class="val">${fmt(C.vol * 100, 2)}%</span><span class="note">amplitude média das últimas 24 velas de 1 h de ${t}</span></div>`;
+  const pcell = v => `<td class="n"><span style="display:inline-block;width:46px;height:6px;border-radius:3px;background:var(--surface-2);vertical-align:middle;margin-right:6px"><span style="display:block;height:6px;border-radius:3px;width:${v * 46}px;background:var(--accent)"></span></span><b>${v >= 0.995 ? '>99' : v < 0.01 ? '<1' : fmt(v * 100)}%</b></td>`;
+  document.getElementById('chanceTabela').innerHTML = '<thead><tr><th>Zona</th><th>Lado</th><th class="n">Distância</th><th class="n">Stops + liquidações</th><th class="n">Tocar em 4 h</th><th class="n">Tocar em 24 h</th><th></th></tr></thead><tbody>' +
+    zs.sort((a, b) => b.de - a.de).map(z => `<tr${z.tocou ? ' class="muted"' : ''}><td class="mono"><b>${faixa(z)}</b></td>
+      <td>${z.lado === 'acima' ? '<span class="chip up">acima · stops de short</span>' : '<span class="chip down">abaixo · stops de long</span>'}</td>
+      <td class="n">${pctTxt(z.dist, 1)}</td><td class="n">${usdCurto(z.valor)}</td>
+      ${z.tocou ? '<td colspan="2" class="n"><span class="chip acc">o preço já chegou</span></td>' : pcell(z.p4) + pcell(z.p24)}
+      <td class="small muted">${[z.perto ? 'mais perto' : '', z.maior ? 'maior' : ''].filter(Boolean).join(' · ')}</td></tr>`).join('') + '</tbody>';
+  const cal = C.calibracao, perto = alvo => cal.faixas.reduce((a, b) => Math.abs(b.prevista - alvo) < Math.abs(a.prevista - alvo) ? b : a);
+  const tp = C.teste_primeiro;
+  document.getElementById('chanceNota').innerHTML = `Como é calculado: nas ${fmt(C.velas)} velas de 1 h da Hyperliquid desde ${quando(C.desde).slice(0, 5)}, o radar mediu quanto ${t} subiu e caiu nas 4 h e 24 h seguintes a cada hora, em múltiplos da volatilidade daquele momento. A chance de tocar uma zona é a fração da história em que o preço andou a distância dela, ajustada à volatilidade de agora. "Primeiro" usa só as distâncias (quem está mais perto tende a ser tocado antes). Recalcula com o preço ao vivo; as zonas são da última foto.` +
+    `<br><b>Conferido no histórico</b> (escolhido com os 70% iniciais, medido nos 30% finais): quando a chance era ~${fmt(perto(0.25).prevista * 100)}%, tocou ${fmt(perto(0.25).tocou * 100)}%; ~${fmt(perto(0.5).prevista * 100)}% → ${fmt(perto(0.5).tocou * 100)}%; ~${fmt(perto(0.75).prevista * 100)}% → ${fmt(perto(0.75).tocou * 100)}%.` +
+    (tp && tp.erro_medio != null ? ` O "lado primeiro" errou em média ${fmt(tp.erro_medio * 100)} pontos.` : '') +
+    ` Mostra o quanto o preço costuma andar, <b>não para onde vai</b>.`;
+}
+
+/* ---------- liquidações ao vivo (Binance, direto do navegador) ---------- */
+const LIQ_PAR = { BTC: 'btcusdt', ETH: 'ethusdt', SOL: 'solusdt', XRP: 'xrpusdt', HYPE: 'hypeusdt', NEAR: 'nearusdt' };
+const liqAoVivo = Object.fromEntries(Object.keys(LIQ_PAR).map(k => [k, []]));
+let liqSocket = null, liqGeo = null, liqConectada = false;
+function conectarLiquidacoes() {
+  if (liqSocket && liqSocket.readyState <= 1) return;
+  try {
+    liqSocket = new WebSocket('wss://fstream.binance.com/market/stream?streams=' + Object.values(LIQ_PAR).map(s => s + '@forceOrder').join('/'));
+  } catch (e) { return; }
+  liqSocket.onopen = () => { liqConectada = true; renderLiqVivo(); };
+  liqSocket.onmessage = m => {
+    let o; try { o = JSON.parse(m.data).data.o; } catch (e) { return; }
+    const ativo = Object.keys(LIQ_PAR).find(k => LIQ_PAR[k].toUpperCase() === o.s);
+    if (!ativo) return;
+    // ordem de VENDA forçada = um comprado (long) foi liquidado; COMPRA forçada = um vendido (short)
+    liqAoVivo[ativo].push({ t: o.T, lado: o.S === 'SELL' ? 'long' : 'short', px: +o.ap || +o.p, usd: (+o.ap || +o.p) * +o.z });
+    const corte = Date.now() - 3600e3;
+    liqAoVivo[ativo] = liqAoVivo[ativo].filter(x => x.t >= corte);
+    if (chanceAtual && chanceAtual.t === ativo) renderLiqVivo();
+  };
+  liqSocket.onclose = () => { liqConectada = false; renderLiqVivo(); setTimeout(() => { if (!document.hidden) conectarLiquidacoes(); }, 5000); };
+}
+function renderLiqVivo() {
+  const box = document.getElementById('liqVivoBox');
+  if (!box || !chanceAtual) return;
+  const t = chanceAtual.t, xs = liqAoVivo[t] || [], agora = Date.now();
+  const soma = (min, lado) => xs.filter(x => x.t >= agora - min * 60e3 && x.lado === lado).reduce((a, x) => a + x.usd, 0);
+  document.getElementById('liqVivoStatus').innerHTML = liqConectada ? '<span class="chip up">conectado</span>' : '<span class="chip warn">conectando…</span>';
+  document.getElementById('liqVivoKpis').innerHTML = [15, 60].map(min =>
+    `<div class="kpi"><span class="lab">Últimos ${min} min · ${t}</span><span class="val"><span class="neg">${usdCurto(soma(min, 'long'))}</span> <span class="muted small">longs</span></span><span class="note"><span class="pos">${usdCurto(soma(min, 'short'))}</span> de shorts liquidados</span></div>`).join('');
+  const ult = [...xs].reverse().slice(0, 12);
+  document.getElementById('liqVivoLista').innerHTML = ult.length ? ult.map(x => `<div class="alert"><time>${new Date(x.t).toLocaleTimeString('pt-BR')}</time>
+      <span><span class="chip ${x.lado === 'long' ? 'down' : 'up'}">${x.lado === 'long' ? '▼ long liquidado (venda forçada)' : '▲ short liquidado (compra forçada)'}</span></span>
+      <span class="mono">${fmtPx(x.px)} · ${usdCurto(x.usd)}</span></div>`).join('')
+    : `<p class="muted small">Nenhuma liquidação de ${t} na Binance desde que a página abriu${liqConectada ? '' : ' (conectando)'}.</p>`;
+  // marcas no mapa: ▲/▼ na altura do preço das liquidações dos últimos 15 min
+  const svg = document.getElementById('liq'); if (!svg || !liqGeo || liqGeo.t !== t) return;
+  svg.querySelectorAll('.marca-liq').forEach(e => e.remove());
+  xs.filter(x => x.t >= agora - 15 * 60e3 && x.px >= liqGeo.lo && x.px <= liqGeo.hi).forEach((x, i) => {
+    const y = liqGeo.y(x.px);
+    const g = svgEl('text', { x: liqGeo.x + (i % 8) * 10, y: y + 4, class: 'marca-liq', 'font-size': 11, fill: x.lado === 'long' ? 'var(--down)' : 'var(--up)' }, svg, x.lado === 'long' ? '▼' : '▲');
+    svgEl('title', {}, g, `${new Date(x.t).toLocaleTimeString('pt-BR')} · ${x.lado} liquidado em ${fmtPx(x.px)} · ${usdCurto(x.usd)} (Binance)`);
+  });
+}
+setInterval(() => { if (!document.hidden) renderLiqVivo(); }, 15000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) conectarLiquidacoes(); });
+
 let liqAtual = null, aLiqAtual = null, ultimosMids = null;
 async function atualizarAoVivo(buscar) {
   if (buscar || !ultimosMids) {
@@ -1715,6 +1827,7 @@ async function atualizarAoVivo(buscar) {
     const v = +ultimosMids[liqAtual.t], d = v / liqAtual.px - 1;
     lv.innerHTML = `· <b>agora ${fmtPx(v)}</b> (${d >= 0 ? '+' : ''}${fmt(d * 100, 1)}% desde a foto)`;
   }
+  if (chanceAtual && ultimosMids[chanceAtual.t]) renderChance(+ultimosMids[chanceAtual.t]);
   const alv = document.getElementById('aLiqVivo');
   if (alv && aLiqAtual && ultimosMids[aLiqAtual.t]) {
     const v = +ultimosMids[aLiqAtual.t], d = v / aLiqAtual.px - 1;
@@ -1725,4 +1838,5 @@ setInterval(() => { if (!document.hidden) atualizarAoVivo(true); }, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarAoVivo(true); });
 
 if (INJETADO) renderReal(INJETADO); else carregar();
+conectarLiquidacoes();
 </script>

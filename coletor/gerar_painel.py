@@ -12,6 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import acoes
+import chance
 import analise as an
 import contexto
 import fase2
@@ -188,6 +189,10 @@ def gerar(hl=None, con=None):
     ultima_foto = con.execute("SELECT MAX(tempo) FROM fotos").fetchone()[0]
     ativos = mercado(hl, consenso, con)
     f2 = fase2.calcular(hl, con, ativos, consenso, agora)
+    try:   # chance de tocar as zonas (chance.py); um erro aqui não derruba o painel
+        chance.montar(hl, con, f2, ativos, agora)
+    except Exception as e:
+        print("chance de toque falhou:", repr(e), flush=True)
     reg = con.execute("SELECT COUNT(*) AS n, MIN(tempo) AS desde FROM regime").fetchone()
     dados = {
         "gerado": agora,
