@@ -531,6 +531,13 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       </div>
       <svg id="liq" viewBox="0 0 720 470" role="img" aria-label="Volume de stops e liquidações por faixa de preço"></svg>
     </div>
+    <div class="box" id="estBox" hidden>
+      <div class="box-head"><h2>Mapa estimado de liquidação (Binance)</h2><div class="seg" id="estJanelas" role="group" aria-label="Janela"></div></div>
+      <p class="small muted">Estimativa no modelo do Coinglass, calculada no seu navegador com dados públicos da Binance: cada aumento do open interest vira posições novas (metade comprada, metade vendida) no preço médio daquele intervalo, divididas por alavancagem (suposição: 40% em 10x, 30% em 25x, 20% em 50x, 10% em 100x). Saem do mapa as que o preço já teria liquidado, e quedas do open interest fecham posições na mesma proporção. Tom forte = 10x, médio = 25–50x, claro = 100x. Caixa tracejada = zona forte em 2 ou mais janelas. <b>Não são posições reais:</b> as reais estão no mapa de cima (Hyperliquid); passe o mouse para comparar as duas.</p>
+      <div class="kpis" id="estKpis"></div>
+      <svg id="estMapa" viewBox="0 0 720 470" role="img" aria-label="Mapa estimado de liquidação por faixa de preço"></svg>
+      <div class="small" id="estStatus"></div>
+    </div>
     <div class="box" id="chanceBox" hidden>
       <div class="box-head"><h2>Chance de o preço tocar as zonas</h2><span class="chip acc">conferida no histórico</span></div>
       <div class="kpis" id="chanceKpis"></div>
@@ -928,6 +935,7 @@ function renderReal(DADOS) {
     $('#liqMeta').innerHTML = `foto de ${quando(AM.tempo || DADOS.gerado)} com preço ${fmtPx(px)} <span id="liqVivo"></span> · faixas de ${fmt(p, p >= 1 ? 0 : casas(p))}<br>amostra das últimas 24 h: ${fmt(AM.ranking || 0)} carteiras do ranking + ${fmt(AM.varejo_24h || 0)} da amostra ampla (de ${fmt(AM.varejo_total || 0)} contas de US$ 1 mil a 1 milhão sorteadas, lidas em rodízio de ~800 por hora). Stop "da posição inteira" conta pelo tamanho da posição (desde 09/10; antes valia zero).`;
     liqAtual = { t, px };
     chanceAtual = { t, C: F2[t].chance };
+    renderEstimado(t, L, px);
     atualizarAoVivo();
     renderChance(ultimosMids && +ultimosMids[t]);
     const dist = v => v == null ? '' : ` (${pctTxt((v + p / 2) / px - 1, 1)})`;
@@ -1798,6 +1806,134 @@ function renderLiqVivo() {
 }
 setInterval(() => { if (!document.hidden) renderLiqVivo(); }, 15000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) conectarLiquidacoes(); });
+
+/* ---------- mapa ESTIMADO de liquidação (Binance, calculado no navegador; modelo do Coinglass) ---------- */
+const EST_ALAV = [[10, 0.4], [25, 0.3], [50, 0.2], [100, 0.1]];   // suposição: como o open interest novo se divide
+const EST_MM = 0.005;                                              // margem de manutenção aproximada
+const EST_JANELAS = [['4h', '4 horas', '5m', 48], ['1d', '1 dia', '5m', 288], ['1s', '1 semana', '1h', 168], ['1m', '1 mês', '1h', 720]];
+const estCache = {};
+let estJanela = '1d', estAtual = null;
+const bnc = (caminho, qs) => fetch(`https://fapi.binance.com${caminho}?${new URLSearchParams(qs)}`).then(r => { if (!r.ok) throw new Error('Binance ' + r.status); return r.json(); });
+async function estDados(ativo) {
+  const c = estCache[ativo];
+  if (c && Date.now() - c.t < 5 * 60e3) return c;
+  const s = LIQ_PAR[ativo].toUpperCase(), agora = Date.now();
+  const [oi5, k5, oi1a, oi1b, k1] = await Promise.all([
+    bnc('/futures/data/openInterestHist', { symbol: s, period: '5m', limit: 289 }),
+    bnc('/fapi/v1/klines', { symbol: s, interval: '5m', limit: 290 }),
+    bnc('/futures/data/openInterestHist', { symbol: s, period: '1h', limit: 500, endTime: agora - 220 * 3600e3 }),
+    bnc('/futures/data/openInterestHist', { symbol: s, period: '1h', limit: 221 }),
+    bnc('/fapi/v1/klines', { symbol: s, interval: '1h', limit: 730 })]);
+  const oi1 = [...new Map([...oi1a, ...oi1b].map(x => [x.timestamp, x])).values()].sort((a, b) => a.timestamp - b.timestamp);
+  const kl = arr => arr.map(k => ({ t: k[0], h: +k[2], l: +k[3], c: +k[4], tp: (+k[2] + +k[3] + +k[4]) / 3 }));
+  return (estCache[ativo] = { t: Date.now(), m5: { oi: oi5, k: kl(k5) }, h1: { oi: oi1, k: kl(k1) } });
+}
+function estModelo(serie, nBins) {
+  // posições abertas em cada intervalo pelo aumento do open interest (um comprado e um vendido por contrato)
+  const oi = serie.oi.slice(-(nBins + 1)), kIdx = new Map(serie.k.map((k, i) => [k.t, i])), K = serie.k;
+  const minL = new Array(K.length + 1).fill(Infinity), maxH = new Array(K.length + 1).fill(-Infinity);
+  for (let i = K.length - 1; i >= 0; i--) { minL[i] = Math.min(K[i].l, minL[i + 1]); maxH[i] = Math.max(K[i].h, maxH[i + 1]); }
+  let pos = [];
+  for (let k = 1; k < oi.length; k++) {
+    const q0 = +oi[k - 1].sumOpenInterest, q1 = +oi[k].sumOpenInterest, i = kIdx.get(oi[k - 1].timestamp);
+    if (i == null || !q0) continue;
+    const dq = q1 - q0;
+    if (dq > 0) {
+      const e = K[i].tp;
+      EST_ALAV.forEach(([L, w]) => {
+        pos.push({ lado: 'long', L, liq: e * (1 - 1 / L + EST_MM), q: dq * w, i });
+        pos.push({ lado: 'short', L, liq: e * (1 + 1 / L - EST_MM), q: dq * w, i });
+      });
+    } else if (dq < 0) {
+      const f = Math.max(0, 1 + dq / q0);   // fechamentos: reduz todo mundo na mesma proporção
+      pos.forEach(p => { p.q *= f; });
+    }
+  }
+  // sai do mapa quem já teria sido liquidado pelo caminho do preço depois de abrir
+  return pos.filter(p => p.q > 0 && (p.lado === 'long' ? minL[p.i + 1] > p.liq : maxH[p.i + 1] < p.liq));
+}
+function estFaixas(pos, passo) {
+  const b = new Map();
+  pos.forEach(p => {
+    const f = Math.floor(p.liq / passo) * passo, x = b.get(f) || { preco: f, long: 0, short: 0, baixa: 0, media: 0, alta: 0 };
+    const usd = p.q * p.liq;
+    x[p.lado] += usd; x[p.L <= 10 ? 'baixa' : p.L >= 100 ? 'alta' : 'media'] += usd;
+    b.set(f, x);
+  });
+  return b;
+}
+async function renderEstimado(t, L, px) {
+  const box = document.getElementById('estBox');
+  if (!box) return;
+  estAtual = { t, L, px };
+  if (!LIQ_PAR[t]) { box.hidden = true; return; }
+  box.hidden = false;
+  document.getElementById('estJanelas').innerHTML = EST_JANELAS.map(([id, nome]) => `<button aria-pressed="${id === estJanela}" data-j="${id}">${nome}</button>`).join('');
+  document.getElementById('estJanelas').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { estJanela = b.dataset.j; renderEstimado(t, L, px); }));
+  const st = document.getElementById('estStatus');
+  st.innerHTML = '<span class="chip">buscando na Binance…</span>';
+  let D;
+  try { D = await estDados(t); } catch (e) { st.innerHTML = '<span class="chip warn">Binance indisponível agora</span>'; return; }
+  if (!estAtual || estAtual.t !== t) return;
+  const pxv = (ultimosMids && +ultimosMids[t]) || px, p = L.passo, lo = pxv * 0.9, hi = pxv * 1.1;
+  const mapas = Object.fromEntries(EST_JANELAS.map(([id, , per, n]) => [id, estFaixas(estModelo(per === '5m' ? D.m5 : D.h1, n), p)]));
+  // zona forte = faixa com pelo menos 50% da maior do seu lado, até ±5%; destaque quando aparece em 2+ janelas
+  const fortes = {};
+  Object.values(mapas).forEach(m => ['long', 'short'].forEach(lado => {
+    const fx = [...m.values()].filter(f => Math.abs(f.preco / pxv - 1) <= 0.05 && f[lado] > 0 && (lado === 'short' ? f.preco > pxv : f.preco + p < pxv));
+    const mx = Math.max(0, ...fx.map(f => f[lado]));
+    fx.filter(f => f[lado] >= 0.5 * mx).forEach(f => { fortes[f.preco] = (fortes[f.preco] || 0) + 1; });
+  }));
+  const M = mapas[estJanela], fx = [...M.values()].filter(f => f.preco >= lo && f.preco <= hi);
+  const ate5 = lado => [...M.values()].filter(f => Math.abs(f.preco / pxv - 1) <= 0.05).reduce((a, f) => a + f[lado], 0);
+  const L5 = ate5('long'), S5 = ate5('short'), tot = L5 + S5;
+  const zona = lado => Object.keys(fortes).map(Number).filter(k => fortes[k] >= 2 && (lado === 'acima' ? k > pxv : k + p < pxv))
+    .sort((a, b) => Math.abs(a - pxv) - Math.abs(b - pxv))[0];
+  const za = zona('acima'), zb = zona('abaixo');
+  const fx2 = v => v == null ? 'nenhuma' : `${fmtPx(v)}–${fmtPx(v + p)} (${pctTxt((v + p / 2) / pxv - 1, 1)})`;
+  document.getElementById('estKpis').innerHTML =
+    `<div class="kpi"><span class="lab">Longs liquidáveis até −5% (est.)</span><span class="val neg">${usdCurto(L5)}</span><span class="note">janela de ${EST_JANELAS.find(j => j[0] === estJanela)[1]}</span></div>` +
+    `<div class="kpi"><span class="lab">Shorts liquidáveis até +5% (est.)</span><span class="val pos">${usdCurto(S5)}</span><span class="note">${tot ? fmt(S5 / tot * 100) + '% acima · ' + fmt(L5 / tot * 100) + '% abaixo' : '—'}</span></div>` +
+    `<div class="kpi"><span class="lab">Zonas em 2+ janelas</span><span class="val" style="font-size:15px">▲ ${fx2(za)}<br>▼ ${fx2(zb)}</span><span class="note">as mais perto do preço, em qualquer janela</span></div>`;
+  // gráfico: mesma régua de preço do mapa real (faixas de ${p})
+  const s = document.getElementById('estMapa'); s.innerHTML = '';
+  const linhas = []; for (let f = Math.floor(hi / p) * p; f >= lo; f -= p) linhas.push(Math.round(f / p) * p);
+  const rh = 11, x0 = 76, x1 = 700, y0 = 8, H = y0 + linhas.length * rh + 12;
+  s.setAttribute('viewBox', `0 0 720 ${H}`);
+  const porPreco = new Map(fx.map(f => [Math.round(f.preco / p) * p, f]));
+  const real = new Map((L.faixas || []).map(f => [Math.round(f.preco / p) * p, f]));
+  const max = Math.max(1, ...fx.map(f => f.long + f.short));
+  const top = [...fx].sort((a, b) => (b.long + b.short) - (a.long + a.short)).slice(0, 6).map(f => f.preco);
+  linhas.forEach((preco, i) => {
+    const y = y0 + i * rh, f = porPreco.get(preco);
+    if (i % 4 === 0) svgEl('text', { x: x0 - 8, y: y + 9, 'text-anchor': 'end', class: 'ax' }, s, fmtPx(preco));
+    if ((fortes[preco] || 0) >= 2) svgEl('rect', { x: x0 - 2, y, width: x1 - x0 - 196, height: rh, fill: 'none', stroke: 'var(--faint)', 'stroke-dasharray': '3 3', rx: 2 }, s);
+    if (!f || f.long + f.short <= 0) return;
+    const cor = preco > pxv ? 'var(--up)' : 'var(--down)', val = f.long + f.short;
+    // tons: alavancagem baixa (forte), média, alta (clara)
+    let x = x0;
+    [['baixa', 1], ['media', 0.65], ['alta', 0.35]].forEach(([k, op]) => {
+      if (!f[k]) return;
+      const w = Math.max(1.5, f[k] / max * (x1 - x0 - 200));
+      svgEl('rect', { x, y: y + 1, width: w, height: rh - 3, rx: 2, fill: cor, opacity: op }, s);
+      x += w;
+    });
+    if (top.includes(preco)) svgEl('text', { x: x + 6, y: y + 9, class: 'ax', style: 'fill:var(--fg)' }, s, usdCurto(val));
+    const r = real.get(preco), rv = r ? r.stop_long + r.liq_long + r.stop_short + r.liq_short : 0;
+    const alvo = svgEl('rect', { x: x0, y, width: x1 - x0, height: rh, fill: 'transparent' }, s);
+    svgEl('title', {}, alvo, `${fmtPx(preco)}–${fmtPx(preco + p)} (${pctTxt((preco + p / 2) / pxv - 1, 1)})
+Estimado (Binance, ${EST_JANELAS.find(j => j[0] === estJanela)[1]}): ${usdCurto(val)} de ${preco > pxv ? 'shorts' : 'longs'}
+  alavancagem baixa (10x): ${usdCurto(f.baixa)} · média (25–50x): ${usdCurto(f.media)} · alta (100x): ${usdCurto(f.alta)}
+Real (Hyperliquid, stops + liquidações): ${usdCurto(rv)}${(fortes[preco] || 0) >= 2 ? `\nZona forte em ${fortes[preco]} das 4 janelas` : ''}`);
+  });
+  const iPx = linhas.findIndex(l => l <= pxv), py = y0 + iPx * rh + rh * (1 - (pxv - linhas[iPx]) / p);
+  svgEl('line', { x1: x0, x2: x1, y1: py, y2: py, stroke: 'var(--fg)', 'stroke-dasharray': '6 4', 'stroke-width': 1.2 }, s);
+  const etq = 'agora ' + fmtPx(pxv), we = etq.length * 6.7 + 16;
+  svgEl('rect', { x: x1 - we, y: py - 9, width: we, height: 18, rx: 9, fill: 'var(--surface)', stroke: 'var(--fg)', 'stroke-width': 1 }, s);
+  svgEl('text', { x: x1 - we / 2, y: py + 4, 'text-anchor': 'middle', class: 'ax', style: 'fill:var(--fg);font-weight:600' }, s, etq);
+  st.innerHTML = `<span class="chip acc">estimado · atualizado ${new Date(D.t).toLocaleTimeString('pt-BR')}</span>`;
+}
+setInterval(() => { if (!document.hidden && estAtual) renderEstimado(estAtual.t, estAtual.L, estAtual.px); }, 5 * 60e3);
 
 let liqAtual = null, aLiqAtual = null, ultimosMids = null;
 async function atualizarAoVivo(buscar) {
