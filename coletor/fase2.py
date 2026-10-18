@@ -180,7 +180,13 @@ def mapa_de(posicoes, ordens, px, oi_usd):
             k = "stop_long" if r["lado"] == "A" else "stop_short"
         else:
             continue
-        tam = r["tamanho"] or (posicoes.get(r["endereco"]) or {}).get("tamanho") or 0
+        # stop/alvo é de redução: nunca vale mais que a posição real da carteira (um stop "da posição
+        # inteira" chega com 3.200 BTC só para cobrir qualquer tamanho: US$ 1,5 bi num dia, 18/10/2026);
+        # sem posição na leitura, a ordem não gera liquidação nenhuma
+        pos = (posicoes.get(r["endereco"]) or {}).get("tamanho") or 0
+        tam = min(r["tamanho"], pos) if r["tamanho"] else pos
+        if not tam:
+            continue
         b[f][k] += tam * r["preco"]
         n[f][k].add(r["endereco"])
     faixas = sorted(({"preco": f, **v, "n": {k: len(s) for k, s in n[f].items()}} for f, v in b.items()),
