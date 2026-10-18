@@ -999,7 +999,7 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
     const iPx = linhas.findIndex(l => l <= px);
     const py = y0 + iPx * rh + rh * (1 - (px - linhas[iPx]) / p);
     if (s.id === 'liq') {   // mapa do cripto: guarda a geometria para as marcas das liquidações ao vivo
-      liqGeo = { t: liqAtual && liqAtual.t, lo, hi, x: x1 - 175, y: v => { const i = Math.max(0, linhas.findIndex(l => l <= v)); return y0 + i * rh + rh * (1 - (v - linhas[i]) / p); } };
+      liqGeo = { t: liqAtual && liqAtual.t, lo, hi, x: x1 - 215, y: v => { const i = Math.max(0, linhas.findIndex(l => l <= v)); return y0 + i * rh + rh * (1 - (v - linhas[i]) / p); } };
       setTimeout(renderLiqVivo, 0);
     }
     svgEl('line', { x1: x0, x2: x1, y1: py, y2: py, stroke: 'var(--fg)', 'stroke-dasharray': '6 4', 'stroke-width': 1.2 }, s);
