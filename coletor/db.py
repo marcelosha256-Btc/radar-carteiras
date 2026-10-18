@@ -255,7 +255,8 @@ class Banco:
             # autocommit: cada comando fecha a própria transação. Sem isso, uma consulta abre uma transação
             # que fica parada enquanto o coletor espera a API (minutos) e o Neon derruba a conexão
             # (IdleInTransactionSessionTimeout, 08/10/2026)
-            self.con = psycopg.connect(url, prepare_threshold=None, connect_timeout=30, autocommit=True)
+            self._url = url
+            self.con = self._abrir()
             esquema = ESQUEMA.replace("{ID}", "BIGSERIAL PRIMARY KEY")
             with self.con.cursor() as cur:
                 cur.execute(esquema)
@@ -271,14 +272,34 @@ class Banco:
                     self.con.execute(f"ALTER TABLE {tab} ADD COLUMN {col} {tipo}")
         self.con.commit()
 
+    def _abrir(self):
+        import psycopg
+        return psycopg.connect(self._url, prepare_threshold=None, connect_timeout=30, autocommit=True)
+
+    def _com_reconexao(self, fazer):
+        """A conexão com o Neon cai quando fica minutos parada (a coleta espera a API da Hyperliquid
+        por muito tempo entre uma gravação e outra): reabre e repete o comando uma vez."""
+        import psycopg
+        try:
+            return fazer()
+        except (psycopg.OperationalError, psycopg.InterfaceError):
+            try:
+                self.con.close()
+            except Exception:
+                pass
+            self.con = self._abrir()
+            return fazer()
+
     def _q(self, sql):
         return sql.replace("?", "%s") if self.pg else sql
 
     def execute(self, sql, args=()):
         if self.pg:
-            cur = self.con.cursor(row_factory=_fabrica_linha)
-            cur.execute(self._q(sql), args)
-            return cur
+            def fazer():
+                cur = self.con.cursor(row_factory=_fabrica_linha)
+                cur.execute(self._q(sql), args)
+                return cur
+            return self._com_reconexao(fazer)
         return self.con.execute(sql, args)
 
     def executemany(self, sql, linhas):
@@ -286,8 +307,10 @@ class Banco:
         if not linhas:
             return 0
         if self.pg:
-            with self.con.cursor() as cur:
-                cur.executemany(self._q(sql), linhas)
+            def fazer():
+                with self.con.cursor() as cur:
+                    cur.executemany(self._q(sql), linhas)
+            self._com_reconexao(fazer)
         else:
             self.con.executemany(sql, linhas)
         return len(linhas)

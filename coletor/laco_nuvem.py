@@ -16,8 +16,17 @@ DURACAO_S = 5.5 * 3600
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
 
+LIMITE_MIN = {"ranking_diario.py": 90, "acoes_ranking.py": 90, "coleta_hora.py": 40}   # as demais: 45
+
+
 def rodar(script, *args):
-    r = subprocess.run([sys.executable, os.path.join(AQUI, script), *args])
+    """Uma etapa travada (chamada de rede sem resposta) não pode consumir o laço inteiro."""
+    try:
+        r = subprocess.run([sys.executable, os.path.join(AQUI, script), *args],
+                           timeout=LIMITE_MIN.get(script, 45) * 60)
+    except subprocess.TimeoutExpired:
+        print(f"{script} passou de {LIMITE_MIN.get(script, 45)} min e foi encerrado", flush=True)
+        return False
     return r.returncode == 0
 
 

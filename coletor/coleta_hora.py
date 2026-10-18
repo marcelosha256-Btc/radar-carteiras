@@ -250,10 +250,11 @@ def main():
         coletar(con)
     except Exception as e:
         log("ERRO\n" + traceback.format_exc() + f"python: {sys.executable}\nsys.path: {sys.path}")
-        try:
-            if con:
-                con.con.rollback()
-                registrar_execucao(con, "coleta", False, repr(e))
+        try:   # conexão NOVA: a da coleta pode ter caído, e foi por isso que o erro nunca aparecia
+            novo = conectar()
+            registrar_execucao(novo, "coleta", False, repr(e))
+            novo.kv_gravar("ultimo_erro", {"tempo": int(time.time() * 1000), "origem": "github" if NA_NUVEM else "pc",
+                                           "erro": traceback.format_exc()[-1800:]})
         except Exception:
             pass
         if NA_NUVEM:
