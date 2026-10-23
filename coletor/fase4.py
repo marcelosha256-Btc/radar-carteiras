@@ -152,7 +152,8 @@ def indicadores(d):
     c, h, l = d["c"], d["h"], d["l"]
     n = len(c)
     ind = {"c": c, "h": h, "l": l, "o": d["o"], "sma20": sma(c, 20), "sma50": sma(c, 50), "sma200": sma(c, 200),
-           "rsi2": rsi(c, 2), "rsi14": rsi(c, 14), "atr": atr(h, l, c), "rsi_sem": rsi_semanal(d["ts"], c, fim=d.get("fim_semana", 6))}
+           "rsi2": rsi(c, 2), "rsi14": rsi(c, 14), "atr": atr(h, l, c), "rsi_sem": rsi_semanal(d["ts"], c, fim=d.get("fim_semana", 6)),
+           "crsi": crsi(c)}
     max20 = [None] * n
     min20 = [None] * n
     largura = [None] * n
@@ -200,6 +201,12 @@ SETUPS = [
      "sentido": -1,
      "cond": lambda k, i: i >= 1 and _tend(k, i, "alta") and k["atr"][i - 1] is not None
      and k["c"][i] < k["c"][i - 1] and _tr(k, i) >= 2 * k["atr"][i - 1]},
+    # do painel do radar original (23/10/2026): no teste ficou perto de zero na maioria dos ativos; entra no
+    # Diário mesmo sem passar no filtro, só para medir daqui para a frente
+    {"id": "crsi_reversao", "nome": "Reversão do CRSI acima da média de 200 (em observação)", "lado": "long",
+     "sentido": -1, "medir": True,
+     "cond": lambda k, i: k["crsi"][i] is not None and k["crsi"][i] < 25 and k["sma200"][i] is not None
+     and k["c"][i] > k["sma200"][i]},
 ]
 
 
@@ -294,7 +301,7 @@ def indicadores_rapidos(d):
     c, h, l = d["c"], d["h"], d["l"]
     n = len(c)
     ind = {"c": c, "h": h, "l": l, "o": d["o"], "sma20": sma(c, 20), "sma50": sma(c, 50), "sma200": sma(c, 200),
-           "rsi2": rsi(c, 2), "rsi14": rsi(c, 14), "atr": atr(h, l, c), "rsi_sem": [None] * n}
+           "rsi2": rsi(c, 2), "rsi14": rsi(c, 14), "atr": atr(h, l, c), "rsi_sem": [None] * n, "crsi": crsi(c)}
     max20 = [None] * n
     min20 = [None] * n
     comp = [False] * n
@@ -353,7 +360,7 @@ def calcular_base(hl, precos):
             ops = testar(s, ind, ts)
             r = resumo(ops, corte)
             ativo = bool(ind["atr"][-1] and s["cond"](ind, len(d["c"]) - 1))
-            r.update({"id": s["id"], "nome": s["nome"], "lado": s["lado"], "ativo_ontem": ativo,
+            r.update({"id": s["id"], "nome": s["nome"], "lado": s["lado"], "ativo_ontem": ativo, "medir": s.get("medir", False),
                       "gatilho": None if ativo else gatilho(s, d, px),
                       "ultimas": [{"t": x["t"], "r": round(x["r"], 2)} for x in ops[-5:]]})
             if s["id"] == "rsi_semanal_60":
@@ -392,7 +399,7 @@ def registrar_e_acompanhar(hl, con, precos, agora):
     novos = []
     for m, a in base["ativos"].items():
         for s in a.get("setups", []):
-            if not (s["passa"] and s["ativo_ontem"]):
+            if not ((s["passa"] or s.get("medir")) and s["ativo_ontem"]):
                 continue
             chave = f"swing:{a['sinal_ts']}"
             ja = con.execute("SELECT 1 FROM sinais WHERE origem=? AND moeda=? AND endereco=?",

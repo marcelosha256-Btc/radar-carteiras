@@ -879,7 +879,7 @@ function renderReal(DADOS) {
           <td class="n ${sinalCls(s.media)}">${Rtxt(s.media)}</td><td class="n ${sinalCls(s.media_fora)}">${Rtxt(s.media_fora)} <span class="muted small">n=${s.n_fora}</span></td>
           <td class="n">${pctN(s.stopado)}</td>
           <td>${s.ativo_ontem ? '<span class="chip up">disparou ontem</span>' : s.gatilho ? `${fmtPx(s.gatilho)} <span class="muted small">(${pctTxt(s.dist, 1)})</span>` : `<span class="muted small">${s.nota || 'longe'}</span>`}</td>
-          <td>${s.passa ? '<span class="chip up">passa</span>' : s.filtro_basico ? '<span class="chip warn" title="passa no filtro, mas não ganha de comprar em qualquer dia">só carona na alta</span>' : '<span class="chip flat">não passa</span>'}</td></tr>`).join('') +
+          <td>${s.passa ? '<span class="chip up">passa</span>' : s.medir ? '<span class="chip acc" title="não passa no filtro, mas os sinais vão para o Diário para medir">em observação</span>' : s.filtro_basico ? '<span class="chip warn" title="passa no filtro, mas não ganha de comprar em qualquer dia">só carona na alta</span>' : '<span class="chip flat">não passa</span>'}</td></tr>`).join('') +
         (a.referencia ? (r => `<tr class="muted"><td><i>${r.nome}</i></td><td class="n">${r.n}</td><td class="n">${pctN(r.acerto)}</td>
           <td class="n">${Rtxt(r.mediana)}</td><td class="n">${Rtxt(r.media)}</td><td class="n">${Rtxt(r.media_fora)} <span class="small">n=${r.n_fora}</span></td>
           <td class="n">${pctN(r.stopado)}</td><td colspan="2" class="small">base: o long precisa ganhar dela</td></tr>`)(a.referencia) : '') + '</tbody>';

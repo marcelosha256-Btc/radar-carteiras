@@ -132,7 +132,7 @@ def calcular_ativo(con, m, px_contrato, hoje):
         ops = fase4.testar(s, ind, ts, fora)
         r = fase4.resumo(ops, corte)
         ativo = bool(ind["atr"][-1] and s["cond"](ind, ult)) and ult not in fora
-        r.update({"id": s["id"], "nome": s["nome"].replace("(só no domingo)", "(só na sexta)"), "lado": s["lado"],
+        r.update({"id": s["id"], "nome": s["nome"].replace("(só no domingo)", "(só na sexta)"), "lado": s["lado"], "medir": s.get("medir", False),
                   "ativo_ontem": ativo,
                   "gatilho": None if ativo else _escalar(fase4.gatilho(s, d, px_bolsa), escala),
                   "ultimas": [{"t": x["t"], "r": round(x["r"], 2)} for x in ops[-5:]]})
@@ -198,7 +198,7 @@ def registrar_e_acompanhar(hl, con, agora):
         if "erro" in a or a["balanco"]["bloqueado"]:
             continue
         for s in a["setups"]:
-            if not (s["passa"] and s["ativo_ontem"]):
+            if not ((s["passa"] or s.get("medir")) and s["ativo_ontem"]):
                 continue
             chave = f"{s['id']}:{a['ultimo_pregao']}"
             if con.execute("SELECT 1 FROM acoes_swing_sinais WHERE origem=? AND moeda=?", (chave, m)).fetchone():
