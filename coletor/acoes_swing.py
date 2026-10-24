@@ -59,7 +59,9 @@ def velas_bolsa(tk, faixa="10y"):
         return None
     off = meta.get("gmtoffset", 0)
     linhas = []
-    for t, o, h, l, c in zip(res.get("timestamp") or [], q["open"], q["high"], q["low"], q["close"]):
+    tss = res.get("timestamp") or []
+    col = lambda k: q.get(k) or [None] * len(tss)   # o Yahoo às vezes devolve um papel sem algum campo
+    for t, o, h, l, c in zip(tss, col("open"), col("high"), col("low"), col("close")):
         if None in (o, h, l, c) or min(o, h, l, c) <= 0:   # petróleo negativo em 04/2020 e buracos
             continue
         dia = datetime.fromtimestamp(t + off, timezone.utc).date()

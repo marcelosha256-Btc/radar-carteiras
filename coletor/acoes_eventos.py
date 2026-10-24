@@ -125,7 +125,7 @@ def yahoo_diario(tk, faixa="10y"):
     except (TypeError, KeyError, IndexError):
         return [], {}
     barras = [(datetime.fromtimestamp(t + off, timezone.utc).date().isoformat(), o, c)
-              for t, o, c in zip(res.get("timestamp") or [], q["open"], q["close"]) if o is not None and c is not None]
+              for t, o, c in zip(res.get("timestamp") or [], q.get("open") or [], q.get("close") or []) if o is not None and c is not None]
     return barras, res["meta"]
 
 
