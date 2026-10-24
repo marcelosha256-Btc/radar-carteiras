@@ -203,7 +203,9 @@ def registrar_e_acompanhar(hl, con, agora):
             if not ((s["passa"] or s.get("medir")) and s["ativo_ontem"]):
                 continue
             chave = f"{s['id']}:{a['ultimo_pregao']}"
-            if con.execute("SELECT 1 FROM acoes_swing_sinais WHERE origem=? AND moeda=?", (chave, m)).fetchone():
+            # como no teste: um sinal de cada vez por setup e ativo
+            if con.execute("SELECT 1 FROM acoes_swing_sinais WHERE moeda=? AND (origem=? OR (setup=? AND fechado_em IS NULL))",
+                           (m, chave, s["id"])).fetchone():
                 continue
             px = mids.get(m)
             if not px:

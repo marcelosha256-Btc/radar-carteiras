@@ -402,7 +402,8 @@ def registrar_e_acompanhar(hl, con, precos, agora):
             if not ((s["passa"] or s.get("medir")) and s["ativo_ontem"]):
                 continue
             chave = f"swing:{a['sinal_ts']}"
-            ja = con.execute("SELECT 1 FROM sinais WHERE origem=? AND moeda=? AND endereco=?",
+            # como no teste: o mesmo setup não abre uma segunda operação no ativo enquanto a primeira está aberta
+            ja = con.execute("SELECT 1 FROM sinais WHERE origem=? AND moeda=? AND (endereco=? OR fechado_em IS NULL)",
                              (s["id"], m, chave)).fetchone()
             px = precos.get(m)
             if ja or not px:
