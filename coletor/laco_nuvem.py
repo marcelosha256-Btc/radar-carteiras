@@ -41,7 +41,26 @@ def disparar_proxima():
     print("próxima execução disparada" if r.status_code == 204 else f"falha ao disparar a próxima: {r.status_code} {r.text[:200]}")
 
 
+INTERVALO_H = 2   # coleta de 2 em 2 horas (25/10/2026: de hora em hora estourou a cota mensal do Neon grátis)
+
+
+def banco_disponivel():
+    """Com a cota do Neon estourada, o banco recusa conexões até o mês virar: não adianta tentar."""
+    try:
+        sys.path.insert(0, AQUI)
+        from db import conectar
+        conectar().execute("SELECT 1")
+        return True
+    except Exception as e:
+        if "quota" in str(e).lower():
+            print("banco bloqueado pela cota do plano grátis; o agendamento tenta de novo em 3 h", flush=True)
+            return False
+        raise
+
+
 def main():
+    if not banco_disponivel():
+        return   # sai sem erro e sem disparar a próxima: o cron "7 */3" reinicia quando a cota voltar
     inicio = time.time()
     falhas = 0
     while True:
@@ -56,7 +75,8 @@ def main():
             falhas += 1
         if not rodar("coleta_hora.py"):
             falhas += 1
-        proxima = (time.time() // 3600 + 1) * 3600 + 7 * 60
+        bloco = INTERVALO_H * 3600
+        proxima = (time.time() // bloco + 1) * bloco + 7 * 60
         if proxima - inicio > DURACAO_S:
             break
         print(time.strftime("%H:%M:%S"), f"próxima coleta às {time.strftime('%H:%M', time.gmtime(proxima))} UTC", flush=True)

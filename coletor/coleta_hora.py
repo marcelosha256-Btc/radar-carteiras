@@ -184,7 +184,7 @@ def coletar(con):
             except Exception:
                 log("ERRO no swing das ações (o resto segue normal)\n" + traceback.format_exc())
     u = con.kv_ler("ultima_coleta")
-    janela = (50 if NA_NUVEM else 100) * 60_000
+    janela = (50 if NA_NUVEM else 250) * 60_000   # a nuvem coleta de 2 em 2 h; o PC só entra se ela falhar
     if u and time.time() * 1000 - u["tempo"] < janela:
         log(f"coleta recente ({u['origem']}, há {(time.time() * 1000 - u['tempo']) / 60_000:.0f} min); pulei")
         registrar_execucao(con, "coleta", True, "pulada: coleta recente")

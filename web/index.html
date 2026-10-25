@@ -1719,6 +1719,7 @@ async function carregar(senhaDigitada) {
   }
   if (r && r.status === 401) return pedirSenha(senha ? 'Senha incorreta.' : '');
   if (!r || r.status === 404) return aviso('Este é o modelo do painel, sem dados. Rode gerar_painel.py para gerar o painel.html com os dados reais.');
+  if (r.status === 503) return aviso('Banco de dados em pausa: o plano gratuito do Neon atingiu a cota do mês. O radar volta sozinho quando a cota renovar, em 01/11. Os preços ao vivo continuam no topo.');
   aviso(`Não consegui buscar os dados (erro ${r.status}). Tente de novo em alguns minutos.`);
 }
 /* ---------- preço ao vivo, a cada 30 s, direto da Hyperliquid ---------- */

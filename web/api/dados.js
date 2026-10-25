@@ -7,12 +7,18 @@ const pool = new pg.Pool({
   ssl: { rejectUnauthorized: false },
 });
 
+// cópia dos dados na instância por 5 min: o painel só muda a cada coleta, e cada consulta acorda o banco
+let cache = { t: 0, corpo: null };
+
 export default async function handler(req, res) {
   const senha = (process.env.PAINEL_SENHA || '').trim();
   if (!senha || (req.headers['x-senha'] || '').trim() !== senha) {
     res.status(401).json({ erro: 'senha' });
     return;
   }
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  if (cache.corpo && Date.now() - cache.t < 5 * 60e3) { res.status(200).send(cache.corpo); return; }
   try {
     // painel de cripto + ações (grupo xyz), gravados em chaves separadas pela coleta
     const { rows } = await pool.query("SELECT chave, valor FROM kv WHERE chave IN ('painel', 'painel_acoes')");
@@ -23,8 +29,11 @@ export default async function handler(req, res) {
     if (!por.painel_acoes) { res.status(200).send(por.painel); return; }
     const dados = JSON.parse(por.painel);
     dados.acoes = JSON.parse(por.painel_acoes);
-    res.status(200).send(JSON.stringify(dados));
+    cache = { t: Date.now(), corpo: JSON.stringify(dados) };
+    res.status(200).send(cache.corpo);
   } catch (e) {
-    res.status(500).json({ erro: 'banco', detalhe: String(e.message || e) });
+    const msg = String(e.message || e);
+    if (/quota/i.test(msg)) { res.status(503).json({ erro: 'cota', detalhe: msg }); return; }
+    res.status(500).json({ erro: 'banco', detalhe: msg });
   }
 }
