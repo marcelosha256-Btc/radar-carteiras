@@ -334,6 +334,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
   <!-- AÇÕES: DIÁRIO -->
   <section class="panel" id="p-a-diario" role="tabpanel" hidden>
     <div class="kpis" id="aDiarioKpis"></div>
+    <div class="box" id="aDiarioLados"></div>
     <div class="box">
       <div class="box-head"><h2>Cópia das carteiras confiáveis em ações</h2><p>Quando uma carteira confiável em ações abre posição, o radar registra a entrada no preço daquele momento, até 1 h depois dela. Fecha quando ela fecha. Nada é apagado nem recalculado. Separado do Diário de cripto.</p></div>
       <div class="tbl-wrap"><table id="aSignals"></table></div>
@@ -465,6 +466,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
   <!-- DIÁRIO -->
   <section class="panel" id="p-diario" role="tabpanel" hidden>
     <div class="kpis" id="diarioKpis"></div>
+    <div class="box" id="diarioLados"></div>
     <div class="box">
       <div class="box-head"><h2>Cópia das carteiras confiáveis</h2><p>Quando uma carteira confiável abre posição, o radar registra a entrada no preço daquele momento, até 1 h depois dela, que é o atraso real de quem copia. Fecha quando ela fecha. Nada é apagado nem recalculado.</p></div>
       <div class="tbl-wrap"><table id="signals"></table></div>
@@ -779,6 +781,7 @@ function renderReal(DADOS) {
 
   /* ---------- Diário ---------- */
   const soma = fechados.reduce((a, b) => a + b, 0);
+  $('#diarioLados').innerHTML = ladosCopiaHTML(sinais);
   $('#diarioKpis').innerHTML =
     kpi('Cópias registradas', sinais.length, `${abertos.length} abertas agora`) +
     kpi('Acerto real', acerto == null ? '—' : fmt(acerto * 100) + '%', fechados.length ? `${fechados.length} fechadas` : 'aguardando a primeira cópia fechar') +
@@ -1366,6 +1369,7 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
     const fechadosA = sinaisA.filter(s => s.retorno != null).map(s => s.retorno);
     const acertoA = fechadosA.length ? fechadosA.filter(r => r > 0).length / fechadosA.length : null;
     const somaA = fechadosA.reduce((a, b) => a + b, 0);
+    $('#aDiarioLados').innerHTML = ladosCopiaHTML(sinaisA, 'aqui, as 300 cópias mais recentes');
     $('#aDiarioKpis').innerHTML =
       kpi('Cópias registradas', sinaisA.length, `${abertosA.length} abertas agora`) +
       kpi('Acerto real', acertoA == null ? '—' : fmt(acertoA * 100) + '%', fechadosA.length ? `${fechadosA.length} fechadas` : 'aguardando a primeira cópia fechar') +
@@ -1975,6 +1979,22 @@ Real (Hyperliquid, stops + liquidações): ${usdCurto(rv)}${(fortes[preco] || 0)
 }
 setInterval(() => { if (!document.hidden && estAtual) renderEstimado(estAtual.t, estAtual.L, estAtual.px); }, 5 * 60e3);
 
+/* ---------- Diário: compra x venda (separa o acerto das carteiras da direção do mercado) ---------- */
+function ladosCopiaHTML(sinais, mercado) {
+  const f = sinais.filter(x => x.retorno != null);
+  if (f.length < 5) return '<p class="small muted">A separação entre compras e vendas aparece depois de 5 cópias fechadas.</p>';
+  const st = lado => { const r = f.filter(x => x.lado === lado).map(x => x.retorno).sort((a, b) => a - b);
+    if (!r.length) return null; const m = r.reduce((a, b) => a + b, 0) / r.length;
+    return { n: r.length, acerto: r.filter(v => v > 0).length / r.length, media: m, mediana: r[Math.floor(r.length / 2)] }; };
+  const L = st('long'), S = st('short');
+  const cel = (x, nome, cls) => x ? `<div class="kpi"><span class="lab">${nome}</span><span class="val ${sinalCls(x.media)}">${pctTxt(x.media)}</span><span class="note">${x.n} cópias · acerto ${fmt(x.acerto * 100)}% · mediana ${pctTxt(x.mediana)}</span></div>` : `<div class="kpi"><span class="lab">${nome}</span><span class="val muted">—</span><span class="note">nenhuma fechada</span></div>`;
+  const neutro = L && S ? (L.media + S.media) / 2 : null;
+  const pctLong = f.filter(x => x.lado === 'long').length / f.length;
+  return `<div class="box-head"><h2>Compra × venda: o que é acerto e o que é o mercado</h2><span class="chip acc">${fmt(pctLong * 100)}% das cópias foram compras</span></div>
+    <div class="kpis">${cel(L, 'Média das compras (long)')}${cel(S, 'Média das vendas (short)')}
+      <div class="kpi"><span class="lab">Compra e venda com o mesmo peso</span><span class="val ${sinalCls(neutro)}">${neutro == null ? '—' : pctTxt(neutro)}</span><span class="note">o que sobra sem a direção do mercado</span></div></div>
+    <p class="small muted">Quem copia herda a direção das carteiras: se elas estão mais compradas e o mercado cai, a cópia perde mesmo que elas escolham bem${mercado ? ` (${mercado})` : ''}. A média com o mesmo peso para compras e vendas tira esse efeito e mostra se as carteiras acertam de verdade. Em 09/11/2026, depois de um mês de queda do BTC (−10%), as compras davam −1,8%, as vendas +2,3% e a média com o mesmo peso +0,25% por cópia.</p>`;
+}
 let liqAtual = null, aLiqAtual = null, ultimosMids = null;
 async function atualizarAoVivo(buscar) {
   if (buscar || !ultimosMids) {
