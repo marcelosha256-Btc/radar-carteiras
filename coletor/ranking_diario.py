@@ -158,6 +158,9 @@ def coletar_velas(hl, con, ops_por, dias, confiaveis):
                         [(m, v["t"], float(v["o"]), float(v["c"])) for v in velas])
         con.commit()
     con.execute("DELETE FROM velas WHERE t<?", (inicio,))
+    # espaço (plano grátis do Neon, 0,5 GB): velas de 15 min só nos últimos 10 dias; antes disso, só as de hora
+    # cheia (a cópia simulada de operações antigas já usa velas de 1 h)
+    con.execute("DELETE FROM velas WHERE t<? AND t - (t / 3600000) * 3600000 <> 0", (agora_ms() - 10 * DIA,))
     con.commit()
     log(f"velas: {len(moedas)} moedas")
 

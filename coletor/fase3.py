@@ -13,8 +13,9 @@ import time
 
 import requests
 
-API = "https://bitview.space/api/metric/{}/day1?from=-{}"
-API1 = "https://bitview.space/api/metric/{}/hour1?from=-{}"
+# a API mudou em nov/2026: /api/series/{nome}/{índice}?start=-N, com os valores dentro de "data"
+API = "https://bitview.space/api/series/{}/day1?start=-{}"
+API1 = "https://bitview.space/api/series/{}/hour1?start=-{}"
 DIAS = 4400                  # ~12 anos: 3 de janela + eventos desde 2017 com retorno de até 365 dias
 JANELA = 3 * 365
 HORIZONTES = [7, 30, 60, 120, 180, 365]
@@ -23,19 +24,24 @@ GUARDAR_H = 0.75             # recalcula a cada coleta (de hora em hora); a font
 SERIES = ("date", "price_close", "sth_realized_price", "sth_sopr_1w", "sth_sopr_24h")
 
 
+def _serie(url):
+    r = requests.get(url, timeout=60, headers={"User-Agent": "radar-carteiras"})
+    r.raise_for_status()
+    j = r.json()
+    return j["data"] if isinstance(j, dict) else j
+
+
 def baixar():
     s = {}
     for m in SERIES:
-        r = requests.get(API.format(m, DIAS), timeout=60, headers={"User-Agent": "radar-carteiras"})
-        r.raise_for_status()
-        s[m] = r.json()
+        s[m] = _serie(API.format(m, DIAS))
     n = min(len(v) for v in s.values())
     s = {k: v[-n:] for k, v in s.items()}
     ok = [i for i in range(n) if all(s[m][i] is not None for m in SERIES)]
     s = {k: [v[i] for i in ok] for k, v in s.items()}
     # SOPR de 24 h em velas de 1 h (últimos 7 dias), para ver o dia corrente sem esperar o fechamento
-    v1 = requests.get(API1.format("sth_sopr_24h", 168), timeout=60, headers={"User-Agent": "radar-carteiras"}).json()
-    t1 = requests.get(API1.format("timestamp", 168), timeout=60, headers={"User-Agent": "radar-carteiras"}).json()
+    v1 = _serie(API1.format("sth_sopr_24h", 168))
+    t1 = _serie(API1.format("timestamp", 168))
     s["h1"] = [[t * 1000, v] for t, v in zip(t1, v1) if v is not None]
     return s
 
