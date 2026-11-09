@@ -73,6 +73,8 @@ def main():
             falhas += 1
         if not rodar("acoes_swing.py", "--se-velho", "20"):    # swing das ações e setores e força
             falhas += 1
+        if not rodar("rotacao.py", "--se-velho", "20"):        # para onde vai o dinheiro (setores dos EUA)
+            falhas += 1
         if not rodar("coleta_hora.py"):
             falhas += 1
         bloco = INTERVALO_H * 3600

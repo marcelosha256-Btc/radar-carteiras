@@ -181,6 +181,11 @@ CREATE TABLE IF NOT EXISTS acoes_swing_sinais (
   stop DOUBLE PRECISION, alvo DOUBLE PRECISION,
   fechado_em BIGINT, preco_fechamento DOUBLE PRECISION, retorno DOUBLE PRECISION, r DOUBLE PRECISION
 );
+CREATE TABLE IF NOT EXISTS rotacao_hist (
+  dia TEXT, etf TEXT,               -- mapa de rotação dos setores dos EUA, um ponto por pregão
+  x DOUBLE PRECISION, y DOUBLE PRECISION, rel4 DOUBLE PRECISION, rel13 DOUBLE PRECISION,
+  PRIMARY KEY (dia, etf)
+);
 CREATE TABLE IF NOT EXISTS balancos (
   simbolo TEXT, data TEXT,          -- data do anúncio (AAAA-MM-DD, calendário de balanços da Nasdaq)
   hora TEXT,                        -- antes | depois (da sessão) | NULL quando a Nasdaq não informa

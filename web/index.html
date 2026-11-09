@@ -249,7 +249,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-fluxo" hidden>Fluxo e alertas</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-liquidez" hidden>Stops e liquidações</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-eventos" hidden>Balanços e eventos</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-forca" hidden>Setores e força</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-forca" hidden>Para onde vai o dinheiro</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-diario" hidden>Diário de sinais</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-swing" hidden>Swing trade</button>
     </nav>
@@ -359,7 +359,22 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
 
   <!-- AÇÕES: SETORES E FORÇA -->
   <section class="panel" id="p-a-forca" role="tabpanel" hidden>
-    <div class="box-head"><h2>Setores e força relativa</h2><p id="aForcaNota"></p></div>
+    <div class="box-head"><h2>Para onde vai o dinheiro</h2><p id="aRotNota"></p></div>
+    <div class="kpis" id="aRotKpis"></div>
+    <div class="box">
+      <div class="box-head"><h2>Mapa de rotação dos setores dos EUA</h2><div class="seg" id="aRotFiltro" role="group" aria-label="O que mostrar no mapa"></div></div>
+      <div id="aRotMapa"></div>
+      <p class="small muted" id="aRotLegenda"></p>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2>Setores e segmentos</h2><p>Ordenados por quanto renderam acima do S&amp;P 500 nas últimas 4 semanas. Clique numa linha (ou num ponto do mapa) para ver as ações.</p></div>
+      <div class="tbl-wrap"><table id="aRotTabela" class="clicavel"></table></div>
+    </div>
+    <div class="box">
+      <div class="box-head"><h2 id="aRotDetTit">Ações do setor</h2><p class="small" id="aRotDetNota"></p></div>
+      <div class="tbl-wrap"><table id="aRotDet"></table></div>
+    </div>
+    <div class="box-head" style="margin-top:28px"><h2>Força relativa no grupo xyz</h2><p id="aForcaNota"></p></div>
     <div class="kpis" id="aForcaKpis"></div>
     <div class="box">
       <div class="box-head"><h2>Setores</h2><p>Mediana dos papéis de cada setor no grupo xyz. Força de 1 a 99: posição do papel entre todos os do grupo (99 = o mais forte contra o S&amp;P 500).</p></div>
@@ -1270,6 +1285,144 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
           <td>${nomeSetupA[s.setup] || s.setup}</td><td class="n">${fmtPx(s.preco_abertura)}</td><td class="n">${fmtPx(s.stop)}</td><td class="n">${fmtPx(s.alvo)}</td>
           <td>${sit}</td><td class="n ${sinalCls(aberto ? s.agora : s.r)}">${res}</td></tr>`;
       }).join('') : '<tr><td colspan="8" class="muted">Nenhum sinal ainda. Aparece aqui quando um setup aprovado disparar no fechamento do pregão.</td></tr>') + '</tbody>';
+
+    /* para onde vai o dinheiro: mapa de rotação dos setores dos EUA e as ações de cada um */
+    const RO = A.rotacao;
+    if (RO && RO.etfs && RO.etfs.length) {
+      const pc = v => v == null ? '—' : pctTxt(v, 1);
+      const dBR = d => d ? d.split('-').reverse().join('/') : '—';
+      const QD = { liderando: ['Liderando', 'up', '--up', '--up-soft'], melhorando: ['Melhorando', 'acc', '--accent', '--accent-soft'],
+                   enfraquecendo: ['Enfraquecendo', 'warn', '--warn', '--warn-soft'], atrasado: ['Atrasado', 'down', '--down', '--down-soft'] };
+      const chipQ = q => `<span class="chip ${QD[q][1]}">${QD[q][0]}</span>`;
+      const ctx = RO.contexto || {}, spy = ctx.SPY || {}, rsp = ctx.RSP || {};
+      const util = RO.etfs.filter(e => e.tipo !== 'referencia');
+      const lid = RO.etfs.filter(e => e.tipo === 'setor' && e.quadrante === 'liderando').sort((a, b) => b.x - a.x);
+      // entrando / saindo: acelerando (ou perdendo ritmo) e subindo (ou caindo) na fila das últimas 4 semanas
+      const mov = e => (e.rank_antes || 0) - (e.rank || 0);
+      const entra = util.filter(e => e.y > 0 && mov(e) > 0).sort((a, b) => mov(b) - mov(a) || b.y - a.y);
+      const sai = util.filter(e => e.y < 0 && mov(e) < 0).sort((a, b) => mov(a) - mov(b) || a.y - b.y);
+      const nomes = l => l.length ? l.slice(0, 3).map(e => e.nome).join(', ') : '—';
+      const largura = rsp.r4 != null && spy.r4 != null ? rsp.r4 - spy.r4 : null;
+      $('#aRotNota').innerHTML = `Quanto cada setor rendeu acima ou abaixo do S&amp;P 500, com fechamento de ${dBR(RO.pregao)} (Yahoo, atualiza uma vez por dia). ` +
+        `Mostra para onde o dinheiro <b>foi</b>, não para onde vai: no nosso teste de 10 anos o setor que liderou um mês continuou na frente no mês seguinte só um pouco mais da metade das vezes (56–59%). Volume alto é pista de interesse, não prova de entrada de dinheiro.` +
+        `<br>Abrigos em 4 semanas: ouro ${pc((ctx.GLD || {}).r4)}, títulos longos dos EUA ${pc((ctx.TLT || {}).r4)}, dólar ${pc((ctx.UUP || {}).r4)}.`;
+      $('#aRotKpis').innerHTML =
+        kpi('S&amp;P 500 · 4 semanas', pc(spy.r4), spy.a200 == null ? '' : spy.a200 ? 'acima da média de 200 dias' : 'abaixo da média de 200 dias', sinalCls(spy.r4)) +
+        kpi('Peso igual vs S&amp;P', pc(largura), largura == null ? '' : largura >= 0 ? 'positivo: dinheiro saindo das gigantes para o resto' : 'negativo: alta concentrada nas gigantes', sinalCls(largura)) +
+        kpi('Setores liderando', lid.length ? lid.slice(0, 3).map(e => e.tk).join(' · ') : '—', lid.length ? nomes(lid) : 'nenhum setor acima do S&amp;P e acelerando', lid.length ? 'pos' : '') +
+        kpi('Entrando', entra.length ? entra.slice(0, 3).map(e => e.tk).join(' · ') : '—', entra.length ? nomes(entra) + ' · subiram na fila e aceleram' : 'nenhum ganhando ritmo', entra.length ? 'pos' : '') +
+        kpi('Saindo', sai.length ? sai.slice(0, 3).map(e => e.tk).join(' · ') : '—', sai.length ? nomes(sai) + ' · caíram na fila e perdem ritmo' : 'nenhum perdendo ritmo', sai.length ? 'neg' : '');
+
+      const ST = window.__rot = window.__rot || { filtro: 'setor', sel: null };
+      if (!ST.sel || !RO.etfs.some(e => e.tk === ST.sel)) ST.sel = (lid[0] || util.slice().sort((a, b) => a.rank - b.rank)[0] || RO.etfs[0]).tk;
+      const visiveis = () => RO.etfs.filter(e => ST.filtro === 'todos' || (ST.filtro === 'setor' ? e.tipo === 'setor' : e.tipo !== 'setor'));
+
+      const mapa = lista => {
+        const W = Math.min(960, Math.max(320, ($('#aRotMapa').clientWidth || window.innerWidth - 64))), H = Math.round(W * (W < 500 ? 0.85 : 0.58)), P = 30;
+        const xs = lista.flatMap(e => e.cauda.map(p => Math.abs(p[0]))), ys = lista.flatMap(e => e.cauda.map(p => Math.abs(p[1])));
+        const mx = Math.max(3, ...xs) * 1.15, my = Math.max(3, ...ys) * 1.15;
+        const X = v => P + (v + mx) / (2 * mx) * (W - 2 * P), Y = v => H - P - (v + my) / (2 * my) * (H - 2 * P);
+        const x0 = X(0), y0 = Y(0);
+        let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;max-width:${W}px;margin:0 auto;font-family:var(--f-body)" role="img" aria-label="Mapa de rotação: força contra o S&amp;P 500 em 13 semanas (horizontal) e aceleração nas últimas 4 (vertical)">`;
+        const quad = (q, x, y, w, h, ax, ay, anc) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="var(${QD[q][3]})" opacity=".55"/>` +
+          `<text x="${ax}" y="${ay}" text-anchor="${anc}" font-size="12" font-weight="600" fill="var(${QD[q][2]})">${QD[q][0]}</text>`;
+        s += quad('melhorando', P, P, x0 - P, y0 - P, P + 8, P + 16, 'start') + quad('liderando', x0, P, W - P - x0, y0 - P, W - P - 8, P + 16, 'end') +
+             quad('atrasado', P, y0, x0 - P, H - P - y0, P + 8, H - P - 8, 'start') + quad('enfraquecendo', x0, y0, W - P - x0, H - P - y0, W - P - 8, H - P - 8, 'end');
+        s += `<line x1="${x0}" y1="${P}" x2="${x0}" y2="${H - P}" stroke="var(--faint)" stroke-dasharray="3 3"/><line x1="${P}" y1="${y0}" x2="${W - P}" y2="${y0}" stroke="var(--faint)" stroke-dasharray="3 3"/>`;
+        s += `<text x="${W / 2}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)">← mais fraco que o S&amp;P · 13 semanas · mais forte →</text>`;
+        s += `<text transform="translate(12 ${H / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--muted)">← perdendo ritmo · 4 semanas · acelerando →</text>`;
+        const ord = lista.slice().sort((a, b) => (a.tk === ST.sel) - (b.tk === ST.sel));   // o selecionado por cima
+        // rótulos: empurra para cima/baixo quem cairia em cima de outro
+        // (os nomes dos quadrantes também contam como ocupados)
+        const rot = {}, postos = [[P, P + 95, P + 16], [W - P - 95, W - P, P + 16], [P, P + 80, H - P - 8], [W - P - 105, W - P, H - P - 8]];
+        for (const e of lista.slice().sort((a, b) => (b.tk === ST.sel) - (a.tk === ST.sel) || b.y - a.y)) {
+          const p = e.cauda[e.cauda.length - 1], hx = X(p[0]), dir = hx > W - 70 ? -1 : 1;
+          const x1 = dir > 0 ? hx + 9 : hx - 9 - 36, x2 = x1 + 36, y0 = Y(p[1]) + 4;
+          const livre = y => !postos.some(q => x1 < q[1] && x2 > q[0] && Math.abs(y - q[2]) < 12.5);
+          const y = [0, 13, -13, 26, -26, 39, -39, 52, -52].map(d => y0 + d).find(livre) ?? y0;
+          postos.push([x1, x2, y]); rot[e.tk] = y;
+        }
+        for (const e of ord) {
+          const cor = `var(${QD[e.quadrante][2]})`, sel = e.tk === ST.sel, pts = e.cauda.map(p => [X(p[0]), Y(p[1])]);
+          const [hx, hy] = pts[pts.length - 1];
+          const dir = hx > W - 70 ? -1 : 1;
+          s += `<g data-tk="${e.tk}" style="cursor:pointer" opacity="${sel || !ST.sel ? 1 : .8}"><title>${e.tk} · ${e.nome}\n${QD[e.quadrante][0]} · vs S&P 13 sem. ${pc(e.rel13)} · 4 sem. ${pc(e.rel4)}\nCauda: as ${pts.length - 1} semanas anteriores</title>` +
+            `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="${cor}" stroke-width="${sel ? 2.5 : 1.5}" opacity="${sel ? .9 : .45}"/>` +
+            pts.slice(0, -1).map((p, k) => `<circle cx="${p[0]}" cy="${p[1]}" r="${sel ? 2.6 : 2}" fill="${cor}" opacity="${.25 + .5 * k / pts.length}"/>`).join('') +
+            `<circle cx="${hx}" cy="${hy}" r="${sel ? 8 : 6}" fill="${cor}" stroke="${sel ? 'var(--fg)' : 'var(--surface)'}" stroke-width="${sel ? 2 : 1.5}"/></g>`;
+        }
+        for (const e of ord) {   // rótulos por último, para nenhum ponto cobrir um nome
+          const sel = e.tk === ST.sel, p = e.cauda[e.cauda.length - 1], hx = X(p[0]), dir = hx > W - 70 ? -1 : 1;
+          s += `<text data-tk="${e.tk}" style="cursor:pointer" x="${hx + dir * (sel ? 11 : 9)}" y="${rot[e.tk]}" text-anchor="${dir > 0 ? 'start' : 'end'}" font-size="${sel ? 13 : 11.5}" font-weight="${sel ? 700 : 600}" fill="var(--fg)" stroke="var(--surface)" stroke-width="3" paint-order="stroke">${e.tk}</text>`;
+        }
+        return s + '</svg>';
+      };
+
+      const barraF = f => f == null ? '—' : `<span style="display:inline-block;width:50px;height:8px;border-radius:4px;background:var(--surface-2);vertical-align:middle;margin-right:6px"><span style="display:block;height:8px;border-radius:4px;width:${f * 0.5}px;background:${f >= 70 ? 'var(--up)' : f <= 30 ? 'var(--down)' : 'var(--faint)'}"></span></span><b>${fmt(f)}</b>`;
+      const mm = v => v == null ? '<span class="muted small">—</span>' : v ? '<span class="chip up">acima</span>' : '<span class="chip down">abaixo</span>';
+      const sgnR = v => v == null ? '—' : (v >= 0 ? '+' : '') + fmt(v, 2) + 'R';
+      const situ = a => {
+        if (a.setup_ativo) return '<span class="chip acc">sinal hoje: correção em alta</span>';
+        if (a.tend == null) return '<span class="muted small">histórico curto</span>';
+        if (!a.tend) return '<span class="chip">sem tendência de alta</span>';
+        if (a.gatilho) return `<span class="chip up">em alta</span> <span class="small">sinal se fechar até ${fmtPx(a.gatilho)} <span class="muted">(${pctTxt(a.gatilho / a.px - 1, 1)})</span></span>`;
+        return '<span class="chip up">em alta</span> <span class="small muted">sem gatilho até −25%</span>';
+      };
+      const histS = a => {
+        const s = a.setup;
+        if (!s || !s.n) return '<span class="muted small">sem ocorrências</span>';
+        return `<span class="small" style="white-space:nowrap">${fmt(s.n)}× · ${fmt(s.acerto * 100)}% · <b class="${sinalCls(s.media)}">${sgnR(s.media)}</b> <span class="muted">ref. ${sgnR(s.ref)}</span></span> ` +
+          (s.ganha ? '<span class="chip up" title="melhor que comprar em qualquer dia no período todo e nos 30% finais, com 20+ ocorrências">ganha</span>' : '<span class="chip" title="não ganhou de comprar em qualquer dia (no período todo ou nos 30% finais) ou teve menos de 20 ocorrências">não ganha</span>');
+      };
+      const balTxt = b => {
+        if (!b) return '<span class="muted small">—</span>';
+        const dias = Math.round((Date.parse(b + 'T12:00:00Z') - Date.now()) / 864e5);
+        return dias >= 0 && dias <= 7 ? `<span class="chip warn">${dBR(b)} · ${dias ? 'em ' + dias + ' d' : 'hoje'}</span>` : `<span class="small ${dias < 0 ? 'muted' : ''}">${dBR(b)}</span>`;
+      };
+
+      const desenhar = () => {
+        const lista = visiveis();
+        $('#aRotFiltro').innerHTML = [['setor', 'Setores'], ['segmento', 'Segmentos'], ['todos', 'Todos']].map(([k, n]) => `<button aria-pressed="${ST.filtro === k}" data-k="${k}">${n}</button>`).join('');
+        $('#aRotFiltro').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { ST.filtro = b.dataset.k; desenhar(); }));
+        $('#aRotMapa').innerHTML = mapa(lista);
+        $('#aRotMapa').querySelectorAll('[data-tk]').forEach(g => g.addEventListener('click', () => { ST.sel = g.dataset.tk; desenhar(); }));
+        $('#aRotLegenda').textContent = `Horizontal: quanto o ETF rendeu acima (direita) ou abaixo (esquerda) do S&P 500 em 13 semanas. Vertical: se nas últimas 4 semanas ele acelerou (cima) ou perdeu ritmo (baixo) em relação a esse trimestre. A linha é o caminho das ${RO.cauda_semanas} semanas anteriores; o ponto grande é hoje. O giro típico é no sentido horário: melhorando → liderando → enfraquecendo → atrasado.`;
+        const tab = lista.slice().sort((a, b) => b.rel4 - a.rel4);
+        $('#aRotTabela').innerHTML = '<thead><tr><th>ETF</th><th>Quadrante</th><th class="n">1 sem.</th><th class="n">4 sem.</th><th class="n">13 sem.</th><th class="n">vs S&amp;P 4 sem.</th><th class="n">vs S&amp;P 13 sem.</th><th class="n" title="posição pelo rendimento acima do S&amp;P em 4 semanas, e onde estava há 1 semana">Posição</th><th class="n" title="volume em dólar das últimas 4 semanas ÷ média dos 5 meses anteriores">Volume</th><th class="n" title="% das maiores ações do setor acima da média de 50 dias">Amplitude</th><th>Médias 50 / 200</th><th class="n">Do topo</th></tr></thead><tbody>' +
+          tab.map(e => {
+            const mov = e.rank && e.rank_antes ? e.rank_antes - e.rank : 0;
+            return `<tr data-tk="${e.tk}" class="${e.tk === ST.sel ? 'sel' : ''}" style="cursor:pointer"><td><b>${e.tk}</b> <span class="muted small">${e.nome}</span></td><td>${chipQ(e.quadrante)}</td>
+            <td class="n ${sinalCls(e.r1)}">${pc(e.r1)}</td><td class="n ${sinalCls(e.r4)}">${pc(e.r4)}</td><td class="n ${sinalCls(e.r13)}">${pc(e.r13)}</td>
+            <td class="n ${sinalCls(e.rel4)}"><b>${pc(e.rel4)}</b></td><td class="n ${sinalCls(e.rel13)}">${pc(e.rel13)}</td>
+            <td class="n">${e.rank ? e.rank + 'º' : '—'} ${mov ? `<span class="small ${mov > 0 ? 'pos' : 'neg'}">${mov > 0 ? '▲' : '▼'}${Math.abs(mov)}</span>` : ''}</td>
+            <td class="n ${e.vol >= 1.3 ? 'pos' : ''}">${e.vol == null ? '—' : fmt(e.vol, 2) + 'x'}</td>
+            <td class="n">${e.amplitude == null ? '—' : fmt(e.amplitude * 100) + '%'}</td>
+            <td style="white-space:nowrap">${mm(e.a50)} ${mm(e.a200)}</td><td class="n">${pc(e.topo)}</td></tr>`;
+          }).join('') + '</tbody>';
+        $('#aRotTabela').querySelectorAll('tr[data-tk]').forEach(tr => tr.addEventListener('click', () => {
+          ST.sel = tr.dataset.tk; desenhar();
+          $('#aRotDetTit').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }));
+        const e = RO.etfs.find(x => x.tk === ST.sel);
+        const tks = (RO.membros[e.tk] || []).filter(t => RO.acoes[t]).sort((a, b) => (RO.acoes[b].forca ?? -1) - (RO.acoes[a].forca ?? -1));
+        $('#aRotDetTit').innerHTML = `${e.nome} <span class="muted">(${e.tk})</span> ${chipQ(e.quadrante)}`;
+        $('#aRotDetNota').innerHTML = tks.length
+          ? `${tks.length} das maiores ações do ${e.tipo === 'setor' ? 'setor' : 'segmento'}, da mais forte para a mais fraca. Força de 1 a 99 entre as ${Object.keys(RO.acoes).length} ações de todos os setores (99 = a que mais subiu acima do S&amp;P em 3, 6, 9 e 12 meses). ` +
+            `<b>Situação</b> e <b>histórico</b> são do setup "correção em tendência de alta" do Swing (RSI de 2 abaixo de 10 com a média de 50 acima da de 200), em 10 anos da própria ação: stop de 3 ATR, alvo 1,5R, até 20 pregões, custo incluído. ` +
+            `<span class="chip acc" style="font-size:11px">xyz</span> = dá para operar no grupo xyz da Hyperliquid. Balanço nos próximos 7 dias em amarelo: o Swing não entra perto de balanço.`
+          : 'Sem lista de ações para este ETF (é só referência).';
+        $('#aRotDet').innerHTML = tks.length ? '<thead><tr><th>Ação</th><th>Força</th><th class="n">1 mês</th><th class="n">3 meses</th><th class="n">Do topo</th><th>Médias 50 / 200</th><th>Situação para entrada</th><th title="vezes que o setup disparou em 10 anos · % de acerto · ganho médio por operação em R · ref. = comprar em qualquer dia com as mesmas saídas">Histórico do setup (ref. = qualquer dia)</th><th>Balanço</th></tr></thead><tbody>' +
+          tks.map(t => {
+            const a = RO.acoes[t];
+            return `<tr><td style="white-space:nowrap"><b>${t}</b> ${a.xyz ? '<span class="chip acc" style="font-size:11px" title="negociável no grupo xyz da Hyperliquid">xyz</span>' : ''} <span class="muted small">${fmtPx(a.px)}</span></td>
+              <td style="white-space:nowrap">${barraF(a.forca)}</td><td class="n ${sinalCls(a.r1m)}">${pc(a.r1m)}</td><td class="n ${sinalCls(a.r3m)}">${pc(a.r3m)}</td><td class="n">${pc(a.topo)}</td>
+              <td style="white-space:nowrap">${mm(a.a50)} ${mm(a.a200)}</td><td>${situ(a)}</td><td>${histS(a)}</td><td>${balTxt(a.balanco)}</td></tr>`;
+          }).join('') + '</tbody>' : '';
+      };
+      desenhar();
+    } else {
+      $('#aRotNota').textContent = 'O mapa de rotação dos setores sai depois do primeiro processamento diário.';
+    }
 
     /* setores e força */
     const FO = A.forca;

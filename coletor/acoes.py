@@ -510,5 +510,6 @@ def painel(hl, con, agora):
         swing = {"erro": repr(e)[:300]}
     return {"gerado": agora, "ativos": ativos, "liquidez": mapas, "sessoes": sessoes, "carteiras": carteiras,
             "eventos": eventos, "swing": swing, "forca": con.kv_ler("acoes_forca"),
+            "rotacao": con.kv_ler("rotacao"),
             "funding_base": FUNDING_BASE, "amostra": _amostra(con, agora),
             "universo_dia": (con.kv_ler("acoes_universo") or {}).get("dia")}

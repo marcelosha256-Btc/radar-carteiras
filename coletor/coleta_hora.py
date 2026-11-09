@@ -183,6 +183,14 @@ def coletar(con):
                 acoes_swing.executar(con)
             except Exception:
                 log("ERRO no swing das ações (o resto segue normal)\n" + traceback.format_exc())
+        ro = con.kv_ler("rotacao")
+        if not ro or time.time() * 1000 - ro.get("gerado", 0) > 30 * 3_600_000:
+            try:
+                log("rotação dos setores atrasada; refazendo aqui no PC")
+                import rotacao
+                rotacao.executar(con)
+            except Exception:
+                log("ERRO na rotação dos setores (o resto segue normal)\n" + traceback.format_exc())
     u = con.kv_ler("ultima_coleta")
     janela = (50 if NA_NUVEM else 250) * 60_000   # a nuvem coleta de 2 em 2 h; o PC só entra se ela falhar
     if u and time.time() * 1000 - u["tempo"] < janela:
