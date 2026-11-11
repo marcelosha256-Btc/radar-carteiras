@@ -169,6 +169,11 @@ def coletar(con):
     # o GitHub atrasa e pula execuções agendadas: a nuvem roda de hora em hora e o PC fica de
     # reserva; quem chegar depois de uma coleta recente só registra e sai
     if not NA_NUVEM:   # reserva: se a nuvem não conseguir o calendário (Nasdaq às vezes barra a nuvem), o PC faz
+        try:   # open interest da Binance: só o PC consegue (a Binance bloqueia o GitHub)
+            import binance_oi
+            binance_oi.gravar(con, log)
+        except Exception:
+            log("ERRO ao gravar o open interest da Binance (o resto segue normal)\n" + traceback.format_exc())
         ev = con.kv_ler("acoes_eventos")
         if not ev or time.time() * 1000 - ev["gerado"] > 30 * 3_600_000:
             try:

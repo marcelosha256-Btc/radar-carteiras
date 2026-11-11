@@ -181,6 +181,11 @@ CREATE TABLE IF NOT EXISTS acoes_swing_sinais (
   stop DOUBLE PRECISION, alvo DOUBLE PRECISION,
   fechado_em BIGINT, preco_fechamento DOUBLE PRECISION, retorno DOUBLE PRECISION, r DOUBLE PRECISION
 );
+CREATE TABLE IF NOT EXISTS binance_oi (
+  moeda TEXT, t BIGINT,             -- open interest de 5 min da Binance (ela só guarda 30 dias); gravado pelo PC
+  contratos DOUBLE PRECISION, valor DOUBLE PRECISION,
+  PRIMARY KEY (moeda, t)
+);
 CREATE TABLE IF NOT EXISTS rotacao_hist (
   dia TEXT, etf TEXT,               -- mapa de rotação dos setores dos EUA, um ponto por pregão
   x DOUBLE PRECISION, y DOUBLE PRECISION, rel4 DOUBLE PRECISION, rel13 DOUBLE PRECISION,

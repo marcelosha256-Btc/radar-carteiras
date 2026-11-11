@@ -551,7 +551,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
     </div>
     <div class="box" id="estBox" hidden>
       <div class="box-head"><h2>Mapa estimado de liquidação (Binance)</h2><div class="seg" id="estJanelas" role="group" aria-label="Janela"></div></div>
-      <p class="small muted">Estimativa no modelo do Coinglass, calculada no seu navegador com dados públicos da Binance: cada aumento do open interest vira posições novas (metade comprada, metade vendida) no preço médio daquele intervalo, divididas por alavancagem (suposição: 40% em 10x, 30% em 25x, 20% em 50x, 10% em 100x). Saem do mapa as que o preço já teria liquidado, e quedas do open interest fecham posições na mesma proporção. Tom forte = 10x, médio = 25–50x, claro = 100x. Caixa tracejada = zona forte em 2 ou mais janelas. <b>Não são posições reais:</b> as reais estão no mapa de cima (Hyperliquid); passe o mouse para comparar as duas.</p>
+      <p class="small muted">Estimativa no modelo do Coinglass, calculada no seu navegador com dados públicos da Binance: cada aumento do open interest vira posições novas (metade comprada, metade vendida) no preço médio daquele intervalo, divididas por alavancagem (suposição: 40% em 10x, 30% em 25x, 20% em 50x, 10% em 100x). Saem do mapa as que o preço já teria liquidado, e quedas do open interest fecham posições na mesma proporção. Tom forte = 10x, médio = 25–50x, claro = 100x. Caixa tracejada = zona forte em 2 ou mais janelas; caixa colorida = maior zona de cada lado na janela escolhida. <b>Sem "captura primeiro" e sem "cascata":</b> testamos em 11/11/2026 (30 dias, 6 moedas) e o "lado capturado primeiro" é só o lado mais perto do preço, e o preço seguiu até o fim da "cascata" tantas vezes quanto voltou. <b>Não são posições reais:</b> as reais estão no mapa de cima (Hyperliquid); passe o mouse para comparar as duas.</p>
       <div class="kpis" id="estKpis"></div>
       <svg id="estMapa" viewBox="0 0 720 470" role="img" aria-label="Mapa estimado de liquidação por faixa de preço"></svg>
       <div class="small" id="estStatus"></div>
@@ -2007,7 +2007,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) cone
 /* ---------- mapa ESTIMADO de liquidação (Binance, calculado no navegador; modelo do Coinglass) ---------- */
 const EST_ALAV = [[10, 0.4], [25, 0.3], [50, 0.2], [100, 0.1]];   // suposição: como o open interest novo se divide
 const EST_MM = 0.005;                                              // margem de manutenção aproximada
-const EST_JANELAS = [['4h', '4 horas', '5m', 48], ['1d', '1 dia', '5m', 288], ['1s', '1 semana', '1h', 168], ['1m', '1 mês', '1h', 720]];
+const EST_JANELAS = [['1h', '1 hora', '5m', 12], ['4h', '4 horas', '5m', 48], ['1d', '1 dia', '5m', 288], ['1s', '1 semana', '1h', 168], ['1m', '1 mês', '1h', 720]];
 const estCache = {};
 let estJanela = '1d', estAtual = null;
 const bnc = (caminho, qs) => fetch(`https://fapi.binance.com${caminho}?${new URLSearchParams(qs)}`).then(r => { if (!r.ok) throw new Error('Binance ' + r.status); return r.json(); });
@@ -2024,6 +2024,16 @@ async function estDados(ativo) {
   const oi1 = [...new Map([...oi1a, ...oi1b].map(x => [x.timestamp, x])).values()].sort((a, b) => a.timestamp - b.timestamp);
   const kl = arr => arr.map(k => ({ t: k[0], h: +k[2], l: +k[3], c: +k[4], tp: (+k[2] + +k[3] + +k[4]) / 3 }));
   return (estCache[ativo] = { t: Date.now(), m5: { oi: oi5, k: kl(k5) }, h1: { oi: oi1, k: kl(k1) } });
+}
+// fluxo agressor dos últimos 15 min contra a média das 24 h anteriores (velas de 1 min, taker buy da Binance)
+const fluxoCache = {};
+async function fluxo15(ativo) {
+  const c = fluxoCache[ativo];
+  if (c && Date.now() - c.t < 55e3) return c;
+  const k = (await bnc('/fapi/v1/klines', { symbol: LIQ_PAR[ativo].toUpperCase(), interval: '1m', limit: 1456 })).slice(0, -1);   // a última ainda está aberta
+  const ult = k.slice(-15), dia = k.slice(-1455, -15), n = dia.length / 15;
+  const venda = a => a.reduce((s, x) => s + (+x[7] - +x[10]), 0), compra = a => a.reduce((s, x) => s + +x[10], 0);
+  return (fluxoCache[ativo] = { t: Date.now(), vendaX: venda(ult) / (venda(dia) / n), compraX: compra(ult) / (compra(dia) / n) });
 }
 function estModelo(serie, nBins) {
   // posições abertas em cada intervalo pelo aumento do open interest (um comprado e um vendido por contrato)
@@ -2088,7 +2098,32 @@ async function renderEstimado(t, L, px) {
     .sort((a, b) => Math.abs(a - pxv) - Math.abs(b - pxv))[0];
   const za = zona('acima'), zb = zona('abaixo');
   const fx2 = v => v == null ? 'nenhuma' : `${fmtPx(v)}–${fmtPx(v + p)} (${pctTxt((v + p / 2) / pxv - 1, 1)})`;
-  document.getElementById('estKpis').innerHTML =
+  // maior zona de cada lado nesta janela, fora da faixa colada no preço (lá o "toque" é certo e não diz nada),
+  // com a chance de tocar conferida no histórico e o selo ACESA (fluxo agressor forte na direção dela)
+  const nomeJ = EST_JANELAS.find(j => j[0] === estJanela)[1];
+  const CH = chanceAtual && chanceAtual.t === t ? chanceAtual.C : null;
+  let FL = null;
+  try { FL = await fluxo15(t); } catch (e) {}
+  if (!estAtual || estAtual.t !== t) return;
+  const maior = lado => {
+    const z = [...M.values()].filter(f => lado === 'abaixo'
+      ? f.long > 0 && f.preco + p < pxv * (1 - 0.0015) && f.preco >= pxv * 0.95
+      : f.short > 0 && f.preco > pxv * 1.0015 && f.preco + p <= pxv * 1.05).sort((a, b) => b[lado === 'abaixo' ? 'long' : 'short'] - a[lado === 'abaixo' ? 'long' : 'short'])[0];
+    if (!z) return null;
+    const borda = lado === 'abaixo' ? z.preco + p : z.preco, d = Math.abs(borda / pxv - 1), q = lado === 'abaixo' ? 'dn' : 'up';
+    return { ...z, lado, borda, dist: borda / pxv - 1, usd: lado === 'abaixo' ? z.long : z.short,
+      p4: CH ? probToque(CH.quantis['4'][q], d / CH.vol) : null, p24: CH ? probToque(CH.quantis['24'][q], d / CH.vol) : null,
+      acesa: FL ? (lado === 'abaixo' ? FL.vendaX >= 2 && FL.vendaX >= 1.25 * FL.compraX : FL.compraX >= 2 && FL.compraX >= 1.25 * FL.vendaX) : false };
+  };
+  const zMb = maior('abaixo'), zMa = maior('acima');
+  const pcz = v => v == null ? '—' : v >= 0.995 ? '>99%' : v < 0.01 ? '<1%' : fmt(v * 100) + '%';
+  const cardZ = (z, lado) => `<div class="kpi"><span class="lab">Maior zona ${lado} · ${nomeJ}</span>` + (z
+    ? `<span class="val ${lado === 'abaixo' ? 'neg' : 'pos'}" style="font-size:16px">${fmtPx(z.preco)}–${fmtPx(z.preco + p)} ${z.acesa ? '<span class="chip warn">ACESA</span>' : ''}</span>
+       <span class="note">${pctTxt(z.dist, 1)} do preço · ${usdCurto(z.usd)} (est.)${z.p4 != null ? ` · tocar em 4 h ~${pcz(z.p4)} · 24 h ~${pcz(z.p24)}` : ''}</span>`
+    : '<span class="val" style="font-size:16px">—</span><span class="note">nada relevante entre 0,15% e 5% do preço</span>') + '</div>';
+  const xs = v => v == null || !isFinite(v) ? '—' : fmt(v, 1) + '×';
+  document.getElementById('estKpis').innerHTML = cardZ(zMb, 'abaixo') + cardZ(zMa, 'acima') +
+    `<div class="kpi"><span class="lab">Fluxo agressor · 15 min</span><span class="val" style="font-size:16px"><span class="neg">venda ${xs(FL && FL.vendaX)}</span> · <span class="pos">compra ${xs(FL && FL.compraX)}</span></span><span class="note">${FL && FL.vendaX >= 2 && FL.compraX >= 2 && !(zMb && zMb.acesa) && !(zMa && zMa.acesa) ? '<b>volume alto nos dois lados</b> · ' : ''}contra a média das últimas 24 h (Binance). <b>ACESA</b> = 2× ou mais na direção da zona e mais forte que o outro lado: mede o agora, não prevê</span></div>` +
     `<div class="kpi"><span class="lab">Longs liquidáveis até −5% (est.)</span><span class="val neg">${usdCurto(L5)}</span><span class="note">janela de ${EST_JANELAS.find(j => j[0] === estJanela)[1]}</span></div>` +
     `<div class="kpi"><span class="lab">Shorts liquidáveis até +5% (est.)</span><span class="val pos">${usdCurto(S5)}</span><span class="note">${tot ? fmt(S5 / tot * 100) + '% acima · ' + fmt(L5 / tot * 100) + '% abaixo' : '—'}</span></div>` +
     `<div class="kpi"><span class="lab">Zonas em 2+ janelas</span><span class="val" style="font-size:15px">▲ ${fx2(za)}<br>▼ ${fx2(zb)}</span><span class="note">as mais perto do preço, em qualquer janela</span></div>`;
@@ -2105,6 +2140,12 @@ async function renderEstimado(t, L, px) {
     const y = y0 + i * rh, f = porPreco.get(preco);
     if (i % 4 === 0) svgEl('text', { x: x0 - 8, y: y + 9, 'text-anchor': 'end', class: 'ax' }, s, fmtPx(preco));
     if ((fortes[preco] || 0) >= 2) svgEl('rect', { x: x0 - 2, y, width: x1 - x0 - 196, height: rh, fill: 'none', stroke: 'var(--faint)', 'stroke-dasharray': '3 3', rx: 2 }, s);
+    const zM = [zMb, zMa].find(z => z && Math.round(z.preco / p) * p === preco);
+    if (zM) {
+      svgEl('rect', { x: x0 - 4, y: y - 1, width: x1 - x0 + 4, height: rh + 2, fill: zM.lado === 'abaixo' ? 'var(--down-soft)' : 'var(--up-soft)', stroke: zM.acesa ? 'var(--warn)' : zM.lado === 'abaixo' ? 'var(--down)' : 'var(--up)', 'stroke-width': zM.acesa ? 2.2 : 1.2, rx: 3 }, s);
+      svgEl('text', { x: x1 - 4, y: y + 9, 'text-anchor': 'end', class: 'ax', style: `fill:${zM.acesa ? 'var(--warn)' : zM.lado === 'abaixo' ? 'var(--down)' : 'var(--up)'};font-weight:600` }, s,
+        `${zM.lado === 'abaixo' ? '▼' : '▲'} maior${zM.p4 != null ? ' · 4 h ~' + pcz(zM.p4) : ''}${zM.acesa ? ' · ACESA' : ''}`);
+    }
     if (!f || f.long + f.short <= 0) return;
     const cor = preco > pxv ? 'var(--up)' : 'var(--down)', val = f.long + f.short;
     // tons: alavancagem baixa (forte), média, alta (clara)
@@ -2130,7 +2171,7 @@ Real (Hyperliquid, stops + liquidações): ${usdCurto(rv)}${(fortes[preco] || 0)
   svgEl('text', { x: x1 - we / 2, y: py + 4, 'text-anchor': 'middle', class: 'ax', style: 'fill:var(--fg);font-weight:600' }, s, etq);
   st.innerHTML = `<span class="chip acc">estimado · atualizado ${new Date(D.t).toLocaleTimeString('pt-BR')}</span>`;
 }
-setInterval(() => { if (!document.hidden && estAtual) renderEstimado(estAtual.t, estAtual.L, estAtual.px); }, 5 * 60e3);
+setInterval(() => { if (!document.hidden && estAtual) renderEstimado(estAtual.t, estAtual.L, estAtual.px); }, 60e3);   // modelo a cada 5 min (cache), fluxo a cada minuto
 
 /* ---------- Diário: compra x venda (separa o acerto das carteiras da direção do mercado) ---------- */
 function ladosCopiaHTML(sinais, mercado) {
