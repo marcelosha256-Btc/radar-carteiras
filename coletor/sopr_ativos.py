@@ -6,6 +6,13 @@ Só o Bitcoin tem o dado on-chain real (fase3.py). Para os outros, estimamos:
 Validação no BTC (3 anos, 08/10/2026): custo estimado com erro mediano de 2,4% e SOPR
 estimado com correlação 0,89 com o real, acertando o lado (lucro/prejuízo) em 87% dos dias.
 Os rótulos de comportamento usam as faixas do próprio ativo (percentis do SOPR estimado).
+
+Termômetro (14/11/2026): preço ÷ custo médio de quem comprou nos últimos 7, 30, 155 e 365 dias
+(média simples ponderada pelo volume), comparado com a própria história de 3 anos. No BTC, a coluna
+de 155 dias usa o custo on-chain real do curto prazo (bitview). Validação no BTC: a janela de 155
+dias estimada tem correlação 0,98 com o on-chain e pega 74% dos dias de "prejuízo extremo".
+Teste de previsão (6 moedas, desde 2017): "prejuízo extremo" não antecipou alta (BTC +2,9% em 30 d
+contra +2,4% de qualquer dia; ETH −12,7%; SOL −33,5%). É termômetro, não sinal.
 """
 import math
 import statistics as st
@@ -119,12 +126,71 @@ def calcular_ativo(hl, m, a, b, btc_real=None):
     for nv in niveis:
         nv["dist"] = nv["preco"] / preco - 1
     corte = max(0, len(ts) - 730)
-    return {"preco": preco, "sopr7": s7, "custo": c, "acima": preco / c - 1, "estimado": estimado, "fonte": fonte,
+    try:
+        termo = termometro(ts, barras, _onchain_btc() if m == "BTC" and btc_real else None)
+    except Exception as e:   # o termômetro nunca derruba o SOPR dos ativos
+        termo = {"erro": repr(e)[:200]}
+    return {"termometro": termo, "preco": preco, "sopr7": s7, "custo": c, "acima": preco / c - 1, "estimado": estimado, "fonte": fonte,
             "comportamento": comportamento(s7, p02, p10, p90, p98), "faixas": [p02, p10, p90, p98], "niveis": niveis,
             "dias": len(validos),
             "serie": {"datas": [time.strftime("%Y-%m-%d", time.gmtime(t)) for t in ts[corte:]],
                       "preco": [round(x, 6) for x in precos[corte:]],
                       "custo": [round(x, 6) if x else None for x in custo[corte:]]}}
+
+
+TERMO_JANELAS = (7, 30, 155, 365)
+TERMO_RECENTES = 120
+
+
+def _quantis(xs):
+    o = sorted(xs)
+    return [round(_quantil(o, k / 100), 5) for k in range(101)]
+
+
+def termometro(ts, barras, onchain=None):
+    """Para cada janela: custo (média ponderada pelo volume dos últimos N dias), percentis de preço÷custo
+    nos 3 anos e os últimos 120 dias de preço÷custo (para achar desde quando está no extremo)."""
+    precos = [x[0] for x in barras]
+    out = {}
+    for n in TERMO_JANELAS:
+        num = den = 0.0
+        razao, custo = [], None
+        for i, (c, vol, tip) in enumerate(barras):
+            num += vol * tip; den += vol
+            if i >= n:
+                num -= barras[i - n][1] * barras[i - n][2]; den -= barras[i - n][1]
+            custo = num / den if i >= n - 1 and den > 0 else None
+            razao.append(c / custo if custo else None)
+        fonte = "estimado"
+        if onchain and n == 155:
+            # BTC: custo real do curto prazo (on-chain) nos mesmos dias
+            mapa = onchain
+            razao = [mapa.get(t) for t in ts]
+            custo = precos[-1] / razao[-1] if razao[-1] else None
+            fonte = "on-chain"
+        hist = [r for r in razao[-JANELA:] if r is not None]
+        if len(hist) < 120 or not custo:
+            out[str(n)] = {"erro": f"histórico curto ({len(hist)} dias)"}
+            continue
+        out[str(n)] = {"custo": round(custo, 6), "q": _quantis(hist), "dias": len(hist), "fonte": fonte,
+                       "rec": [round(r, 5) if r else None for r in razao[-TERMO_RECENTES:]],
+                       "rec_fim": time.strftime("%Y-%m-%d", time.gmtime(ts[-1]))}
+    return out
+
+
+def _onchain_btc():
+    """preço ÷ custo on-chain do curto prazo do BTC, por dia (UTC), nos últimos ~3 anos."""
+    import calendar
+    import fase3
+    datas = fase3._serie(fase3.API.format("date", 1200))
+    preco = fase3._serie(fase3.API.format("price_close", 1200))
+    custo = fase3._serie(fase3.API.format("sth_realized_price", 1200))
+    out = {}
+    for d, p, c in zip(datas, preco, custo):
+        if d and p and c:
+            y, m, dd = map(int, d.split("-"))
+            out[calendar.timegm((y, m, dd, 0, 0, 0))] = p / c
+    return out
 
 
 def validar_no_btc(btc_est, sopr_btc):

@@ -65,6 +65,24 @@ p { margin: 0; }
 .chip.flat { background: var(--flat-soft); color: var(--flat); }
 .chip.warn { background: var(--warn-soft); color: var(--warn); }
 .chip.acc { background: var(--accent-soft); color: var(--accent); }
+/* termômetro de lucro e prejuízo */
+.tm-cel { display: grid; gap: 6px; min-width: 120px; }
+.tm-bar { position: relative; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--down) 0 5%, var(--down-soft) 5% 15%, var(--surface-2) 15% 85%, var(--up-soft) 85% 95%, var(--up) 95%); }
+.tm-bar i { position: absolute; top: -3px; width: 4px; height: 12px; border-radius: 2px; background: var(--fg); transform: translateX(-50%); box-shadow: 0 0 0 2px var(--surface); }
+.chip.tm-pe { background: var(--down); color: var(--surface); font-weight: 600; }
+.chip.tm-pa { background: var(--down-soft); color: var(--down); font-weight: 600; }
+.chip.tm-pl { color: var(--down); }
+.chip.tm-ll { color: var(--up); }
+.chip.tm-la { background: var(--up-soft); color: var(--up); font-weight: 600; }
+.chip.tm-le { background: var(--up); color: var(--surface); font-weight: 600; }
+td.tm-x { background: color-mix(in srgb, var(--down-soft) 55%, transparent); }
+td.tm-xl { background: color-mix(in srgb, var(--up-soft) 55%, transparent); }
+#termoTabela th:first-child, #termoTabela td:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+@media (max-width: 600px) {
+  .tm-cel { min-width: 104px; }
+  .tm-cel .chip { font-size: 11px; padding: 2px 7px; }
+  #termoTabela th, #termoTabela td { padding-left: 6px; padding-right: 6px; }
+}
 .demo { font-size: 12.5px; color: var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 8px 12px; }
 
 .info { font-size: 12.5px; color: var(--fg); background: var(--accent-soft); border-radius: 8px; padding: 8px 12px; }
@@ -577,6 +595,13 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
 
   <!-- SOPR -->
   <section class="panel" id="p-sopr" role="tabpanel" hidden>
+    <div class="box" id="termoBox" hidden>
+      <div class="box-head"><h2>Termômetro de lucro e prejuízo</h2><span class="chip" id="termoVivo"></span></div>
+      <p id="termoManchete" style="margin:0 0 10px"></p>
+      <p class="small muted" style="margin:0 0 6px">Colunas: o preço contra o custo médio de quem comprou nos últimos 7 dias, 30 dias, 155 dias e 1 ano.</p>
+      <div class="tbl-wrap"><table id="termoTabela"></table></div>
+      <p class="small muted" id="termoNota"></p>
+    </div>
     <div class="box">
       <div class="box-head"><h2>Visão geral: curto prazo em lucro ou prejuízo?</h2></div>
       <p class="small muted" id="soprVisaoNota"></p>
@@ -1697,6 +1722,7 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
 
   /* ---------- SOPR: visão geral dos 6 ativos, seletor e ativos estimados ---------- */
   const SA = DADOS.sopr_ativos;
+  termoSA = SA; renderTermometro();
   const corComp = c => /Capitula|Prejuízo forte/.test(c) ? 'var(--down)' : /prejuízo/.test(c) ? 'var(--warn)' : /extremo|forte/.test(c) ? 'var(--warn)' : 'var(--up)';
   const regimeTxt = t => { const R = (F2[t] || {}).regime; if (!R) return '—';
     const o = [['Alta', R.alta, 'var(--up)'], ['Lateral', R.lateral, 'var(--flat)'], ['Baixa', R.baixa, 'var(--down)']].sort((x, y) => y[1] - x[1])[0];
@@ -1881,6 +1907,71 @@ async function carregar(senhaDigitada) {
 }
 /* ---------- preço ao vivo, a cada 30 s, direto da Hyperliquid ---------- */
 /* ---------- chance de tocar as zonas (recalcula com o preço ao vivo) ---------- */
+/* ---------- termômetro: preço ÷ custo médio de quem comprou em 7, 30, 155 dias e 1 ano (recalcula com o preço ao vivo) ---------- */
+let termoSA = null;
+const TERMO_COL = [['7', '7 dias'], ['30', '30 dias'], ['155', '155 dias'], ['365', '1 ano']];
+function termoPct(q, r) {   // posição de r na própria história (q = percentis 0..100)
+  if (r <= q[0]) return 0;
+  if (r >= q[100]) return 1;
+  let i = 0;
+  while (q[i + 1] < r) i++;
+  return (i + (r - q[i]) / Math.max(q[i + 1] - q[i], 1e-12)) / 100;
+}
+function termoClasse(r, p) {
+  if (r < 1) return p < 0.05 ? ['prejuízo extremo', 'pe', -3] : p < 0.15 ? ['prejuízo alto', 'pa', -2] : ['prejuízo leve', 'pl', -1];
+  return p > 0.95 ? ['lucro extremo', 'le', 3] : p > 0.85 ? ['lucro alto', 'la', 2] : ['lucro leve', 'll', 1];
+}
+function renderTermometro() {
+  const box = document.getElementById('termoBox');
+  if (!box) return;
+  if (!termoSA || !termoSA.ativos || !Object.values(termoSA.ativos).some(A => A && A.termometro)) { box.hidden = true; return; }
+  box.hidden = false;
+  const vivo = !!ultimosMids, ext = [], altos = [];
+  const dBR = d => { const [a, m, dia] = d.split('-'); return `${dia}/${m}`; };
+  const linhas = Object.keys(CORES).map(t => {
+    const A = termoSA.ativos[t], T = A && A.termometro;
+    const nomeT = `<span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(${CORES[t]})"></span> <b>${t}</b>`;
+    if (!T || T.erro) return `<tr><td>${nomeT}</td><td colspan="4" class="muted small">${T ? T.erro : 'sem dados'}</td></tr>`;
+    const px = (ultimosMids && +ultimosMids[t]) || A.preco;
+    const cels = TERMO_COL.map(([n, nome]) => {
+      const c = T[n];
+      if (!c || c.erro) return `<td class="muted small">${c ? c.erro : '—'}</td>`;
+      const r = px / c.custo, p = termoPct(c.q, r), k = termoClasse(r, p);
+      let desde = '';
+      if (Math.abs(k[2]) >= 2) {
+        let j = c.rec.length - 1;
+        while (j >= 0 && c.rec[j] && termoClasse(c.rec[j], termoPct(c.q, c.rec[j]))[2] === k[2]) j--;
+        const ini = j + 1;
+        if (ini >= c.rec.length) desde = 'hoje';
+        else if (ini === 0) desde = `há mais de ${c.rec.length} dias`;
+        else {
+          const fim = Date.parse(c.rec_fim + 'T00:00:00Z'), dia = new Date(fim - (c.rec.length - 1 - ini) * 864e5).toISOString().slice(0, 10);
+          desde = dBR(dia);
+        }
+        (Math.abs(k[2]) === 3 ? ext : altos).push({ t, nome, desde, k });
+      }
+      return `<td class="${k[2] === -3 ? 'tm-x' : k[2] === 3 ? 'tm-xl' : ''}" title="${t} · custo médio de quem comprou em ${nome}: ${fmtPx(c.custo)} (${c.fonte === 'on-chain' ? 'on-chain real' : 'estimado pelo volume'})&#10;Preço ${fmtPx(px)} = ${pctTxt(r - 1, 1)} do custo · mais baixo que ${fmt((1 - p) * 100)}% dos dias dos últimos ${fmt(c.dias)}">
+        <div class="tm-cel"><span><span class="chip tm-${k[1]}">${k[0]}</span>${c.fonte === 'on-chain' ? ' <span class="chip acc" style="font-size:10.5px">on-chain</span>' : ''}</span>
+        <div class="tm-bar"><i style="left:${Math.max(1, Math.min(99, p * 100))}%"></i></div>
+        <span class="small muted">${pctTxt(r - 1, 1)} do custo${desde ? ` · desde ${desde}` : ''}</span></div></td>`;
+    }).join('');
+    return `<tr><td>${nomeT}<br><span class="small muted">${t === 'BTC' ? 'on-chain + estimado' : 'estimado'}</span></td>${cels}</tr>`;
+  });
+  document.getElementById('termoTabela').innerHTML = `<thead><tr><th>Ativo</th>${TERMO_COL.map(([, nome]) => `<th title="custo médio de quem comprou nos últimos ${nome}">${nome}</th>`).join('')}</tr></thead><tbody>${linhas.join('')}</tbody>`;
+  // agrupa por moeda e por nível: "BTC: prejuízo extremo em 7 dias (desde 13/11) e 30 dias (desde 13/11)"
+  const agrupar = lista => {
+    const g = new Map();
+    lista.forEach(x => { const ch = x.t + '|' + x.k[0]; if (!g.has(ch)) g.set(ch, { t: x.t, k: x.k, itens: [] }); g.get(ch).itens.push(x); });
+    return [...g.values()].map(G => `<b>${G.t}</b> <span class="chip tm-${G.k[1]}">${G.k[0]}</span> <span class="small">em ${G.itens.map(x => x.nome + (x.desde ? ` <span class="muted">(desde ${x.desde})</span>` : '')).join(' e ')}</span>`).join('<span class="muted"> · </span>');
+  };
+  const nc = new Set(ext.map(x => x.t)).size;
+  document.getElementById('termoManchete').innerHTML = ext.length
+    ? `<b>${ext.length} ${ext.length === 1 ? 'extremo' : 'extremos'} agora, em ${nc} ${nc === 1 ? 'moeda' : 'moedas'}:</b> ${agrupar(ext)}`
+    : `<b>Nenhum extremo agora.</b>${altos.length ? ` Em nível alto: ${agrupar(altos)}` : ''}`;
+  document.getElementById('termoVivo').textContent = vivo ? 'com o preço ao vivo' : 'fechamento de ontem';
+  document.getElementById('termoNota').innerHTML = `Cada célula compara o preço com o <b>custo médio de quem comprou</b> no período (média de preço ponderada pelo volume negociado), e a barra mostra onde isso está na história do próprio ativo nos últimos 3 anos: à esquerda, os momentos de maior prejuízo; à direita, os de maior lucro. Extremo = entre os 5% mais raros; alto = entre os 15%. No BTC, a coluna de 155 dias usa o custo <b>on-chain</b> real do curto prazo; o resto é estimado (no BTC, a estimativa de 155 dias bate 0,98 com o on-chain). ` +
+    `<b>É termômetro, não sinal:</b> testamos em 14/11/2026 e "prejuízo extremo" não antecipou alta (30 dias depois: BTC +2,9% contra +2,4% de qualquer dia; ETH −12,7%; SOL −33,5%; poucos casos). Prejuízo extremo quer dizer que o mercado está caindo, e muitas vezes continua.`;
+}
 let chanceAtual = null;
 const usdCurto = v => v >= 1e9 ? `US$ ${fmt(v / 1e9, 2)} bi` : v >= 1e6 ? `US$ ${fmt(v / 1e6, 1)} mi` : v >= 1e3 ? `US$ ${fmt(v / 1e3, 0)} mil` : `US$ ${fmt(v, 0)}`;
 function probToque(qs, x) {   // fração da história com excursão ≥ x (qs = quantis ordenados)
@@ -2218,6 +2309,7 @@ async function atualizarAoVivo(buscar) {
     lv.innerHTML = `· <b>agora ${fmtPx(v)}</b> (${d >= 0 ? '+' : ''}${fmt(d * 100, 1)}% desde a foto)`;
   }
   if (chanceAtual && ultimosMids[chanceAtual.t]) renderChance(+ultimosMids[chanceAtual.t]);
+  renderTermometro();
   const alv = document.getElementById('aLiqVivo');
   if (alv && aLiqAtual && ultimosMids[aLiqAtual.t]) {
     const v = +ultimosMids[aLiqAtual.t], d = v / aLiqAtual.px - 1;
