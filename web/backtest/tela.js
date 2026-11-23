@@ -28,6 +28,15 @@ const MODELOS = {
              alvos: [{ fracao: 50, tipo: 'risco', valor: 1, depois: 'break_even' }, { fracao: 25, tipo: 'risco', valor: 2, depois: 'alvo_anterior' }],
              tempo_max: 60 },
     posicao: { alavancagem: 3, tamanho: { tipo: 'risco', valor: 1 } } },
+  'Stormer: trap no 1-2-3 com estocástico sobrevendido': {
+    nome: 'Stormer: trap no 1-2-3', lado: 'compra',
+    entrada: { modo: 'E', condicoes: [
+      { ind: { nome: 'Trap123', janela: 10, validade: 3 }, op: '>', valor: 0.5 },
+      { ind: { nome: 'MinimoN', periodo: 10, de: { nome: 'Estocastico', periodo: 14, suavizacao: 3, linha: 'k' } }, op: '<', valor: 20 },
+      { ind: { nome: 'MME', periodo: 70 }, op: '>', valor: { ind: { nome: 'MME', periodo: 70 }, atras: 1 } }] },
+    gatilho: { tipo: 'rompimento', validade: 3, renovar: true },
+    saida: { stop: { tipo: 'minima_sinal' }, alvos: [{ fracao: 100, tipo: 'risco', valor: 2 }] },
+    posicao: { alavancagem: 1, tamanho: { tipo: 'caixa', valor: 100 } } },
   'IFR 2 sobrevendido em tendência de alta': {
     nome: 'IFR2 em tendência de alta', lado: 'compra',
     entrada: { modo: 'E', condicoes: [
