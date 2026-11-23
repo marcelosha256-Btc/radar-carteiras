@@ -28,6 +28,16 @@ const MODELOS = {
              alvos: [{ fracao: 50, tipo: 'risco', valor: 1, depois: 'break_even' }, { fracao: 25, tipo: 'risco', valor: 2, depois: 'alvo_anterior' }],
              tempo_max: 60 },
     posicao: { alavancagem: 3, tamanho: { tipo: 'risco', valor: 1 } } },
+  'Tendência (diário): Donchian 20, saída na mínima de 10 dias': {
+    nome: 'Tendência Donchian + mínima de 10 dias', lado: 'compra',
+    entrada: { modo: 'E', condicoes: [
+      { ind: { nome: 'preco', campo: 'fechamento' }, op: 'cruza_acima', valor: { ind: { nome: 'Donchian', periodo: 20, linha: 'superior' } } },
+      { ind: { nome: 'ADX', periodo: 14 }, op: '>', valor: 20 },
+      { ind: { nome: 'preco', campo: 'fechamento' }, op: '>', valor: { ind: { nome: 'MME', periodo: 50 } } }] },
+    gatilho: { tipo: 'abertura' },
+    saida: { sinal: { modo: 'E', condicoes: [{ ind: { nome: 'preco', campo: 'fechamento' }, op: '<', valor: { ind: { nome: 'Donchian', periodo: 10, linha: 'inferior' } } }] },
+             stop: { tipo: 'atr', valor: 3, periodo: 14 }, tempo_max: 400 },
+    posicao: { alavancagem: 3, tamanho: { tipo: 'risco', valor: 1 } } },
   'Stormer: trap no 1-2-3 com estocástico sobrevendido': {
     nome: 'Stormer: trap no 1-2-3', lado: 'compra',
     entrada: { modo: 'E', condicoes: [

@@ -972,7 +972,7 @@ function renderReal(DADOS) {
     renderSwing();
   }
   const W = DADOS.swing;
-  const nomeSetup = {};
+  const nomeSetup = { tendencia_donchian: 'Tendência: Donchian 20, saída na mínima de 10 dias (em observação)' };
   if (W) {
     W.ativos.forEach(a => (a.setups || []).forEach(s => { nomeSetup[s.id] = s.nome; }));
     montarSwing(W, '', { nome: a => a.t, cor: a => `var(${CORES[a.t]})`, fecha: 'o dia fechar (21h de Brasília)' });
