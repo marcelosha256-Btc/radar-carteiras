@@ -262,8 +262,9 @@ def limpar_url(url):
 
 
 class Banco:
-    def __init__(self, url=None):
-        url = limpar_url(url if url is not None else url_do_ambiente())
+    def __init__(self, url=None, caminho=None):
+        # caminho: força um arquivo SQLite específico (ex.: o histórico gravado no PC enquanto o Postgres está fora)
+        url = "" if caminho else limpar_url(url if url is not None else url_do_ambiente())
         self.pg = bool(url)
         if self.pg:
             libs = RAIZ / "libs"   # no PC o psycopg fica instalado na pasta do projeto
@@ -282,8 +283,9 @@ class Banco:
                 for tab, col, tipo in COLUNAS_NOVAS:   # bancos criados antes dessas colunas
                     cur.execute(f"ALTER TABLE {tab} ADD COLUMN IF NOT EXISTS {col} {tipo}")
         else:
-            CAMINHO.parent.mkdir(parents=True, exist_ok=True)
-            self.con = sqlite3.connect(CAMINHO, timeout=60)
+            arquivo = Path(caminho) if caminho else CAMINHO
+            arquivo.parent.mkdir(parents=True, exist_ok=True)
+            self.con = sqlite3.connect(arquivo, timeout=60)
             self.con.row_factory = sqlite3.Row
             self.con.executescript(ESQUEMA.replace("{ID}", "INTEGER PRIMARY KEY AUTOINCREMENT"))
             for tab, col, tipo in COLUNAS_NOVAS:
@@ -348,5 +350,5 @@ class Banco:
         self.commit()
 
 
-def conectar(url=None):
-    return Banco(url)
+def conectar(url=None, caminho=None):
+    return Banco(url, caminho)

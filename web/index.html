@@ -240,6 +240,16 @@ tr.avoid td { color: var(--muted); }
 .bt-cel.vazia { opacity: .45; }
 table.clicavel tbody tr:hover { background: var(--surface-2); }
 table.clicavel tbody tr.sel { background: var(--accent-soft); }
+/* lista de operações do Backtest no celular: cada linha vira um cartão (rótulo à esquerda, valor à direita) */
+@media (max-width: 600px) {
+  #btTabela thead { display: none; }
+  #btTabela, #btTabela tbody { display: block; }
+  #btTabela tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px 16px; padding: 10px 6px; width: 100%; box-sizing: border-box; border-bottom: 1px solid var(--line); }
+  #btTabela td { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border: 0; padding: 1px 0; text-align: right; white-space: normal; }
+  #btTabela td::before { content: attr(data-l); color: var(--muted); font-size: 12px; text-align: left; flex: none; }
+  #btTabela td:first-child { grid-column: 1 / -1; font-weight: 600; }
+  #btTabela td:nth-child(8) { grid-column: 1 / -1; }
+}
 /* cripto | ações */
 .modo { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
 .seg.grande button { font: 600 14px var(--f-body); padding: 7px 18px; }
