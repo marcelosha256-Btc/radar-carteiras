@@ -417,7 +417,7 @@ def registrar_e_acompanhar(hl, con, precos, agora):
             novos.append({"moeda": m, "lado": s["lado"], "nome": s["nome"], "entrada": px, "stop": stop, "alvo": alvo,
                           "n": s["n"], "acerto": s["acerto"], "mediana": s["mediana"], "media_fora": s["media_fora"]})
     fechados = []
-    for s in con.execute("SELECT * FROM sinais WHERE origem<>'copia' AND fechado_em IS NULL").fetchall():
+    for s in con.execute("SELECT * FROM sinais WHERE origem NOT IN ('copia', 'tendencia_donchian') AND fechado_em IS NULL").fetchall():
         long = s["lado"] == "long"
         risco = abs(s["preco_abertura"] - s["stop"])
         saida = None

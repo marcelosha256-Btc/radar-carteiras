@@ -245,6 +245,16 @@ def coletar(con):
     novos, fechados = fase4.registrar_e_acompanhar(hl, con, precos, agora)
     log(f"swing: {len(novos)} sinais novos no Diário · {len(fechados)} fechados")
     avisar_swing(novos, fechados)
+    try:   # tendência (Donchian 20, saída na mínima de 10 dias): em observação, sem alvo; um erro aqui não para a coleta
+        import tendencia_diario
+        nt, ft = tendencia_diario.registrar_e_acompanhar(hl, con, precos, agora)
+        log(f"tendência: {len(nt)} sinais novos no Diário · {len(ft)} fechados")
+        for x in nt:
+            avisar(f"Sinal de tendência (em observação): {x['moeda']} LONG", f"{tendencia_diario.NOME}. Entrada {_px(x['entrada'])} · stop {_px(x['stop'])} (3 ATR) · sem alvo: sai quando o dia fechar abaixo da mínima dos 10 dias anteriores. Só mede daqui para a frente; não é recomendação.", rotulo="sinal")
+        for x in ft:
+            avisar(f"Sinal de tendência encerrado: {x['moeda']} LONG por {x['motivo']} ({x['r']:+.2f}R)".replace(".", ","), f"Entrada {_px(x['entrada'])} · saída {_px(x['saida'])} · {x['retorno'] * 100:+.1f}% sem alavancagem, com custos.".replace(".", ","), rotulo="sinal")
+    except Exception:
+        log("ERRO na tendência (o resto segue normal)" + chr(10) + traceback.format_exc())
     log(f"painel: {gerar_painel.gerar(hl, con)}")
     con.kv_gravar("ultima_coleta", {"tempo": agora, "origem": "github" if NA_NUVEM else "pc"})
     registrar_execucao(con, "coleta", True, f"{(time.time() * 1000 - agora) / 1000:.0f} s")
