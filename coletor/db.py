@@ -181,6 +181,15 @@ CREATE TABLE IF NOT EXISTS acoes_swing_sinais (
   stop DOUBLE PRECISION, alvo DOUBLE PRECISION,
   fechado_em BIGINT, preco_fechamento DOUBLE PRECISION, retorno DOUBLE PRECISION, r DOUBLE PRECISION
 );
+CREATE TABLE IF NOT EXISTS candles (
+  coin TEXT, "interval" TEXT, ts BIGINT,   -- candles fechados da Hyperliquid para o backtest (historico_hl.py)
+  o DOUBLE PRECISION, h DOUBLE PRECISION, l DOUBLE PRECISION, c DOUBLE PRECISION, v DOUBLE PRECISION,
+  PRIMARY KEY (coin, "interval", ts)
+);
+CREATE TABLE IF NOT EXISTS funding (
+  coin TEXT, ts BIGINT, rate DOUBLE PRECISION,   -- funding da Hyperliquid, taxa por hora
+  PRIMARY KEY (coin, ts)
+);
 CREATE TABLE IF NOT EXISTS binance_oi (
   moeda TEXT, t BIGINT,             -- open interest de 5 min da Binance (ela só guarda 30 dias); gravado pelo PC
   contratos DOUBLE PRECISION, valor DOUBLE PRECISION,
