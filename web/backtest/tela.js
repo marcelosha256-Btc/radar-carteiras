@@ -138,12 +138,14 @@ async function fundingHL(coin, desde, aviso) {
   return pts;
 }
 const memo = new Map();
+let bancoFora = 0;   // até quando não vale a pena perguntar ao banco do radar (ms)
 async function doBanco(coin, iv, comFunding) {
   // banco do radar (histórico mais longo, gravado todo dia); fora do ar ou sem senha → segue só com a Hyperliquid
   try {
     let senha = ''; try { senha = localStorage.getItem('radar-senha') || ''; } catch (e) {}
+    if (!senha || Date.now() < bancoFora) return null;   // sem senha o banco recusa (401): nem pergunta
     const r = await fetch(`api/historico?coin=${coin}&intervalo=${iv}${comFunding ? '' : '&sem_funding=1'}`, { headers: { 'x-senha': senha } });
-    if (!r.ok) return null;
+    if (!r.ok) { bancoFora = Date.now() + 10 * 60e3; return null; }   // senha errada ou banco em pausa: não insiste por 10 min
     const j = await r.json();
     return { V: j.candles.map(x => ({ t: x[0], o: x[1], h: x[2], l: x[3], c: x[4], v: x[5] })), F: j.funding || [] };
   } catch (e) { return null; }
@@ -313,10 +315,10 @@ function desenharResultado(X) {
       <p class="small muted" id="btJanelaTxt"></p></div>
     <div class="box"><div class="box-head"><h2>Lista de operações</h2><span class="small muted">${T.length > 500 ? 'as 500 mais recentes' : `${T.length} operações`}</span></div>
       <div class="tbl-wrap" style="max-height:420px;overflow:auto"><table class="clicavel" id="btTabela"><thead><tr><th>#</th><th>Entrada (UTC)</th><th class="n">Preço</th><th>Saída</th><th class="n">Preço</th><th>Motivo</th><th class="n">Candles</th><th class="n">Resultado</th><th class="n">R</th><th class="n">Taxas</th><th class="n">Funding</th></tr></thead><tbody>
-      ${T.slice(-500).reverse().map(t => `<tr data-n="${t.n}" style="cursor:pointer"><td class="muted">${t.n}</td><td>${quando(t.t_entrada)}</td><td class="n">${preco(t.entrada)}</td>
-        <td>${quando(t.t_saida)}</td><td class="n">${preco(t.saida)}</td><td><span class="chip ${t.motivo.startsWith('alvo') ? 'up' : t.motivo === 'stop' || t.motivo === 'liquidação' ? 'down' : ''}">${t.motivo}</span>${t.parciais && !t.motivo.startsWith('alvo') ? ` <span class="small muted">${t.parciais} parcial(is)</span>` : ''}</td>
-        <td class="n">${t.candles}</td><td class="n ${cls(t.pnl)}"><b>${usd(t.pnl, true)}</b> <span class="small">${pct(t.ret)}</span></td>
-        <td class="n">${num(t.r, 2)}</td><td class="n">${usd(t.taxas)}</td><td class="n">${usd(t.funding)}</td></tr>`).join('')}
+      ${T.slice(-500).reverse().map(t => `<tr data-n="${t.n}" style="cursor:pointer"><td class="muted" data-l="Operação">#${t.n}</td><td data-l="Entrada">${quando(t.t_entrada)}</td><td class="n" data-l="Preço ent.">${preco(t.entrada)}</td>
+        <td data-l="Saída">${quando(t.t_saida)}</td><td class="n" data-l="Preço saída">${preco(t.saida)}</td><td data-l="Motivo"><span class="chip ${t.motivo.startsWith('alvo') ? 'up' : t.motivo === 'stop' || t.motivo === 'liquidação' ? 'down' : ''}">${t.motivo}</span>${t.parciais && !t.motivo.startsWith('alvo') ? ` <span class="small muted">${t.parciais} parcial(is)</span>` : ''}</td>
+        <td class="n" data-l="Candles">${t.candles}</td><td class="n ${cls(t.pnl)}" data-l="Resultado"><b>${usd(t.pnl, true)}</b> <span class="small">${pct(t.ret)}</span></td>
+        <td class="n" data-l="R">${num(t.r, 2)}</td><td class="n" data-l="Taxas">${usd(t.taxas)}</td><td class="n" data-l="Funding">${usd(t.funding)}</td></tr>`).join('')}
       </tbody></table></div></div>
     <div class="box"><div class="box-head"><h2>Monte Carlo: e se a ordem das operações fosse outra?</h2></div>
       ${mc ? `<div class="kpis">

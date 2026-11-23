@@ -258,6 +258,12 @@ def main():
     if local:
         TRAVA.write_text(str(os.getpid()))
     con = None
+    if local:   # histórico no PC: roda antes de abrir o banco da nuvem, que pode estar fora (cota do Neon)
+        try:
+            import historico_local
+            historico_local.rotina()
+        except Exception:
+            log("ERRO no histórico local (a coleta segue normal)" + chr(10) + traceback.format_exc())
     try:
         con = conectar()
         coletar(con)
