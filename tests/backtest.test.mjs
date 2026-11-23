@@ -249,6 +249,38 @@ test('sem olhar o futuro: cortar os dados não muda nenhum valor nem operação 
   fechadas.forEach((t, k) => { perto(t.pnl, cheio[k].pnl, 1e-9); assert.equal(t.t_entrada, cheio[k].t_entrada); });
 });
 
+/* ================= Trap no 1-2-3 (setup do Stormer) ================= */
+// 1-2-3 nos candles 0-1-2 (fundo 9), trap no 4 (perde 9), trap mais fundo no 5; o 1-2-3 do candle 6 é ignorado
+const trapV = () => [
+  vela(0, 10.5, 11, 10, 10.5), vela(1, 10, 10, 9, 9.5), vela(2, 9.6, 10.5, 9.5, 10.2), vela(3, 10.1, 10.2, 9.2, 9.4),
+  vela(4, 9.3, 9.8, 8.8, 9.0), vela(5, 9.0, 9.5, 8.5, 9.2), vela(6, 8.9, 9.7, 8.7, 9.6), vela(7, 9.6, 10.5, 9.5, 10.4)];
+
+test('Trap123 marca o candle que perde o fundo do 1-2-3 (e o trap mais fundo); MinimoN', () => {
+  assert.deepEqual(calcularIndicador({ nome: 'Trap123', janela: 10, validade: 3 }, trapV()), [null, null, 0, 0, 1, 1, 0, 0]);
+  assert.deepEqual(calcularIndicador({ nome: 'Trap123', janela: 1, validade: 3 }, trapV()), [null, null, 0, 0, 0, 0, 0, 0]);   // passou do prazo
+  const m = calcularIndicador({ nome: 'MinimoN', periodo: 2, de: { nome: 'preco', campo: 'minima' } }, trapV());
+  assert.deepEqual(m.slice(0, 4), [null, 9, 9, 9.2]);
+});
+
+test('rompimento com "renovar": a ordem acompanha o trap mais fundo', () => {
+  const E = renovar => ({ lado: 'compra', entrada: { condicoes: [{ ind: { nome: 'Trap123' }, op: '>', valor: 0.5 }] },
+    gatilho: { tipo: 'rompimento', validade: 3, renovar }, saida: { stop: { tipo: 'minima_sinal' } },
+    posicao: { alavancagem: 1, tamanho: { tipo: 'caixa', valor: 100 } } });
+  const a = rodar(E(true), trapV()).trades[0];
+  perto(a.entrada, 9.5); perto(a.stop, 8.5); assert.equal(a.i_entrada, 6);     // máxima do candle 5, no candle 6
+  const b = rodar(E(false), trapV()).trades[0];
+  perto(b.entrada, 9.8); perto(b.stop, 8.8); assert.equal(b.i_entrada, 7);     // fica na máxima do candle 4
+});
+
+test('candle do rompimento: conservador = stop se a mínima tocou; otimista = mínima veio antes, stop só pelo fechamento', () => {
+  const E = estr({ gatilho: { tipo: 'rompimento', validade: 1 } });
+  const V = [...base(), vela(2, 101, 130, 96, 120)];                          // entra em 101,5; stop 96,425; alvo 111,65
+  assert.equal(rodar(E, V).trades[0].motivo, 'stop');
+  assert.equal(rodar(E, V, { intrabar: 'otimista' }).trades[0].motivo, 'alvo 1');
+  const fecha = rodar(E, [...base(), vela(2, 101, 103, 95, 95.5)], { intrabar: 'otimista' }).trades[0];
+  assert.equal(fecha.motivo, 'stop'); perto(fecha.saida, 101.5 * 0.95);       // fechou abaixo do stop: o stop pegou
+});
+
 /* ================= métricas e estatística ================= */
 test('maior queda e retorno', () => {
   const m = metricas({ trades: [], curva: [120, 90, 130].map((eq, i) => ({ t: (i + 1) * 86_400_000, eq })),

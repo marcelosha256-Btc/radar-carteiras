@@ -194,6 +194,25 @@ function obv(V) {
   return out;
 }
 
+/** Trap no 1-2-3 de fundo (setup do Stormer): marca 1 no candle que perde a mínima do último 1-2-3.
+ *  1-2-3 = candle do meio com mínima abaixo dos vizinhos (confirmado no 3º candle). O trap vale se acontecer em até
+ *  `janela` candles depois do 1-2-3; uma mínima ainda menor dentro desse prazo vira o novo trap. Depois de um trap,
+ *  novos 1-2-3 são ignorados até ele vencer (`validade` candles), como no script do TradingView. */
+function trap123(V, janela, validade) {
+  const out = nulos(V.length);
+  let fundo = null, pat = null, trap = null, trapMin = null;
+  for (let i = 2; i < V.length; i++) {
+    out[i] = 0;
+    if (trap != null && i - trap >= validade) { fundo = pat = trap = trapMin = null; }
+    if (trap == null && pat != null && i - pat > janela) { fundo = pat = null; }
+    if (trap == null && V[i - 1].l < V[i - 2].l && V[i - 1].l < V[i].l) { fundo = V[i - 1].l; pat = i; }
+    if (fundo != null && i > pat && i - pat <= janela && V[i].l < fundo && (trapMin == null || V[i].l < trapMin)) {
+      trapMin = V[i].l; trap = i; out[i] = 1;
+    }
+  }
+  return out;
+}
+
 function fvg(V, linha) {
   // gap de valor justo de 3 candles: alta quando a máxima de i−2 fica abaixo da mínima de i; baixa ao contrário
   return V.map((x, i) => i < 2 ? null : linha === 'baixa' ? (V[i - 2].l > x.h ? 1 : 0) : (V[i - 2].h < x.l ? 1 : 0));
@@ -222,6 +241,9 @@ export const INDICADORES = {
   Maxima: 'periodo — máxima dos N candles ANTERIORES (sem o atual)',
   Minima: 'periodo — mínima dos N candles ANTERIORES (sem o atual)',
   FVG: 'linha: alta | baixa — 1 quando há gap de 3 candles (preparado para a Fase 2)',
+  Trap123: 'janela (10), validade (3) — 1 no candle que perde a mínima do último 1-2-3 de fundo (setup do Stormer)',
+  MinimoN: 'periodo, de: INDICADOR — menor valor do indicador nos últimos N candles, com o atual',
+  MaximoN: 'periodo, de: INDICADOR — maior valor do indicador nos últimos N candles, com o atual',
 };
 // Fase 2 (estrutura de mercado): entram aqui como novos casos de calcularIndicador, usando topos/fundos (pivôs)
 // numa janela de 30 candles: BOS (rompe o último topo/fundo a favor), ChoCH (rompe contra), divergências de IFR/MACD.
@@ -277,6 +299,17 @@ export function calcularIndicador(spec, V) {
     case 'Minima': return janelaExtremos(V, spec.periodo || 20, false).ll;
     case 'VWAP': return vwapDiario(V);
     case 'FVG': return fvg(V, linha);
+    case 'Trap123': return trap123(V, spec.janela ?? 10, spec.validade ?? 3);
+    case 'MinimoN': case 'MaximoN': {
+      if (!spec.de) throw new Error(`${nome} precisa de "de": { "nome": ... } (o indicador de origem)`);
+      const x = calcularIndicador(spec.de, V), n = spec.periodo || 10, out = nulos(V.length), menor = nome === 'MinimoN';
+      for (let i = n - 1; i < V.length; i++) {
+        let m = menor ? Infinity : -Infinity, ok = true;
+        for (let j = i - n + 1; j <= i; j++) { if (x[j] == null) { ok = false; break; } m = menor ? Math.min(m, x[j]) : Math.max(m, x[j]); }
+        if (ok) out[i] = m;
+      }
+      return out;
+    }
     default:
       if (FASE2.includes(nome)) throw new Error(`${nome} chega na Fase 2`);
       throw new Error(`Indicador desconhecido: ${nome}. Disponíveis: ${Object.keys(INDICADORES).join(', ')}`);
@@ -392,6 +425,7 @@ function normalizar(E, ativo) {
  * @param V   candles [{t,o,h,l,c,v}] em ordem, t = abertura em ms
  * @param opc { ativo, intervalo, funding: [{t, r}] (taxa por hora), capital, custos,
  *              refino: [{ intervalo: '5m', velas: [...] }, ...] candles menores para desempatar stop × alvo,
+ *              intrabar: 'conservador' (padrão) | 'otimista' — só para medir quanto a regra do candle do rompimento pesa,
  *              maior: { intervalo: '1d', velas: [...] } candles do tempo gráfico maior (se faltar, agrega os de V) }
  */
 export function rodarBacktest(E, V, opc = {}) {
@@ -543,19 +577,21 @@ export function rodarBacktest(E, V, opc = {}) {
   /* Um trecho de preço (o candle inteiro ou um candle menor do refino). Devolve true se a posição acabou.
    * Ordem dentro do trecho: caminho adverso primeiro (stop/liquidação); se tocou o stop, os alvos do mesmo trecho
    * não valem (conservador). `podeAlvo` = false no candle em que o rompimento foi executado. */
-  function trecho(b, podeAlvo, tFim) {
+  function trecho(b, podeAlvo, tFim, favoravelPrimeiro = false) {
     const adv = side === 1 ? b.l : b.h, fav = side === 1 ? b.h : b.l, abre = b.o;
     const alem = (px, nivel) => side === 1 ? px <= nivel : px >= nivel;
     const niveis = [{ px: pos.liq, tipo: 'liq' }];
     if (pos.stop != null) niveis.push({ px: pos.stop, tipo: 'stop' });
     niveis.sort((x, y) => side === 1 ? y.px - x.px : x.px - y.px);
     const nv = niveis[0], meio = b.t + (tFim - b.t) / 2;
-    if (alem(adv, nv.px)) {
+    const adverso = () => {
+      if (!alem(adv, nv.px)) return false;
       const motivo = S.stop && S.stop.tipo === 'trailing' && pos.stop !== pos.stop0 ? 'trailing' : pos.be ? 'break-even' : 'stop';
       if (nv.tipo === 'liq' || alem(abre, pos.liq)) executar(pos.liq, pos.qtd, 'liquidação', false, alem(abre, nv.px) ? b.t : meio);
       else executar(alem(abre, nv.px) ? abre : nv.px, pos.qtd, motivo, false, alem(abre, nv.px) ? b.t : meio);
       return true;
-    }
+    };
+    if (!favoravelPrimeiro && adverso()) return true;
     if (podeAlvo) {
       pos.alvos.forEach((a, k) => {
         if (a.feito || pos.qtd <= 0) return;
@@ -568,6 +604,7 @@ export function rodarBacktest(E, V, opc = {}) {
       });
       if (pos.qtd <= 0) return true;
     }
+    if (favoravelPrimeiro && adverso()) return true;
     return false;
   }
 
@@ -596,7 +633,12 @@ export function rodarBacktest(E, V, opc = {}) {
       if (pos.proxStop != null) { pos.stop = pos.proxStop; pos.proxStop = null; }   // break-even/trailing do candle anterior
       const noRompimento = pos.rompimento && j === pos.j0;
       let acabou;
-      if (!noRompimento && tocaAdverso(c) && tocaAlvo(c)) {
+      if (noRompimento && opc.intrabar === 'otimista') {
+        // cenário otimista (só para medir o efeito da regra conservadora): no candle da execução, a mínima veio ANTES
+        // do rompimento; depois o preço foi à máxima e terminou no fechamento. Stop só se o fechamento passou dele.
+        const b = side === 1 ? { t: c.t, o: pos.ent, h: c.h, l: c.c, c: c.c } : { t: c.t, o: pos.ent, h: c.c, l: c.l, c: c.c };
+        acabou = trecho(b, true, fimT, true);
+      } else if (!noRompimento && tocaAdverso(c) && tocaAlvo(c)) {
         // empate dentro do candle: candles menores decidem; sem eles, vale o stop
         empates.total++;
         const sub = subvelas(c.t);
@@ -636,7 +678,8 @@ export function rodarBacktest(E, V, opc = {}) {
 
     // 3) sinal de entrada no fechamento deste candle
     const sinal = sinalEntrada(j);
-    if (!pos && !pend && sinal && caixa > 0) {
+    // "renovar": um sinal novo enquanto a ordem de rompimento espera troca a ordem por ele (ex.: trap com mínima menor)
+    if (!pos && sinal && caixa > 0 && (!pend || (gat === 'rompimento' && (E.gatilho || {}).renovar))) {
       const tDec = fimT;
       if (!passaHorario(tDec) || !passaMaior(tDec)) ignorados.filtro++;
       else if (gat === 'fechamento') abrir(j, j + 1, c.c, fimT, j);
