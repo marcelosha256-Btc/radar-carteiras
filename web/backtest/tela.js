@@ -47,6 +47,18 @@ const MODELOS = {
     gatilho: { tipo: 'rompimento', validade: 3, renovar: true },
     saida: { stop: { tipo: 'minima_sinal' }, alvos: [{ fracao: 100, tipo: 'risco', valor: 2 }] },
     posicao: { alavancagem: 1, tamanho: { tipo: 'caixa', valor: 100 } } },
+  'Pullback a favor da tendência (4H, filtro diário, stop estrutural)': {
+    // Setup do diário de operações. Teste em 24/11/2026 (cripto, 4H, de ago/2024 a nov/2026): sem vantagem mensurável. Use o gráfico de 4H.
+    nome: 'Pullback 4H + tendência diária', lado: 'compra',
+    entrada: { modo: 'E', condicoes: [
+      { ind: { nome: 'preco', campo: 'fechamento' }, op: 'cruza_acima', valor: { ind: { nome: 'MME', periodo: 21 } } }] },
+    filtros: { maior: { intervalo: '1d', modo: 'E', condicoes: [
+      { ind: { nome: 'preco', campo: 'fechamento' }, op: '>', valor: { ind: { nome: 'MME', periodo: 100 } } },
+      { ind: { nome: 'MME', periodo: 50 }, op: '>', valor: { ind: { nome: 'MME', periodo: 100 } } }] } },
+    gatilho: { tipo: 'abertura' },
+    saida: { stop: { tipo: 'estrutura', periodo: 12, folga_atr: 0.25, min_atr: 1, max_atr: 3.5 },
+             alvos: [{ fracao: 50, tipo: 'risco', valor: 1.5, depois: 'break_even' }, { fracao: 50, tipo: 'risco', valor: 3 }], tempo_max: 60 },
+    posicao: { alavancagem: 3, tamanho: { tipo: 'risco', valor: 1 } } },
   'IFR 2 sobrevendido em tendência de alta': {
     nome: 'IFR2 em tendência de alta', lado: 'compra',
     entrada: { modo: 'E', condicoes: [
@@ -450,7 +462,9 @@ function ajuda() {
     "stop":   { "tipo": "percentual", "valor": 2 }                         % da entrada
             | { "tipo": "atr", "valor": 2, "periodo": 14 }                 múltiplo do ATR do candle sinal
             | { "tipo": "trailing", "valor": 3 }                           % abaixo da melhor máxima (acima da melhor mínima)
-            | { "tipo": "minima_sinal" },                                  mínima (compra) ou máxima (venda) do candle sinal
+            | { "tipo": "minima_sinal" }                                   mínima (compra) ou máxima (venda) do candle sinal
+            | { "tipo": "estrutura", "periodo": 12, "folga_atr": 0.25,
+                "min_atr": 1, "max_atr": 3.5 },                            mínima dos últimos N candles menos folga em ATR, limitada entre min_atr e max_atr
     "alvos": [ { "fracao": 50, "tipo": "risco" | "percentual", "valor": 1, "depois": "break_even" | "alvo_anterior" | "nenhuma" }, ... ]
                                     até 5; "fracao" = % da posição; o que sobrar segue para stop, sinal ou tempo
     "break_even": { "gatilho_r": 1 } ou { "gatilho_pct": 2 },

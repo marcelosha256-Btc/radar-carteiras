@@ -305,6 +305,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
   <div class="tabs-scroll">
     <nav class="tabs" role="tablist" aria-label="Seções do radar">
       <button class="tab" role="tab" data-modo="cripto" data-tab="hoje">Hoje</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="trades">Meu diário</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="resumo">Resumo</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="carteiras">Carteiras</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="fluxo">Fluxo e alertas</button>
@@ -316,6 +317,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <button class="tab" role="tab" data-modo="cripto" data-tab="swing">Swing trade</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="backtest">Backtest</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-hoje" hidden>Hoje</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-trades" hidden>Meu diário</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-resumo" hidden>Resumo</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-carteiras" hidden>Carteiras</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-fluxo" hidden>Fluxo e alertas</button>
@@ -329,8 +331,12 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
   </div>
 
   <!-- HOJE (cripto e ações: a mesma tela, cada modo abre com o seu filtro) -->
-  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="hojeCripto"><p class="muted">Aguardando os dados do painel…</p></div></section>
-  <section class="panel" id="p-a-hoje" role="tabpanel" hidden><div class="hoje" id="hojeAcoes"><p class="muted">Aguardando os dados do painel…</p></div></section>
+  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="posCripto" style="margin-bottom:16px"></div><div class="hoje" id="hojeCripto"><p class="muted">Aguardando os dados do painel…</p></div></section>
+  <section class="panel" id="p-a-hoje" role="tabpanel" hidden><div class="hoje" id="posAcoes" style="margin-bottom:16px"></div><div class="hoje" id="hojeAcoes"><p class="muted">Aguardando os dados do painel…</p></div></section>
+
+  <!-- MEU DIÁRIO DE OPERAÇÕES (em R) -->
+  <section class="panel" id="p-trades" role="tabpanel" hidden><div class="hoje" id="diarioCripto"></div></section>
+  <section class="panel" id="p-a-trades" role="tabpanel" hidden><div class="hoje" id="diarioAcoes"></div></section>
 
   <!-- AÇÕES: RESUMO -->
   <section class="panel" id="p-a-resumo" role="tabpanel" hidden>
@@ -2816,3 +2822,5 @@ conectarLiquidacoes();
 </script>
 <script type="module" src="backtest/tela.js"></script>
 <script type="module" src="aovivo/aovivo.js"></script>
+<script type="module" src="diario/tela.js"></script>
+<script type="module" src="posicoes/tela.js"></script>

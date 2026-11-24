@@ -302,3 +302,24 @@ test('permutação: grupos muito diferentes dão p pequeno; grupos iguais dão p
   const iguais = Array.from({ length: 40 }, (_, i) => ({ ret: i % 2 ? 0.01 : -0.01, hora: i < 20 ? 0 : 1 }));
   perto(permutacao(iguais, 'hora', { rodadas: 500 }).p, 1, 1e-9);
 });
+
+/* ================= stop estrutural ================= */
+test('stop "estrutura": mínima dos últimos N candles menos folga em ATR, limitado entre min_atr e max_atr', () => {
+  // candles de 99–101 (ATR 2 constante). A entrada é na abertura do candle seguinte ao sinal (100).
+  const base = () => Array.from({ length: 30 }, (_, i) => vela(i, 100, 101, 99, 100));
+  const E = st => ({ lado: 'compra', entrada: { condicoes: [{ ind: { nome: 'preco', campo: 'fechamento' }, op: '>', valor: 0 }] },
+    gatilho: { tipo: 'abertura' }, saida: { stop: { tipo: 'estrutura', periodo: 5, ...st } },
+    posicao: { alavancagem: 1, tamanho: { tipo: 'risco', valor: 1 } } });
+  const stopDe = (st, V) => rodar(E(st), V).trades[0].stop;
+  // mínima 99 + folga 0,5 = distância 1,5; o piso de 1 ATR (2) vale → stop 98
+  perto(stopDe({}, base()), 98);
+  // vela de mínima 95 (amplitude 6) puxa o ATR para 32/14: distância 5 + 0,25 × ATR, dentro de 1 a 3,5 ATR
+  const V1 = base(); V1[12] = vela(12, 100, 101, 95, 100);
+  perto(stopDe({}, V1), 100 - (5 + 0.25 * 32 / 14));
+  // mínima 80 (amplitude 21): ATR = 47/14 e a distância (20,8) passa do teto de 3,5 ATR → stop a 3,5 ATR
+  const V2 = base(); V2[12] = vela(12, 100, 101, 80, 100);
+  perto(stopDe({}, V2), 100 - 3.5 * 47 / 14);
+  // a mínima só conta dentro da janela: a vela 3 já saiu da janela de 5 (só o ATR sente: 47/14), então vale o piso de 1 ATR
+  const V3 = base(); V3[3] = vela(3, 100, 101, 80, 100);
+  perto(stopDe({}, V3), 100 - 47 / 14);
+});
