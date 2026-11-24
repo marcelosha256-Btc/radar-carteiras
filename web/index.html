@@ -274,6 +274,13 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
 .hoje .hj-mini { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
 .hoje .hj-out { display: grid; gap: 8px; }
 .hoje td .facts { display: flex; flex-wrap: wrap; gap: 4px; }
+.hoje .hj-calc .hj-form { margin-bottom: 4px; }
+.hoje .hj-calc table td:last-child, .hoje .hj-calc table th:last-child { text-align: right; }
+.hoje .hj-calc .grid-2 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); }
+.hoje .hj-acoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.hoje .hj-btn.sec { background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); }
+.hoje .hj-btn:disabled { opacity: .6; cursor: wait; }
+.hoje .hj-sug { flex: 1 1 280px; }
 </style>
 
 <div class="wrap">
@@ -1978,7 +1985,7 @@ function hojeMontar(root, modo) {
   const D = DADOS_HOJE;
   if (!D) { root.innerHTML = '<p class="muted">Aguardando os dados do painel…</p>'; return; }
   const filtro = HJ.ler('filtro-' + modo, modo === 'acoes' ? 'acoes' : 'cripto');
-  const obs = HJ.ler('obs', []), chk = hojeChecklist(), calc = HJ.ler('calc', { cap: '', risco: '0.5', lev: '3', ativo: '', entrada: '', stop: '' });
+  const obs = HJ.ler('obs', []), chk = hojeChecklist(), calc = hojeCfg();
   const plano = HJ.ler('plano', []);
   const L = hojeLinhas(D);
   const btc = D.ativos.find(a => a.t === 'BTC');
@@ -2019,7 +2026,7 @@ function hojeMontar(root, modo) {
 
   const heat = g => plano.filter(p => !g || p.grupo === g).reduce((s, p) => s + p.risco, 0);
   const capNum = +calc.cap || 0, pct = v => capNum ? fmt(v / capNum * 100, 2) + '%' : '—';
-  const planoHtml = plano.length ? plano.map((p, i) => `<tr><td><b>${p.ativo}</b> <span class="${p.lado === 'compra' ? 'pos' : 'neg'}">${p.lado}</span></td><td>US$ ${fmt(p.risco, 0)}</td>
+  const planoHtml = plano.length ? plano.map((p, i) => `<tr><td><b>${p.ativo}</b> <span class="${p.lado === 'compra' ? 'pos' : 'neg'}">${p.lado}</span>${p.tf ? ` <span class="muted small">${p.tf}</span>` : ''}</td><td>US$ ${fmt(p.risco, 0)}</td>
       <td>US$ ${fmt(p.notional, 0)}</td><td><button class="hj-link" data-act="plano-rm" data-i="${i}">remover</button></td></tr>`).join('')
     : '<tr><td colspan="4" class="muted">Nenhuma operação planejada para hoje.</td></tr>';
   const heatTot = heat(), limite = capNum * 0.05;
@@ -2038,20 +2045,50 @@ function hojeMontar(root, modo) {
         <tbody>${linhasHtml || '<tr><td colspan="10" class="muted">Nenhum ativo neste filtro.</td></tr>'}</tbody></table></div>
     </div>
 
-    <div class="grid-2">
-      <div class="box hj-calc">
-        <div class="box-head"><h2>Calculadora de risco</h2><p>Tamanho sai do stop, não da vontade.</p></div>
-        <div class="hj-form">
-          <label>Capital (US$)<input data-k="cap" inputmode="decimal" value="${calc.cap}"></label>
+    <div class="box hj-calc">
+      <div class="box-head"><h2>Calculadora de risco</h2><p>O tamanho sai do stop e já desconta taxas, derrapagem e funding. Os limites de risco são regras sugeridas: ajuste ao seu plano.</p></div>
+      <h3 class="hj-sub">Conta</h3>
+      <div class="hj-form">
+          <label>Capital atual (US$)<input data-k="cap" inputmode="decimal" value="${calc.cap}"></label>
+          <label>Pico do capital (US$, opcional)<input data-k="pico" inputmode="decimal" value="${calc.pico}"></label>
           <label>Risco por operação (%)<input data-k="risco" inputmode="decimal" value="${calc.risco}"></label>
+      </div>
+      <h3 class="hj-sub">Operação</h3>
+      <div class="hj-form">
           <label>Ativo<select data-k="ativo" class="hj-ativo"><option value="">—</option>${opt}</select></label>
-          <label>Alavancagem na corretora<input data-k="lev" inputmode="decimal" value="${calc.lev}"></label>
+          <label>Lado<select data-k="lado"><option value="" ${!calc.lado ? 'selected' : ''}>automático (pelo stop)</option><option value="compra" ${calc.lado === 'compra' ? 'selected' : ''}>compra</option><option value="venda" ${calc.lado === 'venda' ? 'selected' : ''}>venda</option></select></label>
+          <label>Tempo gráfico<select data-k="tf">${[['1h', '1H'], ['4h', '4H'], ['1d', 'Diário'], ['1w', 'Semanal']].map(([v, n]) => `<option value="${v}" ${calc.tf === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <label>Entrada<input data-k="entrada" inputmode="decimal" value="${calc.entrada}"></label>
           <label>Stop<input data-k="stop" inputmode="decimal" value="${calc.stop}"></label>
-        </div>
-        <div class="hj-out"></div>
-        <button class="hj-btn" data-act="plano-add">Adicionar ao plano do dia</button>
+          <label>Alvo 1<input data-k="alvo1" inputmode="decimal" value="${calc.alvo1}"></label>
+          <label>% fechado no alvo 1<input data-k="pct1" inputmode="decimal" value="${calc.pct1}"></label>
+          <label>Alvo 2 (opcional)<input data-k="alvo2" inputmode="decimal" value="${calc.alvo2}"></label>
+          <label>Alavancagem na corretora<input data-k="lev" inputmode="decimal" value="${calc.lev}"></label>
+          <label>Alavancagem máxima do ativo<input data-k="maxlev" inputmode="decimal" value="${calc.maxlev}" placeholder="auto"></label>
       </div>
+      <div class="hj-acoes">
+        <button class="hj-btn sec" data-act="preco-atual">Usar preço atual</button>
+        <button class="hj-btn" data-act="sugerir">Sugerir stop e alvos</button>
+        <span class="small muted hj-sug">${calc.sug || 'A sugestão usa as velas ao vivo da Hyperliquid no tempo gráfico escolhido. É um ponto de partida para você revisar, não um sinal.'}</span>
+      </div>
+      <h3 class="hj-sub">Custos (Hyperliquid, nível base)</h3>
+      <div class="hj-form">
+          <label>Taxa taker (%)<input data-k="taker" inputmode="decimal" value="${calc.taker}"></label>
+          <label>Taxa maker (%)<input data-k="maker" inputmode="decimal" value="${calc.maker}"></label>
+          <label>Ordem de entrada<select data-k="tipoEntrada"><option value="taker" ${calc.tipoEntrada === 'taker' ? 'selected' : ''}>a mercado (taker)</option><option value="maker" ${calc.tipoEntrada === 'maker' ? 'selected' : ''}>limite (maker)</option></select></label>
+          <label>Derrapagem por lado (%)<input data-k="slip" inputmode="decimal" value="${calc.slip}"></label>
+          <label>Dias na posição (funding)<input data-k="dias" inputmode="decimal" value="${calc.dias}" placeholder="auto"></label>
+          <label class="hj-chk" style="align-self:end"><input type="checkbox" data-k="inclCustos" ${calc.inclCustos !== false ? 'checked' : ''}> <span>Incluir custos no risco</span></label>
+      </div>
+      <h3 class="hj-sub">Estatística do setup (opcional)</h3>
+      <div class="hj-form">
+          <label>Taxa de acerto esperada (%)<input data-k="wr" inputmode="decimal" value="${calc.wr}"></label>
+      </div>
+      <div class="hj-out"></div>
+      <button class="hj-btn" data-act="plano-add">Adicionar ao plano do dia</button>
+    </div>
+
+    <div class="grid-2">
       <div class="box">
         <div class="box-head"><h2>Plano do dia</h2><button class="hj-link" data-act="plano-limpar">limpar</button></div>
         <div class="tbl-wrap"><table><thead><tr><th>Operação</th><th>Risco</th><th>Posição</th><th></th></tr></thead><tbody>${planoHtml}</tbody></table></div>
@@ -2062,51 +2099,188 @@ function hojeMontar(root, modo) {
         </div>
         <p class="small muted">Cripto anda junta: trate BTC, ETH, SOL e afins quase como um risco só. Perdeu 5% na semana: pare e revise. Perdeu 10% do capital: metade do risco por operação.</p>
       </div>
-    </div>
-
-    <div class="grid-2">
-      <div class="box">
-        <div class="box-head"><h2>Agenda macro (7 dias)</h2><p>Eventos de alto impacto mexem com cripto e ações.</p></div>
-        <div class="tbl-wrap"><table><thead><tr><th>Dia</th><th>Evento</th><th>Impacto</th><th>Previsto</th><th>Anterior</th></tr></thead><tbody>${evHtml}</tbody></table></div>
-      </div>
       <div class="box">
         <div class="box-head"><h2>Rotina</h2><button class="hj-link" data-act="chk-limpar">desmarcar tudo</button></div>
         <h3 class="hj-sub">Diária</h3>${HJ_ROTINA.diario.map((t, i) => chkItem('diario', i, t)).join('')}
         <h3 class="hj-sub">Semanal (domingo)</h3>${HJ_ROTINA.semanal.map((t, i) => chkItem('semanal', i, t)).join('')}
       </div>
+    </div>
+
+    <div class="box">
+        <div class="box-head"><h2>Agenda macro (7 dias)</h2><p>Eventos de alto impacto mexem com cripto e ações.</p></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Dia</th><th>Evento</th><th>Impacto</th><th>Previsto</th><th>Anterior</th></tr></thead><tbody>${evHtml}</tbody></table></div>
+      </div>
     </div>`;
   hojeCalc(root);
 }
+const HJ_PADRAO = { cap: '', pico: '', risco: '0.5', ativo: '', entrada: '', stop: '', alvo1: '', pct1: '50', alvo2: '', lev: '3', maxlev: '', lado: '', tf: '4h', sug: '', atrTf: null,
+  taker: '0.045', maker: '0.015', tipoEntrada: 'taker', slip: '0.03', dias: '', wr: '45', inclCustos: true };
+const HJ_MAXLEV = { BTC: 40, ETH: 25, SOL: 20, XRP: 20, HYPE: 10, NEAR: 10 };   // referência: confira o limite de cada ativo na Hyperliquid
+const hojeCfg = () => Object.assign({}, HJ_PADRAO, HJ.ler('calc', {}));
 function hojeAtivoLinha(t) { return DADOS_HOJE ? hojeLinhas(DADOS_HOJE).find(r => r.t === t) : null; }
+function hojeATR(A) {   // ATR diário em fração do preço, do estudo de swing do painel
+  const D = DADOS_HOJE;
+  if (!D || !A) return null;
+  const lista = A.mercado === 'acoes' ? (D.acoes && D.acoes.swing && D.acoes.swing.ativos) : (D.swing && D.swing.ativos);
+  const x = (lista || []).find(i => i.t === A.id || i.t === A.t);
+  return x && x.contexto && x.contexto.atr_pct != null ? x.contexto.atr_pct : null;
+}
+const HJ_TF = { '1h': { ms: 36e5, jan: 12, nome: '1H' }, '4h': { ms: 144e5, jan: 12, nome: '4H' }, '1d': { ms: 864e5, jan: 10, nome: 'diário' }, '1w': { ms: 6048e5, jan: 8, nome: 'semanal' } };
+const HJ_DIAS = { '1h': 1, '4h': 3, '1d': 10, '1w': 30 };   // dias típicos na posição por tempo gráfico (conta o funding)
+const hojeChave = A => A.mercado === 'acoes' ? A.id : A.t;   // cripto "BTC", ações "xyz:NVDA"
+function hojeVivo(A) {   // preço ao vivo da Hyperliquid (o mesmo do topo da página); cai para a foto do painel se não houver
+  const v = A && typeof ultimosMids !== 'undefined' && ultimosMids ? +ultimosMids[hojeChave(A)] : 0;
+  return v > 0 ? v : (A ? A.px : null);
+}
+const hojeArred = v => parseFloat(Number(v).toPrecision(5));
+async function hojeVelas(A, tf) {
+  const j = HJ_TF[tf], agora = Date.now();
+  const r = await fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'candleSnapshot', req: { coin: hojeChave(A), interval: tf, startTime: agora - 60 * j.ms, endTime: agora } }) });
+  if (!r.ok) throw new Error(r.status);
+  return (await r.json()).map(v => ({ t: v.t, h: +v.h, l: +v.l, c: +v.c })).filter(v => v.t + j.ms <= agora);   // só velas fechadas
+}
+function hojeATRvelas(V, p = 14) {   // ATR de Wilder
+  if (V.length < p + 1) return null;
+  const tr = V.map((v, i) => i ? Math.max(v.h - v.l, Math.abs(v.h - V[i - 1].c), Math.abs(v.l - V[i - 1].c)) : v.h - v.l);
+  let a = tr.slice(1, p + 1).reduce((s, x) => s + x, 0) / p;
+  for (let i = p + 1; i < V.length; i++) a = (a * (p - 1) + tr[i]) / p;
+  return a;
+}
+/* sugere stop e alvos: stop atrás da estrutura recente do tempo gráfico escolhido (com folga de 0,25 ATR),
+   limitado entre 1 e 3,5 ATR; alvos em 1,5R e 3R. É ponto de partida, não sinal. */
+async function hojeSugerir() {
+  const c = hojeCfg(), A = hojeAtivoLinha(c.ativo);
+  const gravar = (msg, extra = {}) => { const x = HJ.ler('calc', {}); Object.assign(x, extra); x.sug = msg; HJ.gravar('calc', x); };
+  if (!A) return gravar('Escolha um ativo primeiro.');
+  const tf = HJ_TF[c.tf] ? c.tf : '4h', j = HJ_TF[tf];
+  const lado = c.lado === 'venda' || c.lado === 'compra' ? c.lado : (A.dir || 'compra');
+  let e = parseFloat(String(c.entrada).replace(',', '.'));
+  if (!(e > 0)) e = hojeVivo(A);
+  let V;
+  try { V = await hojeVelas(A, tf); } catch (err) { return gravar('Não consegui buscar as velas da Hyperliquid agora. Tente de novo em instantes.'); }
+  const atr = hojeATRvelas(V);
+  if (!atr || V.length < 20) return gravar('Poucas velas neste tempo gráfico para calcular o ATR.');
+  const side = lado === 'compra' ? 1 : -1, rec = V.slice(-j.jan);
+  const ext = side > 0 ? Math.min(...rec.map(v => v.l)) : Math.max(...rec.map(v => v.h));
+  let stop = ext - side * 0.25 * atr, ajuste = '';
+  const dAtr = side * (e - stop) / atr;
+  if (dAtr <= 0) { stop = e - side * 1.5 * atr; ajuste = ' A estrutura ficou do lado errado da entrada, então usei 1,5 ATR.'; }
+  else if (dAtr < 1) { stop = e - side * atr; ajuste = ' A estrutura está perto demais (dentro do ruído): afastei para 1 ATR.'; }
+  else if (dAtr > 3.5) { stop = e - side * 3.5 * atr; ajuste = ' A estrutura está longe: limitei a 3,5 ATR.'; }
+  const R = Math.abs(e - stop), a1 = e + side * 1.5 * R, a2 = e + side * 3 * R;
+  const rec2 = V.slice(-j.jan * 2), oposto = side > 0 ? Math.max(...rec2.map(v => v.h)) : Math.min(...rec2.map(v => v.l));
+  const dOp = side * (oposto - e) / R;
+  const aviso = dOp > 0 && dOp < 1.5 ? ` Atenção: a ${side > 0 ? 'máxima' : 'mínima'} recente (${fmtPx(oposto)}) fica a ${fmt(dOp, 1)}R, antes do alvo 1.` : dOp > 0 ? ` Referência: ${side > 0 ? 'máxima' : 'mínima'} recente em ${fmtPx(oposto)} (a ${fmt(dOp, 1)}R).` : '';
+  gravar(`Sugestão ${lado}, gráfico ${j.nome}: stop em ${fmtPx(hojeArred(stop))} (${side > 0 ? 'mínima' : 'máxima'} dos últimos ${j.jan} candles em ${fmtPx(ext)}, ${side > 0 ? 'menos' : 'mais'} 0,25 ATR). ATR(14) = ${fmtPx(atr)} (${fmt(atr / e * 100, 1)}% do preço). Alvos em 1,5R e 3R.${ajuste}${aviso} É um ponto de partida: revise antes de usar.`,
+    { lado, entrada: String(hojeArred(e)), stop: String(hojeArred(stop)), alvo1: String(hojeArred(a1)), alvo2: String(hojeArred(a2)), pct1: '50', atrTf: { tf, ativo: c.ativo, frac: atr / e } });
+}
 function hojeCalcular() {
-  const c = HJ.ler('calc', {});
-  const cap = +c.cap, rp = +c.risco, e = +c.entrada, s = +c.stop, lev = +c.lev || 1;
-  if (!(cap > 0 && rp > 0 && e > 0 && s > 0) || e === s) return null;
-  const lado = s < e ? 'compra' : 'venda', dist = Math.abs(e - s) / e, risco = cap * rp / 100, notional = risco / dist;
+  const c = hojeCfg(), n = k => parseFloat(String(c[k]).replace(',', '.'));
+  const cap = n('cap'), rp0 = n('risco'), e = n('entrada'), s = n('stop');
+  if (!(cap > 0 && rp0 > 0 && e > 0 && s > 0) || e === s) return null;
   const A = hojeAtivoLinha(c.ativo);
-  const carrega = A ? (lado === 'compra' ? A.funding : -A.funding) : null;   // % a.a. que este lado paga (negativo = recebe)
-  return { c, cap, rp, e, s, lev, lado, dist, risco, notional, qtd: notional / e, margem: notional / lev, liq: Math.max(0, 1 / lev - 0.01),
-    taxas: notional * 0.00045 * 2, carrega, carregaDia: carrega == null ? null : notional * carrega / 100 / 365, grupo: A && A.mercado === 'acoes' ? 'acoes' : 'cripto' };
+  const ladoSel = c.lado === 'compra' || c.lado === 'venda' ? c.lado : null;
+  const lado = ladoSel || (s < e ? 'compra' : 'venda'), side = lado === 'compra' ? 1 : -1, dist = Math.abs(e - s) / e;
+  if (ladoSel && (side > 0 ? s >= e : s <= e)) return { erro: `Para ${lado}, o stop precisa ficar ${side > 0 ? 'abaixo' : 'acima'} da entrada.` };
+  const tf = HJ_TF[c.tf] ? c.tf : '4h';
+  /* modo de risco: o risco por operação cai conforme a queda desde o pico do capital (regra sugerida) */
+  const pico = n('pico'), dd = pico > cap ? (pico - cap) / pico : 0;
+  const fator = dd < 0.05 ? 1 : dd < 0.10 ? 0.75 : dd < 0.15 ? 0.5 : 0;
+  const rp = rp0 * fator, risco = cap * rp / 100;
+  const lev = Math.max(1, n('lev') || 1);
+  const maxLev = n('maxlev') > 0 ? n('maxlev') : (A ? (A.mercado === 'acoes' ? 10 : HJ_MAXLEV[A.t] || 10) : 10);
+  /* custos como fração do valor da posição */
+  const fTaker = n('taker') / 100, fMaker = n('maker') / 100, slip = n('slip') / 100, dias = n('dias') > 0 ? n('dias') : HJ_DIAS[tf];
+  const feeIn = c.tipoEntrada === 'maker' ? fMaker : fTaker;
+  const carrega = A ? (side > 0 ? A.funding : -A.funding) : null;   // % ao ano que este lado paga (negativo = recebe)
+  const fundFrac = carrega != null ? Math.max(0, carrega) / 100 / 365 * dias : 0;   // só conta funding pago, nunca o recebido
+  const custoStop = feeIn + fTaker + slip * 2 + fundFrac;
+  const incl = c.inclCustos !== false;
+  const notional = risco > 0 ? risco / (dist + (incl ? custoStop : 0)) : 0;
+  const qtd = notional / e, margem = notional / lev, perdaStop = notional * (dist + custoStop);
+  /* liquidação (margem isolada), fórmula da Hyperliquid: manutenção = 1 / (2 × alavancagem máxima) */
+  const l = 1 / (2 * maxLev);
+  const liqPx = qtd > 0 ? e - side * (margem - notional * l) / qtd / (1 - l * side) : null;
+  const liqDist = liqPx != null ? Math.abs(liqPx - e) / e : null;
+  /* alvos (parcial no alvo 1, o resto no alvo 2) */
+  const p1 = n('alvo1'), p2 = n('alvo2'), pct1 = Math.min(100, Math.max(0, n('pct1') || 100)) / 100;
+  const mk = (p, f, nome) => { const dT = side * (p - e) / e, liq = dT - feeIn - slip - fMaker - fundFrac;
+    return { nome, p, f, dT, lucro: notional * f * liq, r: risco > 0 ? notional * f * liq / risco : 0, valido: dT > 0 }; };
+  const alvos = [];
+  if (p1 > 0 && p2 > 0) alvos.push(mk(p1, pct1, 'Alvo 1'), mk(p2, 1 - pct1, 'Alvo 2'));
+  else if (p1 > 0 || p2 > 0) alvos.push(mk(p1 > 0 ? p1 : p2, 1, 'Alvo'));
+  const okAlvos = alvos.length && alvos.every(a => a.valido);
+  const lucroTot = okAlvos ? alvos.reduce((t, a) => t + a.lucro, 0) : null;
+  const rr = lucroTot != null && risco > 0 ? lucroTot / risco : null;
+  const beWR = rr != null && rr > 0 ? 1 / (1 + rr) : null;
+  const wr = (n('wr') || 0) / 100;
+  const esp = rr != null ? wr * rr - (1 - wr) : null;
+  const atrTf = c.atrTf && c.atrTf.tf === tf && c.atrTf.ativo === c.ativo ? c.atrTf.frac : null;
+  const atr = atrTf || hojeATR(A), atrNome = atrTf ? HJ_TF[tf].nome : 'diário', stopATR = atr ? dist / atr : null;
+  return { c, cap, rp0, rp, fator, pico, dd, e, s, lev, maxLev, lado, side, dist, risco, notional, qtd, margem, perdaStop, liqPx, liqDist,
+    custoStop, fundFrac, feeIn, fTaker, fMaker, slip, dias, tf, atrNome, carrega, alvos, okAlvos, lucroTot, rr, beWR, wr, esp, atr, stopATR, A, incl,
+    grupo: A && A.mercado === 'acoes' ? 'acoes' : 'cripto' };
 }
 function hojeCalc(root) {
   const out = root.querySelector('.hj-out');
   if (!out) return;
   const r = hojeCalcular();
   if (!r) { out.innerHTML = '<p class="muted small">Preencha capital, risco, entrada e stop para ver o tamanho da posição.</p>'; return; }
+  if (r.erro) { out.innerHTML = `<p class="chip down" style="white-space:normal;border-radius:8px">${r.erro}</p>`; return; }
+  const usd = v => (v < 0 ? '−' : '') + 'US$ ' + fmt(Math.abs(v), Math.abs(v) < 100 ? 2 : 0), rf = v => (v >= 0 ? '+' : '−') + fmt(Math.abs(v), 2) + 'R';
   const av = [];
-  if (r.rp > 1) av.push(['down', `Risco de ${fmt(r.rp, 2)}% é alto: nos primeiros meses use 0,25% a 0,5%.`]);
+  if (r.fator === 0) av.push(['down', `Queda de ${fmt(r.dd * 100, 1)}% desde o pico: pare de operar e revise o processo (regra sugerida: parar em −15%).`]);
+  else if (r.fator < 1) av.push(['warn', `Modo de risco: queda de ${fmt(r.dd * 100, 1)}% desde o pico, risco reduzido de ${fmt(r.rp0, 2)}% para ${fmt(r.rp, 2)}%.`]);
+  if (r.rp0 > 1) av.push(['down', `Risco de ${fmt(r.rp0, 2)}% por operação é alto: nos primeiros meses use 0,25% a 0,5%.`]);
+  if (r.stopATR != null && r.stopATR < 0.95) av.push(['warn', `Stop a ${fmt(r.stopATR, 1)} ATR ${r.atrNome}: dentro do ruído normal do ativo, tende a ser stopado à toa.`]);
+  if (r.stopATR != null && r.stopATR > 4) av.push(['warn', `Stop a ${fmt(r.stopATR, 1)} ATR ${r.atrNome}: largo, a posição fica pequena para o risco que você aceita.`]);
   if (r.dist < 0.003) av.push(['warn', 'Stop muito curto: taxas e derrapagem comem boa parte do resultado.']);
-  if (r.margem > r.cap) av.push(['down', 'A margem necessária passa do capital: reduza o risco ou aumente a alavancagem escolhida.']);
-  if (r.liq < r.dist * 3) av.push(['down', `A liquidação (≈ ${fmt(r.liq * 100, 1)}%) está perto do stop (${fmt(r.dist * 100, 1)}%): ela deveria estar pelo menos 3 vezes mais longe.`]);
-  if (r.taxas / r.risco > 0.1) av.push(['warn', `Taxas de ida e volta = ${fmt(r.taxas / r.risco * 100, 0)}% do risco.`]);
-  if (r.carregaDia != null && r.carrega > 20) av.push(['warn', `Carregar este lado custa ${fmt(r.carrega, 1)}% a.a. de funding.`]);
-  out.innerHTML = `<div class="kpis hj-mini">
-      <div class="kpi"><span class="lab">Posição</span><span class="val">US$ ${fmt(r.notional, 0)}</span><span class="note">${fmt(r.qtd, r.qtd < 10 ? 4 : 2)} unidades · ${r.lado}</span></div>
-      <div class="kpi"><span class="lab">Risco no stop</span><span class="val">US$ ${fmt(r.risco, 0)}</span><span class="note">stop a ${fmt(r.dist * 100, 2)}% da entrada</span></div>
-      <div class="kpi"><span class="lab">Margem usada</span><span class="val">US$ ${fmt(r.margem, 0)}</span><span class="note">${fmt(r.notional / r.cap, 2)}x o capital na posição</span></div>
-      <div class="kpi"><span class="lab">Liquidação ≈</span><span class="val">${fmt(r.liq * 100, 1)}%</span><span class="note">da entrada (estimativa; confira na Hyperliquid)</span></div></div>
-    <p class="small muted">Taxas de ida e volta ≈ US$ ${fmt(r.taxas, 2)} (0,045% por lado)${r.carregaDia != null ? ` · funding ≈ ${r.carregaDia >= 0 ? 'US$ ' + fmt(r.carregaDia, 2) + ' pagos' : 'US$ ' + fmt(-r.carregaDia, 2) + ' recebidos'} por dia` : ''}</p>
-    ${av.map(([c, t]) => `<p class="chip ${c}" style="white-space:normal;border-radius:8px">${t}</p>`).join('')}`;
+  if (r.lev > r.maxLev) av.push(['down', `Alavancagem ${fmt(r.lev, 0)}x passa do máximo informado do ativo (${fmt(r.maxLev, 0)}x).`]);
+  if (r.margem > r.cap) av.push(['down', 'A margem necessária passa do capital: aumente a alavancagem ou reduza o risco.']);
+  if (r.liqDist != null && r.liqDist < r.dist * 3) av.push(['down', `A liquidação (${fmt(r.liqDist * 100, 1)}%) está perto do stop (${fmt(r.dist * 100, 1)}%): deveria estar pelo menos 3 vezes mais longe.`]);
+  if (r.alvos.some(a => !a.valido)) av.push(['down', 'Há alvo do lado errado da entrada para esta operação.']);
+  if (r.rr != null && r.rr < 1.5) av.push(['warn', `R:R de ${fmt(r.rr, 2)} é baixo: com custos, o setup precisaria de acerto alto.`]);
+  if (r.A && r.A.dir && r.A.dir !== r.lado) av.push(['warn', `Contra a tendência do diário (${TL[r.A.D].toLowerCase()}): operação contra o viés, use risco menor ou fique de fora.`]);
+  if (r.carrega != null && r.carrega > 20) av.push(['warn', `Carregar este lado custa ${fmt(r.carrega, 1)}% a.a. de funding.`]);
+  if (!r.incl) av.push(['flat', `Tamanho calculado sem custos: a perda real no stop será ${usd(r.perdaStop)}, acima dos ${usd(r.risco)} planejados.`]);
+
+  const linhasCen = [`<tr><td>Stop</td><td>${fmtPx(r.s)}</td><td class="neg">${fmt(r.dist * 100, 2)}%</td><td>${rf(-r.perdaStop / (r.risco || 1))}</td><td class="neg">${usd(-r.perdaStop)}</td></tr>`,
+    `<tr><td>Entrada</td><td>${fmtPx(r.e)}</td><td>—</td><td>—</td><td>—</td></tr>`]
+    .concat(r.alvos.map(a => `<tr><td>${a.nome} <span class="muted small">(${fmt(a.f * 100, 0)}% da posição)</span></td><td>${fmtPx(a.p)}</td><td class="${a.valido ? 'pos' : 'neg'}">${fmt(a.dT * 100, 2)}%</td><td>${rf(a.r)}</td><td class="${a.lucro >= 0 ? 'pos' : 'neg'}">${usd(a.lucro)}</td></tr>`))
+    .concat([`<tr><td>Liquidação</td><td>${r.liqPx != null ? fmtPx(r.liqPx) : '—'}</td><td class="neg">${r.liqDist != null ? fmt(r.liqDist * 100, 1) + '%' : '—'}</td><td>—</td><td class="neg">${usd(-r.margem)} <span class="muted small">(margem)</span></td></tr>`]).join('');
+  const custoUsd = r.notional * r.custoStop;
+  const seqN = [3, 5, 8, 10];
+  const seq = seqN.map(k => { const cap = r.cap * Math.pow(1 - r.rp / 100, k); return `<tr><td>${k} stops seguidos</td><td>${fmt(Math.pow(1 - r.wr, k) * 100, 1)}%</td><td>${usd(cap)}</td><td class="neg">−${fmt((1 - Math.pow(1 - r.rp / 100, k)) * 100, 1)}%</td></tr>`; }).join('');
+
+  out.innerHTML = `
+    <div class="kpis hj-mini">
+      <div class="kpi"><span class="lab">Posição</span><span class="val">${usd(r.notional)}</span><span class="note">${fmt(r.qtd, r.qtd < 10 ? 4 : 2)} unidades · ${r.lado} · ${fmt(r.notional / r.cap, 2)}x o capital</span></div>
+      <div class="kpi"><span class="lab">Perda no stop</span><span class="val">${usd(r.perdaStop)}</span><span class="note">${fmt(r.perdaStop / r.cap * 100, 2)}% do capital · stop a ${fmt(r.dist * 100, 2)}%${r.stopATR != null ? ' · ' + fmt(r.stopATR, 1) + ' ATR ' + r.atrNome : ''}</span></div>
+      <div class="kpi"><span class="lab">Margem usada</span><span class="val">${usd(r.margem)}</span><span class="note">${fmt(r.lev, 0)}x na corretora · máx. ${fmt(r.maxLev, 0)}x</span></div>
+      <div class="kpi"><span class="lab">Liquidação</span><span class="val">${r.liqPx != null ? fmtPx(r.liqPx) : '—'}</span><span class="note">${r.liqDist != null ? fmt(r.liqDist * 100, 1) + '% da entrada · ' + fmt(r.liqDist / r.dist, 1) + 'x a distância do stop' : ''}</span></div>
+    </div>
+    <p class="small muted">Gráfico ${HJ_TF[r.tf].nome} · ${r.lado} · funding contado por ${fmt(r.dias, 0)} dia(s)${r.c.dias ? '' : ' (automático para este tempo gráfico)'}.</p>
+    ${av.map(([c, t]) => `<p class="chip ${c}" style="white-space:normal;border-radius:8px">${t}</p>`).join('')}
+    <div class="grid-2">
+      <div><h3 class="hj-sub">Cenários</h3><div class="tbl-wrap"><table><thead><tr><th>Nível</th><th>Preço</th><th>Distância</th><th>Resultado</th><th>Líquido</th></tr></thead><tbody>${linhasCen}</tbody></table></div>
+        <p class="small muted">Resultados já descontam taxas, derrapagem e funding projetado. Alvo 2 usa o restante da posição.</p></div>
+      <div><h3 class="hj-sub">Custos até o stop</h3><div class="tbl-wrap"><table><tbody>
+        <tr><td>Taxa de entrada (${fmt(r.feeIn * 100, 3)}%)</td><td>${usd(r.notional * r.feeIn)}</td></tr>
+        <tr><td>Taxa de saída no stop (${fmt(r.fTaker * 100, 3)}%)</td><td>${usd(r.notional * r.fTaker)}</td></tr>
+        <tr><td>Derrapagem (entrada + stop, ${fmt(r.slip * 100, 3)}% cada)</td><td>${usd(r.notional * r.slip * 2)}</td></tr>
+        <tr><td>Funding em ${fmt(r.dias, 0)} dias${r.carrega != null ? ` (${fmt(r.carrega, 1)}% a.a.${r.carrega < 0 ? ', você recebe e não conto o ganho' : ''})` : ' (escolha um ativo)'}</td><td>${usd(r.notional * r.fundFrac)}</td></tr>
+        <tr><td><b>Total</b></td><td><b>${usd(custoUsd)}</b> <span class="muted small">(${fmt(custoUsd / (r.risco || 1) * 100, 0)}% do risco)</span></td></tr></tbody></table></div></div>
+    </div>
+    <div class="grid-2">
+      <div><h3 class="hj-sub">Relação risco/retorno e expectativa</h3><div class="tbl-wrap"><table><tbody>
+        <tr><td>R:R líquido (todos os alvos)</td><td>${r.rr != null ? '1 : ' + fmt(r.rr, 2) : '<span class="muted">informe o alvo</span>'}</td></tr>
+        <tr><td>Acerto mínimo para empatar</td><td>${r.beWR != null ? fmt(r.beWR * 100, 0) + '%' : '—'}</td></tr>
+        <tr><td>Expectativa por operação com acerto de ${fmt(r.wr * 100, 0)}%</td><td>${r.esp != null ? `<b class="${r.esp >= 0 ? 'pos' : 'neg'}">${rf(r.esp)}</b> · ${r.esp >= 0 ? '+' : '−'}${fmt(Math.abs(r.esp) * r.rp, 2)}% do capital` : '—'}</td></tr></tbody></table></div>
+        <p class="small muted">O acerto vem do seu histórico (Diário, Backtest ou o seu registro). Sem pelo menos 30 operações fechadas, é chute: não tire conclusão.</p></div>
+      <div><h3 class="hj-sub">Sequência de perdas</h3><div class="tbl-wrap"><table><thead><tr><th>Cenário</th><th>Chance</th><th>Capital</th><th>Queda</th></tr></thead><tbody>${seq}</tbody></table></div>
+        <p class="small muted">Chance = (1 − acerto)^n, supondo operações independentes. Sequências ruins acontecem: o tamanho de posição existe para sobreviver a elas.</p></div>
+    </div>`;
 }
 function hojeRender() {
   const a = document.getElementById('hojeCripto'), b = document.getElementById('hojeAcoes');
@@ -2117,16 +2291,19 @@ function hojeLigar(root) {
     const el = ev.target.closest('[data-act]');
     if (!el || el.tagName === 'INPUT') return;
     const act = el.dataset.act;
-    if (act === 'filtro') HJ.gravar('filtro-' + (root.id === 'hojeAcoes' ? 'acoes' : 'cripto'), el.dataset.f);
+    if (act === 'sugerir') { el.disabled = true; el.textContent = 'Buscando velas…'; hojeSugerir().then(hojeRender, hojeRender); return; }
+    if (act === 'preco-atual') { const c = HJ.ler('calc', {}), A = hojeAtivoLinha(c.ativo); if (A) { c.entrada = String(hojeArred(hojeVivo(A))); HJ.gravar('calc', c); } }
+    else if (act === 'filtro') HJ.gravar('filtro-' + (root.id === 'hojeAcoes' ? 'acoes' : 'cripto'), el.dataset.f);
     else if (act === 'obs') {
       let o = HJ.ler('obs', []);
       o = o.includes(el.dataset.t) ? o.filter(x => x !== el.dataset.t) : o.length < 8 ? [...o, el.dataset.t] : (alert('A lista de observação aceita no máximo 8 ativos.'), o);
       HJ.gravar('obs', o);
     } else if (act === 'plano-add') {
       const r = hojeCalcular();
-      if (!r) return alert('Preencha capital, risco, entrada e stop primeiro.');
+      if (!r || r.erro) return alert(r && r.erro ? r.erro : 'Preencha capital, risco, entrada e stop primeiro.');
+      if (!(r.risco > 0)) return alert('O modo de risco zerou o risco por operação: não há o que adicionar ao plano.');
       const p = HJ.ler('plano', []);
-      p.push({ ativo: r.c.ativo || 'ativo', lado: r.lado, risco: r.risco, notional: r.notional, grupo: r.grupo });
+      p.push({ ativo: r.c.ativo || 'ativo', tf: HJ_TF[r.tf].nome, lado: r.lado, risco: r.risco, notional: r.notional, grupo: r.grupo });
       HJ.gravar('plano', p);
     } else if (act === 'plano-rm') { const p = HJ.ler('plano', []); p.splice(+el.dataset.i, 1); HJ.gravar('plano', p); }
     else if (act === 'plano-limpar') HJ.gravar('plano', []);
@@ -2140,14 +2317,18 @@ function hojeLigar(root) {
       const c = hojeChecklist(); c[el.dataset.g].v[+el.dataset.i] = el.checked; HJ.gravar('chk', c);
     } else if (el.matches('.hj-ativo')) {   // trocar de ativo preenche a entrada com o preço atual
       const c = HJ.ler('calc', {}); c.ativo = el.value;
-      const A = hojeAtivoLinha(el.value); if (A) c.entrada = String(A.px);
+      const A = hojeAtivoLinha(el.value); c.maxlev = ''; c.stop = ''; c.alvo1 = ''; c.alvo2 = ''; c.sug = ''; c.atrTf = null; c.lado = ''; if (A) c.entrada = String(hojeArred(hojeVivo(A)));
       HJ.gravar('calc', c); hojeRender();
     }
   });
   root.addEventListener('input', ev => {   // a calculadora recalcula sem redesenhar (não perde o foco)
     const el = ev.target;
     if (!el.dataset.k || el.matches('.hj-ativo')) return;
-    const c = HJ.ler('calc', {}); c[el.dataset.k] = el.value.replace(',', '.'); HJ.gravar('calc', c);
+    const c = HJ.ler('calc', {}); c[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value.replace(',', '.');
+    const mudouBase = el.dataset.k === 'tf' || el.dataset.k === 'lado';
+    if (mudouBase) c.sug = '';
+    HJ.gravar('calc', c);
+    if (mudouBase) { const q = root.querySelector('.hj-sug'); if (q) q.textContent = 'Tempo gráfico ou lado mudou: clique em "Sugerir stop e alvos" para recalcular.'; }
     hojeCalc(root);
   });
 }
