@@ -132,3 +132,11 @@ test('zonas do mapa no 15 min: só valem se estiverem ao alcance do ATR; longe v
   // sem ATR do tempo gráfico ainda: não julga
   assert.deepEqual(checarMapa({ lado: 'venda', e: 627, s: 672, d, tf: '15m', atr: null }), []);
 });
+
+test('zonas no 15 min: a mensagem lista só a zona que está longe', () => {
+  const d = { bw: 10, L: [[595, 500e3], [610, 20e3]], S: [[661, 120e3], [700, 30e3]] };
+  // venda a 640: vendidos (stop) a 656–666 ≈ 2,5% (perto com ATR 1%); comprados (alvo) a 590–600 ≈ 6,3% (longe)
+  const it = checarMapa({ lado: 'venda', e: 640, s: 650, d, tf: '15m', atr: 0.01 });
+  const info = it.find(([n]) => n === 'info');
+  assert.ok(info && info[1].includes('590') && !info[1].includes('656'));
+});

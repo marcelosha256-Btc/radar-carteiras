@@ -218,6 +218,12 @@ function preAssinar(lista) {
   for (const m of ['acoes', 'cripto']) {
     try { const g = JSON.parse(localStorage.getItem('radar-manha-cache-' + m) || 'null'); if (g && g.linhas) g.linhas.slice().sort((a, b) => (b.forca || 0) - (a.forca || 0)).slice(0, 5).forEach(r => { if (lista.includes(r.coin)) quero.add(r.coin); }); } catch (e) {}
   }
+  // sem ★ nem Radar aberto: o ativo da calculadora e os mais negociados de cada mercado
+  try { const a = typeof hojeCfg === 'function' ? hojeCfg().ativo : ''; const c = lista.includes(a) ? a : lista.includes('xyz:' + a) ? 'xyz:' + a : ''; if (c) quero.add(c); } catch (e) {}
+  if (quero.size < 6) {
+    const L = linhas().filter(r => r.vol > 0).sort((a, b) => b.vol - a.vol);
+    for (const m of ['acoes', 'cripto']) L.filter(r => (r.mercado === 'acoes') === (m === 'acoes')).slice(0, 3).forEach(r => { const c = m === 'acoes' ? r.id : r.t; if (lista.includes(c)) quero.add(c); });
+  }
   [...quero].slice(0, 15).forEach(assinar);
 }
 function escolher(modo, coin) {
