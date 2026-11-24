@@ -340,8 +340,8 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
   </div>
 
   <!-- HOJE (cripto e ações: a mesma tela, cada modo abre com o seu filtro) -->
-  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="posCripto" style="margin-bottom:16px"></div><div class="hoje" id="hojeCripto"><p class="muted">Aguardando os dados do painel…</p></div></section>
-  <section class="panel" id="p-a-hoje" role="tabpanel" hidden><div class="hoje" id="posAcoes" style="margin-bottom:16px"></div><div class="hoje" id="hojeAcoes"><p class="muted">Aguardando os dados do painel…</p></div></section>
+  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="posCripto" style="margin-bottom:16px"></div><div class="hoje" id="mercCripto" style="margin-bottom:16px"></div><div class="hoje" id="hojeCripto"><p class="muted">Aguardando os dados do painel…</p></div></section>
+  <section class="panel" id="p-a-hoje" role="tabpanel" hidden><div class="hoje" id="posAcoes" style="margin-bottom:16px"></div><div class="hoje" id="mercAcoes" style="margin-bottom:16px"></div><div class="hoje" id="hojeAcoes"><p class="muted">Aguardando os dados do painel…</p></div></section>
 
   <!-- MEU DIÁRIO DE OPERAÇÕES (em R) -->
   <section class="panel" id="p-trades" role="tabpanel" hidden><div class="hoje" id="diarioCripto"></div></section>
@@ -2850,3 +2850,4 @@ conectarLiquidacoes();
 <script type="module" src="aovivo/aovivo.js"></script>
 <script type="module" src="diario/tela.js"></script>
 <script type="module" src="posicoes/tela.js"></script>
+<script type="module" src="mercado/tela.js"></script>
