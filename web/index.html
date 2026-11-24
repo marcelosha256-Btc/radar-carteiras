@@ -177,6 +177,8 @@ svg { display: block; width: 100%; height: auto; max-width: 100%; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { width: 12px; height: 4px; border-radius: 2px; display: inline-block; }
 
+.tab-mais { font: 500 13px var(--f-body); border: 1px dashed var(--line); background: none; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; margin-left: 6px; }
+.tab-mais:hover { color: var(--fg); }
 .seg { display: inline-flex; background: var(--surface-2); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap; }
 .seg button { font: 500 12.5px var(--f-body); border: 0; background: none; color: var(--muted); padding: 5px 10px; border-radius: 6px; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
@@ -273,6 +275,8 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
 .hoje .hj-sub { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 8px; }
 .hoje .hj-mini { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
 .hoje .hj-out { display: grid; gap: 8px; }
+.hoje .hj-out, .hoje .hj-out > *, .hoje .grid-2 > * { min-width: 0; }   /* tabelas largas rolam dentro do cartão, sem empurrar a página */
+.hoje > .box { grid-template-columns: minmax(0, 1fr); }
 .hoje td .facts { display: flex; flex-wrap: wrap; gap: 4px; }
 .hoje .hj-calc .hj-form { margin-bottom: 4px; }
 .hoje .hj-calc table td:last-child, .hoje .hj-calc table th:last-child { text-align: right; }
@@ -280,6 +284,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
 .hoje .hj-acoes { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .hoje .hj-btn.sec { background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); }
 .hoje .hj-btn:disabled { opacity: .6; cursor: wait; }
+.hoje .hj-btn[data-act="plano-add"]:disabled { cursor: not-allowed; }
 .hoje .hj-sug { flex: 1 1 280px; }
 </style>
 <script>
@@ -315,33 +320,34 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
     <nav class="tabs" role="tablist" aria-label="Seções do radar">
       <button class="tab" role="tab" data-modo="cripto" data-tab="hoje">Hoje</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="trades">Meu diário</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="resumo">Resumo</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="carteiras">Carteiras</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="fluxo">Fluxo e alertas</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="liquidez">Stops e liquidações</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="resumo" data-sec>Resumo</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="carteiras" data-sec>Carteiras</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="fluxo" data-sec>Fluxo e alertas</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="liquidez" data-sec>Stops e liquidações</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="aovivo">Liquidez ao vivo</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="sr">Suportes e resistências</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="sopr">SOPR e suportes</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="diario">Diário de sinais</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="swing">Swing trade</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="backtest">Backtest</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="sr" data-sec>Suportes e resistências</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="sopr" data-sec>SOPR e suportes</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="diario" data-sec>Diário de sinais</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="swing" data-sec>Swing trade</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="backtest" data-sec>Backtest</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-hoje" hidden>Hoje</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-trades" hidden>Meu diário</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-resumo" hidden>Resumo</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-carteiras" hidden>Carteiras</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-fluxo" hidden>Fluxo e alertas</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-liquidez" hidden>Stops e liquidações</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-resumo" data-sec hidden>Resumo</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-carteiras" data-sec hidden>Carteiras</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-fluxo" data-sec hidden>Fluxo e alertas</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-liquidez" data-sec hidden>Stops e liquidações</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-aovivo" hidden>Liquidez ao vivo</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-eventos" hidden>Balanços e eventos</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-forca" hidden>Para onde vai o dinheiro</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-diario" hidden>Diário de sinais</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-swing" hidden>Swing trade</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-forca" data-sec hidden>Para onde vai o dinheiro</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-diario" data-sec hidden>Diário de sinais</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-swing" data-sec hidden>Swing trade</button>
+      <button class="tab-mais" id="tabMais" aria-expanded="false" title="Abas de pesquisa e contexto (swing, baleias, on-chain, backtest)">Pesquisa ▾</button>
     </nav>
   </div>
 
   <!-- HOJE (cripto e ações: a mesma tela, cada modo abre com o seu filtro) -->
-  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="posCripto" style="margin-bottom:16px"></div><div class="hoje" id="manhaCripto" style="margin-bottom:16px"></div><div class="hoje" id="mercCripto" style="margin-bottom:16px"></div><div class="hoje" id="hojeCripto"><p class="muted">Aguardando os dados do painel…</p></div></section>
-  <section class="panel" id="p-a-hoje" role="tabpanel" hidden><div class="hoje" id="posAcoes" style="margin-bottom:16px"></div><div class="hoje" id="manhaAcoes" style="margin-bottom:16px"></div><div class="hoje" id="mercAcoes" style="margin-bottom:16px"></div><div class="hoje" id="hojeAcoes"><p class="muted">Aguardando os dados do painel…</p></div></section>
+  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="riscoCripto" style="margin-bottom:16px"></div><div class="hoje" id="posCripto" style="margin-bottom:16px"></div><div class="hoje" id="manhaCripto" style="margin-bottom:16px"></div><div class="hoje" id="mercCripto" style="margin-bottom:16px"></div><div class="hoje" id="hojeCripto"><p class="muted">Aguardando os dados do painel…</p></div></section>
+  <section class="panel" id="p-a-hoje" role="tabpanel" hidden><div class="hoje" id="riscoAcoes" style="margin-bottom:16px"></div><div class="hoje" id="posAcoes" style="margin-bottom:16px"></div><div class="hoje" id="manhaAcoes" style="margin-bottom:16px"></div><div class="hoje" id="mercAcoes" style="margin-bottom:16px"></div><div class="hoje" id="hojeAcoes"><p class="muted">Aguardando os dados do painel…</p></div></section>
 
   <!-- MEU DIÁRIO DE OPERAÇÕES (em R) -->
   <section class="panel" id="p-trades" role="tabpanel" hidden><div class="hoje" id="diarioCripto"></div></section>
@@ -2268,7 +2274,15 @@ function hojeCalc(root) {
   const seqN = [3, 5, 8, 10];
   const seq = seqN.map(k => { const cap = r.cap * Math.pow(1 - r.rp / 100, k); return `<tr><td>${k} stops seguidos</td><td>${fmt(Math.pow(1 - r.wr, k) * 100, 1)}%</td><td>${usd(cap)}</td><td class="neg">−${fmt((1 - Math.pow(1 - r.rp / 100, k)) * 100, 1)}%</td></tr>`; }).join('');
 
-  out.innerHTML = `
+  const ck = window.radarRisco ? window.radarRisco.checklist(r) : [];
+  const ICK = { bloqueia: ['✗', 'var(--down)'], aviso: ['!', 'var(--warn)'], ok: ['✓', 'var(--up)'] };
+  const bloqueado = ck.some(x => x[0] === 'bloqueia');
+  const ckHtml = ck.length ? `<div style="border:1px solid ${bloqueado ? 'var(--down)' : 'var(--line)'};border-radius:8px;padding:8px 10px">
+      <h3 class="hj-sub" style="margin:0 0 4px">Checklist antes de entrar ${bloqueado ? '<span class="chip down">não entre</span>' : '<span class="chip up">pode entrar se for o plano</span>'}</h3>
+      ${ck.map(([n, t]) => `<div class="small" style="display:flex;gap:8px"><b style="color:${ICK[n][1]};width:12px">${ICK[n][0]}</b><span>${t}</span></div>`).join('')}</div>` : '';
+  const btn = root.querySelector('[data-act="plano-add"]');
+  if (btn) { btn.disabled = bloqueado; btn.title = bloqueado ? 'O checklist bloqueou esta operação' : ''; }
+  out.innerHTML = ckHtml + `
     <div class="kpis hj-mini">
       <div class="kpi"><span class="lab">Posição</span><span class="val">${usd(r.notional)}</span><span class="note">${fmt(r.qtd, r.qtd < 10 ? 4 : 2)} unidades · ${r.lado} · ${fmt(r.notional / r.cap, 2)}x o capital</span></div>
       <div class="kpi"><span class="lab">Perda no stop</span><span class="val">${usd(r.perdaStop)}</span><span class="note">${fmt(r.perdaStop / r.cap * 100, 2)}% do capital · stop a ${fmt(r.dist * 100, 2)}%${r.stopATR != null ? ' · ' + fmt(r.stopATR, 1) + ' ATR ' + r.atrNome : ''}</span></div>
@@ -2317,6 +2331,8 @@ function hojeLigar(root) {
       const r = hojeCalcular();
       if (!r || r.erro) return alert(r && r.erro ? r.erro : 'Preencha capital, risco, entrada e stop primeiro.');
       if (!(r.risco > 0)) return alert('O modo de risco zerou o risco por operação: não há o que adicionar ao plano.');
+      const bloq = window.radarRisco ? window.radarRisco.checklist(r).filter(x => x[0] === 'bloqueia') : [];
+      if (bloq.length) return alert('O checklist bloqueou esta operação:' + String.fromCharCode(10, 10) + bloq.map(x => '• ' + x[1]).join(String.fromCharCode(10)));
       const p = HJ.ler('plano', []);
       p.push({ ativo: r.c.ativo || 'ativo', tf: HJ_TF[r.tf].nome, lado: r.lado, risco: r.risco, notional: r.notional, grupo: r.grupo });
       HJ.gravar('plano', p);
@@ -2348,6 +2364,7 @@ function hojeLigar(root) {
   });
 }
 ['hojeCripto', 'hojeAcoes'].forEach(id => { const r = document.getElementById(id); if (r) hojeLigar(r); });
+window.addEventListener('radar-risco', () => ['hojeCripto', 'hojeAcoes'].forEach(id => { const r = document.getElementById(id); if (r && r.querySelector('.hj-out')) hojeCalc(r); }));
 
 /* ---------- cor da tela: sistema, claro ou escuro ---------- */
 (function () {
@@ -2375,7 +2392,10 @@ function show(id) {
   const modo = id.startsWith('a-') ? 'acoes' : 'cripto';
   modoAtual = modo;
   tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === id)));
-  document.querySelectorAll('.tabs [data-modo]').forEach(t => { t.hidden = t.dataset.modo !== modo; });
+  let mais = false; try { mais = localStorage.getItem('radar-mais') === '1'; } catch (e) {}
+  // no dia a dia ficam à vista só as abas de operação; as de pesquisa aparecem em "Pesquisa"
+  document.querySelectorAll('.tabs [data-modo]').forEach(t => { t.hidden = t.dataset.modo !== modo || (t.hasAttribute('data-sec') && !mais && t.dataset.tab !== id); });
+  const bm = document.getElementById('tabMais'); if (bm) { bm.setAttribute('aria-expanded', String(mais)); bm.textContent = mais ? 'Menos ▴' : 'Pesquisa ▾'; }
   document.querySelectorAll('#modo button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.modo === modo)));
   document.querySelectorAll('.panel').forEach(p => { p.hidden = p.id !== 'p-' + id; });
   if (SUB[modo]) $('#sub').textContent = SUB[modo];
@@ -2383,6 +2403,11 @@ function show(id) {
   try { localStorage.setItem('radar-tab', id); localStorage.setItem('radar-tab-' + modo, id); } catch (e) {}
 }
 tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab)));
+document.getElementById('tabMais').addEventListener('click', () => {
+  let m = false; try { m = localStorage.getItem('radar-mais') === '1'; localStorage.setItem('radar-mais', m ? '0' : '1'); } catch (e) {}
+  const atual = (tabs.find(t => t.getAttribute('aria-selected') === 'true') || {}).dataset;
+  show(atual && atual.tab ? atual.tab : 'hoje');
+});
 window.addEventListener('hashchange', () => { if (location.hash.length > 1) show(location.hash.slice(1)); });
 document.querySelectorAll('#modo button').forEach(b => b.addEventListener('click', () => {
   let id = b.dataset.modo === 'acoes' ? 'a-hoje' : 'hoje';
@@ -2849,6 +2874,7 @@ conectarLiquidacoes();
 <script type="module" src="backtest/tela.js"></script>
 <script type="module" src="aovivo/aovivo.js"></script>
 <script type="module" src="diario/tela.js"></script>
+<script type="module" src="risco/tela.js"></script>
 <script type="module" src="posicoes/tela.js"></script>
 <script type="module" src="mercado/tela.js"></script>
 <script type="module" src="manha/tela.js"></script>

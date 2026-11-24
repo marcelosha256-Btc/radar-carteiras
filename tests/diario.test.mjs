@@ -69,3 +69,15 @@ test('limpar: vírgula decimal, valores inválidos e texto longo', () => {
   assert.throws(() => limpar({ lado: 'lado errado' }), /lado/);
   assert.throws(() => limpar({ tipo: 'x' }), /tipo/);
 });
+
+test('operação importada: R só com stop; resultado vem das execuções', async () => {
+  const { calcR, limparImportado } = await import('../web/diario/calculo.js');
+  const base = { fonte: 'hyperliquid', lado: 'compra', entrada: 100, qtd: 2, status: 'fechado', resultado_usd: 30 };
+  assert.equal(calcR({ ...base, stop: null }).r, null);
+  const c = calcR({ ...base, stop: 95 });            // risco = 2 × 5 = 10 → 30 / 10 = 3R
+  assert.equal(c.r, 3); assert.equal(c.risco_usd, 10); assert.equal(c.resultado_usd, 30);
+  assert.equal(calcR({ ...base, stop: 95, risco_usd: 20 }).r, 1.5);
+  assert.equal(calcR({ ...base, stop: 95, status: 'aberto', resultado_usd: null }).r, null);
+  assert.throws(() => limparImportado({ chave: 'x; drop', lado: 'compra', mercado: 'cripto', status: 'aberto' }), /chave/);
+  assert.equal(limparImportado({ chave: 'xyz:NVDA:123', lado: 'venda', mercado: 'acoes', status: 'fechado', ativo: 'NVDA', entrada: '150' }).entrada, 150);
+});

@@ -1,6 +1,7 @@
 /* Telas "Meu diário" (Cripto e Ações): registro das operações do próprio trader, medidas em R.
  * Dados: /api/trades (banco, com a senha). Operações em "papel" (simuladas) e "reais" ficam separadas nas estatísticas. */
 import { metricas, porGrupo, rAberto, confianca, ordemFechamento } from './metricas.js';
+import { operacoes, carteira } from '../risco/dados.js';
 
 const MODOS = { cripto: 'diarioCripto', acoes: 'diarioAcoes' };
 const TFS = [['1h', '1H'], ['4h', '4H'], ['1d', 'Diário'], ['1w', 'Semanal']];
@@ -37,7 +38,24 @@ function msgErro(e) {
 async function carregar() {
   S.carregando = true; S.erro = '';
   try { S.lista = (await api()).trades; } catch (e) { S.erro = msgErro(e); }
-  S.carregando = false; desenhar();
+  S.carregando = false; desenhar(); avisar();
+  if (S.lista) importar();
+}
+const avisar = () => window.dispatchEvent(new CustomEvent('radar-diario', { detail: S.lista }));   // o cartão "Regras do dia" recalcula
+/* traz as suas operações reais das execuções da Hyperliquid (últimos 30 dias). Só envia as novas ou que mudaram. */
+async function importar() {
+  if (!carteira()) return;
+  try {
+    const ops = await operacoes(true), por = new Map((S.lista || []).filter(t => t.chave).map(t => [t.chave, t]));
+    const dif = (a, b) => (a == null) !== (b == null) || (a != null && Math.abs(+a - +b) > 1e-6);
+    const mudou = ops.filter(o => { const t = por.get(o.chave); return !t || t.status !== o.status || dif(t.fechamento, o.fechamento) || dif(t.qtd, o.qtd) || dif(t.resultado_usd, o.resultado_usd); });
+    if (!mudou.length) return;
+    for (let i = 0; i < mudou.length; i += 100) {
+      const { trades } = await api({ acao: 'importar', trades: mudou.slice(i, i + 100) });
+      for (const t of trades) { const k = S.lista.findIndex(x => x.id === t.id); if (k >= 0) S.lista[k] = t; else S.lista.unshift(t); }
+    }
+    desenhar(); avisar();
+  } catch (e) { /* sem rede ou sem banco: tenta de novo ao reabrir */ }
 }
 
 /* ---------------------------------------------------------------- desenho ---- */
@@ -71,17 +89,22 @@ function linhaAberta(t) {
   return `<tr><td><b>${esc(t.ativo)}</b> <span class="${t.lado === 'compra' ? 'pos' : 'neg'}">${esc(t.lado)}</span> <span class="muted small">${esc((TFS.find(x => x[0] === t.tf) || [0, t.tf || ''])[1])} · ${t.tipo === 'real' ? 'real' : 'papel'}${t.setup ? ' · ' + esc(t.setup) : ''}</span></td>
     <td>${px(t.entrada)}</td><td>${px(t.stop)}</td><td>${t.alvo1 ? px(t.alvo1) : '—'}</td>
     <td>${p ? px(p) : '—'}</td><td class="${cls(r)}">${r == null ? '—' : sinal(r) + ' R'}</td>
-    <td><div class="facts"><input data-sai="${t.id}" inputmode="decimal" placeholder="saída" size="8" ${p ? `value="${px(p).replace(/\./g, '').replace(',', '.')}"` : ''} style="width:90px">
+    <td>${t.fonte === 'hyperliquid' ? `<div class="facts">${t.stop == null ? campoStop(t) : ''}<span class="muted small">fecha sozinha quando a posição zerar na corretora</span> <button class="hj-link" data-act="tr-anotar" data-id="${t.id}">anotar</button></div>` : `<div class="facts"><input data-sai="${t.id}" inputmode="decimal" placeholder="saída" size="8" ${p ? `value="${px(p).replace(/\./g, '').replace(',', '.')}"` : ''} style="width:90px">
       <input data-tax="${t.id}" inputmode="decimal" placeholder="taxas US$" size="7" style="width:80px">
       <select data-mot="${t.id}">${MOTIVOS.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select>
       <button class="hj-btn" data-act="tr-fechar" data-id="${t.id}">Fechar</button>
-      <button class="hj-link" data-act="tr-apagar" data-id="${t.id}">excluir</button></div></td></tr>`;
+      <button class="hj-link" data-act="tr-apagar" data-id="${t.id}">excluir</button></div>`}</td></tr>`;
+}
+const campoStop = t => `<input data-stp="${t.id}" inputmode="decimal" placeholder="stop que você usou" style="width:120px"> <button class="hj-btn" data-act="tr-stop" data-id="${t.id}">salvar stop</button>`;
+function linhaSemStop(t) {
+  return `<tr><td>${dh(t.fechamento)}</td><td><b>${esc(t.ativo)}</b> <span class="${t.lado === 'compra' ? 'pos' : 'neg'}">${esc(t.lado)}</span></td><td>${px(t.entrada)} → ${px(t.saida)}</td>
+    <td class="${cls(t.resultado_usd)}">US$ ${sinal(t.resultado_usd)}</td><td><div class="facts">${campoStop(t)}</div></td></tr>`;
 }
 function linhaFechada(t) {
   return `<tr><td>${dh(t.fechamento || t.abertura)}</td><td><b>${esc(t.ativo)}</b> <span class="${t.lado === 'compra' ? 'pos' : 'neg'}">${esc(t.lado)}</span> <span class="muted small">${esc((TFS.find(x => x[0] === t.tf) || [0, t.tf || ''])[1])} · ${t.tipo === 'real' ? 'real' : 'papel'}</span></td>
     <td>${esc(t.setup || '—')}</td><td>${px(t.entrada)} → ${px(t.saida)}</td><td class="${cls(t.r)}"><b>${sinal(t.r)} R</b></td>
     <td class="${cls(t.resultado_usd)}">${t.resultado_usd == null ? '—' : 'US$ ' + sinal(t.resultado_usd)}</td><td class="muted small">${esc(t.motivo || '')}${t.emocao ? ' · ' + esc(t.emocao) : ''}${t.nota ? ' · ' + esc(t.nota) : ''}</td>
-    <td><button class="hj-link" data-act="tr-apagar" data-id="${t.id}">excluir</button></td></tr>`;
+    <td>${t.fonte === 'hyperliquid' ? `<button class="hj-link" data-act="tr-anotar" data-id="${t.id}">anotar</button>` : `<button class="hj-link" data-act="tr-apagar" data-id="${t.id}">excluir</button>`}</td></tr>`;
 }
 function formulario(modo) {
   const opt = ['<option value="">—</option>'].concat((typeof DADOS_HOJE !== 'undefined' && DADOS_HOJE && typeof hojeLinhas === 'function' ? hojeLinhas(DADOS_HOJE) : [])
@@ -126,7 +149,10 @@ function desenhar() {
       <button class="hj-link" data-act="tr-recarregar">atualizar</button></span></div>
       <p class="small muted">R é o lucro medido em múltiplos do risco da operação: +2 R é ganhar o dobro do que arriscou. O que importa é a expectância (média em R) depois de dezenas de operações, não o resultado de uma.</p>
       ${kpis(m)}${m.n >= 2 ? `<div>${curvaSVG(m.curva)}</div>` : ''}</div>`;
+    const semStop = L.filter(t => t.fonte === 'hyperliquid' && t.status === 'fechado' && t.r == null).sort((a, b) => b.fechamento - a.fechamento);
     dyn.innerHTML = `
+      ${semStop.length ? `<div class="box" style="border-color:var(--warn)"><div class="box-head"><h2>Operações reais sem stop (${semStop.length})</h2><p>Vieram sozinhas da corretora. Informe o stop que você usou para o R entrar nas estatísticas.</p></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Fechou</th><th>Operação</th><th>Preço</th><th>Resultado</th><th>Stop</th></tr></thead><tbody>${semStop.slice(0, 30).map(linhaSemStop).join('')}</tbody></table></div></div>` : ''}
       <div class="box"><div class="box-head"><h2>Em aberto (${abertas.length})</h2><p>O R atual usa o preço ao vivo da Hyperliquid.</p></div>
         ${abertas.length ? `<div class="tbl-wrap"><table><thead><tr><th>Operação</th><th>Entrada</th><th>Stop</th><th>Alvo 1</th><th>Preço</th><th>R agora</th><th>Fechar</th></tr></thead><tbody>${abertas.map(linhaAberta).join('')}</tbody></table></div>` : '<p class="muted small">Nenhuma operação aberta.</p>'}</div>
       <div class="box"><div class="box-head"><h2>Fechadas (${fechadas.length})</h2></div>
@@ -168,7 +194,7 @@ function ligar(root, modo) {
         const { trade } = await api(f);
         S.lista = [trade, ...(S.lista || [])];
         root.querySelectorAll('[data-form] input').forEach(i => { if (i.dataset.k !== 'setup') i.value = ''; });
-        msg.textContent = 'Registrada.'; el.disabled = false; return desenhar();
+        msg.textContent = 'Registrada.'; el.disabled = false; desenhar(); avisar(); return;
       }
       if (act === 'tr-fechar') {
         const q = s => root.querySelector(`[${s}="${id}"]`);
@@ -176,12 +202,26 @@ function ligar(root, modo) {
         if (!(saida > 0)) { alert('Informe o preço de saída.'); return; }
         el.disabled = true;
         const { trade } = await api({ acao: 'update', id, saida, taxas_usd: q('data-tax').value, motivo: q('data-mot').value, fechamento: Date.now() });
-        S.lista = S.lista.map(t => t.id === id ? trade : t); return desenhar();
+        S.lista = S.lista.map(t => t.id === id ? trade : t); desenhar(); avisar(); return;
+      }
+      if (act === 'tr-stop') {
+        const v = parseFloat(String(root.querySelector(`[data-stp="${id}"]`).value).replace(',', '.'));
+        if (!(v > 0)) { alert('Informe o preço do stop.'); return; }
+        el.disabled = true;
+        const { trade } = await api({ acao: 'update', id, stop: v });
+        S.lista = S.lista.map(t => t.id === id ? trade : t); desenhar(); avisar(); return;
+      }
+      if (act === 'tr-anotar') {
+        const t = S.lista.find(x => x.id === id); if (!t) return;
+        const setup = prompt('Setup desta operação:', t.setup || ''); if (setup === null) return;
+        const nota = prompt('Por que entrou / o que aprendeu:', t.nota || ''); if (nota === null) return;
+        const { trade } = await api({ acao: 'update', id, setup, nota });
+        S.lista = S.lista.map(x => x.id === id ? trade : x); return desenhar();
       }
       if (act === 'tr-apagar') {
         if (!confirm('Excluir esta operação do diário? Não dá para desfazer.')) return;
         await api({ acao: 'apagar', id });
-        S.lista = S.lista.filter(t => t.id !== id); return desenhar();
+        S.lista = S.lista.filter(t => t.id !== id); desenhar(); avisar(); return;
       }
     } catch (e) { el.disabled = false; if (msg) msg.textContent = msgErro(e); else alert(msgErro(e)); }
   });
