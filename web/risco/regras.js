@@ -117,13 +117,24 @@ export function checklist({ calc, trava, eventos = [], heatAberto = 0, regras = 
       const nome = calc.side > 0 ? 'máxima' : 'mínima', rm = regras.rrMin;
       if (d < rm) {
         const eMin = (calc.oposto + rm * calc.s) / (1 + rm);
-        it.push(['bloqueia', `Estrutura no caminho: a ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R da entrada, antes do alvo 1 (${fmt(a1)}R). O espaço real é menor que o seu mínimo de ${rm}:1; só vale ${calc.side > 0 ? 'comprando em' : 'vendendo em'} ${fpx(eMin)} ou ${calc.side > 0 ? 'abaixo' : 'acima'}, ou com alvo até a ${nome}.`, { eMin, base: `Estrutura no caminho: a ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R da entrada, antes do alvo 1 (${fmt(a1)}R). O espaço real é menor que o seu mínimo de ${rm}:1.` }]);
+        it.push(['bloqueia', `Estrutura no caminho: a ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R da entrada, antes do alvo 1 (${fmt(a1)}R). O espaço real é menor que o seu mínimo de ${rm}:1; só vale ${calc.side > 0 ? 'comprando em' : 'vendendo em'} ${fpx(eMin)} ou ${calc.side > 0 ? 'abaixo' : 'acima'}, ou com alvo até a ${nome}.`, { eMin, ref: calc.oposto, stop: calc.s, base: `Estrutura no caminho: a ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R da entrada, antes do alvo 1 (${fmt(a1)}R). O espaço real é menor que o seu mínimo de ${rm}:1.` }]);
       } else it.push(['aviso', `A ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R, antes do alvo 1 (${fmt(a1)}R): o preço pode parar ali.`]);
     }
   }
   it.push(...extras);
   // "só vale entrar em X": várias regras viram UMA entrada mínima (a mais restritiva); se ela passar do stop, não há entrada válida
   const metas = it.filter(x => x[0] === 'bloqueia' && x[2] && x[2].eMin > 0);
+  /* com o stop do plano nenhuma entrada serve: monta o plano de espera com o stop além da zona mais longe (o do mapa)
+     e a entrada que passa em TODAS as regras com esse stop */
+  const alternativa = () => {
+    const compra = calc.side > 0, rm = regras.rrMin;
+    const st = metas.map(x => x[2].stop).filter(v => v > 0), stop = compra ? Math.min(calc.s, ...st) : Math.max(calc.s, ...st);
+    const ent = metas.filter(x => x[2].ref > 0).map(x => (x[2].ref + rm * stop) / (1 + rm)), e2 = compra ? Math.min(...ent) : Math.max(...ent);
+    const ok = ent.length > 0 && (compra ? e2 > stop : e2 < stop);
+    return ok
+      ? `Com o stop em ${fpx(calc.s)} nenhuma entrada passa. Plano de espera: ${compra ? 'comprar num recuo' : 'vender num repique'} até ${fpx(e2)} ou ${compra ? 'abaixo' : 'acima'}, com stop em ${fpx(stop)} (além da zona de liquidação); refaça o plano lá.`
+      : `Nenhum preço de entrada passa nas regras acima com o stop em ${fpx(calc.s)}: espere outro setup.`;
+  };
   if (metas.length && calc.s > 0) {
     const compra = calc.side > 0, eMin = compra ? Math.min(...metas.map(x => x[2].eMin)) : Math.max(...metas.map(x => x[2].eMin));
     const valido = compra ? eMin > calc.s : eMin < calc.s;
@@ -131,8 +142,8 @@ export function checklist({ calc, trava, eventos = [], heatAberto = 0, regras = 
       const ultimo = it.indexOf(metas[metas.length - 1]);
       metas.forEach(x => { x[1] = x[2].base; });
       it.splice(ultimo + 1, 0, ['bloqueia', valido
-        ? `Entrada mínima que passa nas regras acima: ${compra ? 'comprando em' : 'vendendo em'} ${fpx(eMin)} ou ${compra ? 'abaixo' : 'acima'}.`
-        : `Nenhum preço de entrada passa nas regras acima com o stop em ${fpx(calc.s)} (o preço mínimo seria ${fpx(eMin)}, ${compra ? 'abaixo' : 'acima'} do stop): espere outro setup ou mude o plano.`]);
+        ? `Espere ${compra ? 'um recuo' : 'um repique'} até ${fpx(eMin)} ou ${compra ? 'abaixo' : 'acima'}: é a entrada que passa nas regras acima, com o mesmo stop.`
+        : alternativa()]);
     }
   }
   if (calc.e > 0 && calc.atr > 0 && calc.alvos && calc.alvos.length > 1) {   // alvo 2 realista?
