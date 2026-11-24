@@ -2194,11 +2194,22 @@ async function hojeSugerir() {
   if (dAtr <= 0) { stop = e - side * 1.5 * atr; ajuste = ' A estrutura ficou do lado errado da entrada, então usei 1,5 ATR.'; }
   else if (dAtr < 1) { stop = e - side * atr; ajuste = ' A estrutura está perto demais (dentro do ruído): afastei para 1 ATR.'; }
   else if (dAtr > 3.5) { stop = e - side * 3.5 * atr; ajuste = ' A estrutura está longe: limitei a 3,5 ATR.'; }
-  const R = Math.abs(e - stop), a1 = e + side * 1.5 * R, a2 = e + side * 3 * R;
+  const R = Math.abs(e - stop);
+  /* alvos LÍQUIDOS: 1,5R e o 2º de modo que a média (50% em cada) chegue ao seu R:R mínimo, já com taxas e derrapagem,
+     no mesmo cálculo da calculadora (risco = distância + custos até o stop; ganho = distância − custos até o alvo) */
+  const pc = k => (parseFloat(String(c[k]).replace(',', '.')) || 0) / 100;
+  const fIn = c.tipoEntrada === 'maker' ? pc('maker') : pc('taker'), cS = fIn + pc('taker') + 2 * pc('slip'), cA = fIn + pc('slip') + pc('maker');
+  let rrMin = 2; try { rrMin = JSON.parse(localStorage.getItem('radar-regras') || '{}').rrMin || 2; } catch (er) {}
+  const n1 = 1.5, n2 = Math.max(3, 2 * rrMin - n1 + 0.1), dist = R / e;
+  const alvo = n => e + side * e * (n * (dist + cS) + cA);
+  const a1 = alvo(n1), a2 = alvo(n2);
+  const custoPeso = cS / (dist + cS);
+  const fora = A.mercado === 'acoes' && window.radarPregao && !window.radarPregao(Date.now()).aberto && (tf === '15m' || tf === '1h')
+    ? (P => ` ATENÇÃO: o pregão de NY está fechado. Estas velas são só negócios da Hyperliquid fora do horário (finos): o ATR e a estrutura não representam o pregão. Use como rascunho e refaça depois da abertura (${new Date(P.prox).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}).`)(window.radarPregao(Date.now())) : '';
   const rec2 = V.slice(-j.jan * 2), oposto = side > 0 ? Math.max(...rec2.map(v => v.h)) : Math.min(...rec2.map(v => v.l));
   const dOp = side * (oposto - e) / R;
   const aviso = dOp > 0 && dOp < 1.5 ? ` Atenção: a ${side > 0 ? 'máxima' : 'mínima'} recente (${fmtPx(oposto)}) fica a ${fmt(dOp, 1)}R, antes do alvo 1.` : dOp > 0 ? ` Referência: ${side > 0 ? 'máxima' : 'mínima'} recente em ${fmtPx(oposto)} (a ${fmt(dOp, 1)}R).` : '';
-  gravar(`Sugestão ${lado}, gráfico ${j.nome}: stop em ${fmtPx(hojeArred(stop))} (${side > 0 ? 'mínima' : 'máxima'} dos últimos ${j.jan} candles em ${fmtPx(ext)}, ${side > 0 ? 'menos' : 'mais'} 0,25 ATR). ATR(14) = ${fmtPx(atr)} (${fmt(atr / e * 100, 1)}% do preço). Alvos em 1,5R e 3R.${ajuste}${aviso} É um ponto de partida: revise antes de usar.`,
+  gravar(`Sugestão ${lado}, gráfico ${j.nome}: stop em ${fmtPx(hojeArred(stop))} (${side > 0 ? 'mínima' : 'máxima'} dos últimos ${j.jan} candles em ${fmtPx(ext)}, ${side > 0 ? 'menos' : 'mais'} 0,25 ATR). ATR(14) = ${fmtPx(atr)} (${fmt(atr / e * 100, 1)}% do preço). Alvos em ${fmt(n1, 1)}R e ${fmt(n2, 1)}R líquidos (já descontadas taxas e derrapagem, que levam ${fmt(custoPeso * 100, 0)}% do risco).${ajuste}${aviso}${fora} É um ponto de partida: revise antes de usar.`,
     { lado, entrada: String(hojeArred(e)), stop: String(hojeArred(stop)), alvo1: String(hojeArred(a1)), alvo2: String(hojeArred(a2)), pct1: '50', atrTf: { tf, ativo: c.ativo, frac: atr / e }, oposto: { ativo: c.ativo, lado, px: oposto } });
 }
 function hojeCalcular() {
@@ -2301,7 +2312,7 @@ function hojeCalc(root) {
   const seq = seqN.map(k => { const cap = r.cap * Math.pow(1 - r.rp / 100, k); return `<tr><td>${k} stops seguidos</td><td>${fmt(Math.pow(1 - r.wr, k) * 100, 1)}%</td><td>${usd(cap)}</td><td class="neg">−${fmt((1 - Math.pow(1 - r.rp / 100, k)) * 100, 1)}%</td></tr>`; }).join('');
 
   const ck = window.radarRisco ? window.radarRisco.checklist(r) : [];
-  const ICK = { bloqueia: ['✗', 'var(--down)'], aviso: ['!', 'var(--warn)'], ok: ['✓', 'var(--up)'] };
+  const ICK = { bloqueia: ['✗', 'var(--down)'], aviso: ['!', 'var(--warn)'], ok: ['✓', 'var(--up)'], info: ['i', 'var(--muted)'] };
   const bloqueado = ck.some(x => x[0] === 'bloqueia');
   const ckHtml = ck.length ? `<div style="border:1px solid ${bloqueado ? 'var(--down)' : 'var(--line)'};border-radius:8px;padding:8px 10px">
       <h3 class="hj-sub" style="margin:0 0 4px">Checklist antes de entrar ${bloqueado ? '<span class="chip down">não entre</span>' : '<span class="chip up">pode entrar se for o plano</span>'}</h3>
@@ -2324,7 +2335,7 @@ function hojeCalc(root) {
         <tr><td>Taxa de entrada (${fmt(r.feeIn * 100, 3)}%)</td><td>${usd(r.notional * r.feeIn)}</td></tr>
         <tr><td>Taxa de saída no stop (${fmt(r.fTaker * 100, 3)}%)</td><td>${usd(r.notional * r.fTaker)}</td></tr>
         <tr><td>Derrapagem (entrada + stop, ${fmt(r.slip * 100, 3)}% cada)</td><td>${usd(r.notional * r.slip * 2)}</td></tr>
-        <tr><td>Funding em ${fmt(r.dias, 0)} dias${r.carrega != null ? ` (${fmt(r.carrega, 1)}% a.a.${r.carrega < 0 ? ', você recebe e não conto o ganho' : ''})` : ' (escolha um ativo)'}</td><td>${usd(r.notional * r.fundFrac)}</td></tr>
+        <tr><td>Funding em ${r.dias < 1 ? Math.round(r.dias * 24) + ' h' : fmt(r.dias, 0) + ' dia(s)'}${r.carrega != null ? ` (${fmt(r.carrega, 1)}% a.a.${r.carrega < 0 ? ', você recebe e não conto o ganho' : ''})` : ' (escolha um ativo)'}</td><td>${usd(r.notional * r.fundFrac)}</td></tr>
         <tr><td><b>Total</b></td><td><b>${usd(custoUsd)}</b> <span class="muted small">(${fmt(custoUsd / (r.risco || 1) * 100, 0)}% do risco)</span></td></tr></tbody></table></div></div>
     </div>
     <div class="grid-2">

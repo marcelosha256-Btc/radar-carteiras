@@ -49,7 +49,7 @@ window.radarRisco = {
     const A = calc && calc.A, coin = A ? (A.mercado === 'acoes' ? A.id : A.t) : null, R = regras();
     const d = coin ? mapaDe(coin, () => window.dispatchEvent(new Event('radar-risco'))) : null;   // mapa chega depois: redesenha
     let ref = null; try { if (typeof hojeVivo === 'function' && A) ref = hojeVivo(A); } catch (e) {}
-    const extras = calc && d ? checarMapa({ lado: calc.lado, e: calc.e, s: calc.s, d, ref, rrMin: R.rrMin }) : [];
+    const extras = calc && d ? checarMapa({ lado: calc.lado, e: calc.e, s: calc.s, d, ref, rrMin: R.rrMin, tf: calc.tf, atr: calc.atr }) : [];
     return checklist({ calc, trava: S.trava, eventos, heatAberto: heat, regras: R, mercado: A && A.mercado === 'acoes' ? 'acoes' : 'cripto', extras });
   },
 };

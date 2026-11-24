@@ -201,11 +201,24 @@ function desenhar(modo) {
     const salvo = lerPref('ativo-' + modo, '');
     const op = c => `<option value="${esc(c)}">${esc(c.replace('xyz:', ''))}</option>`;
     sel.innerHTML = `<optgroup label="Ações">${lista.filter(c => c.startsWith('xyz:')).map(op).join('')}</optgroup><optgroup label="Cripto">${lista.filter(c => !c.startsWith('xyz:')).map(op).join('')}</optgroup>`;
+    preAssinar(lista);
     const ini = lista.includes(salvo) ? salvo : lista[0];
     sel.value = ini;
     if (E[modo].coin !== ini) escolher(modo, ini);
   }
   root.querySelector('[data-dyn]').innerHTML = blocos(modo);
+}
+/* deixa o fluxo coletando, desde que a página abre, para a sua lista (★) e o topo do Radar da manhã: sem esperar 3 min ao trocar de ativo */
+let preAssinou = false;
+function preAssinar(lista) {
+  if (preAssinou || !lista.length) return;
+  preAssinou = true;
+  const quero = new Set();
+  try { for (const t of JSON.parse(localStorage.getItem('radar-hoje-obs') || '[]')) { const c = lista.includes(t) ? t : 'xyz:' + t; if (lista.includes(c)) quero.add(c); } } catch (e) {}
+  for (const m of ['acoes', 'cripto']) {
+    try { const g = JSON.parse(localStorage.getItem('radar-manha-cache-' + m) || 'null'); if (g && g.linhas) g.linhas.slice().sort((a, b) => (b.forca || 0) - (a.forca || 0)).slice(0, 5).forEach(r => { if (lista.includes(r.coin)) quero.add(r.coin); }); } catch (e) {}
+  }
+  [...quero].slice(0, 15).forEach(assinar);
 }
 function escolher(modo, coin) {
   Object.assign(E[modo], { coin, book: null, ctx: null, fund: null, erro: '' });
