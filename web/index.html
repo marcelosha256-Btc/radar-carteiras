@@ -2275,7 +2275,7 @@ function hojeCalc(root) {
   const linhasCen = [`<tr><td>Stop</td><td>${fmtPx(r.s)}</td><td class="neg">${fmt(r.dist * 100, 2)}%</td><td>${rf(-r.perdaStop / (r.risco || 1))}</td><td class="neg">${usd(-r.perdaStop)}</td></tr>`,
     `<tr><td>Entrada</td><td>${fmtPx(r.e)}</td><td>—</td><td>—</td><td>—</td></tr>`]
     .concat(r.alvos.map(a => `<tr><td>${a.nome} <span class="muted small">(${fmt(a.f * 100, 0)}% da posição)</span></td><td>${fmtPx(a.p)}</td><td class="${a.valido ? 'pos' : 'neg'}">${fmt(a.dT * 100, 2)}%</td><td>${rf(a.r)}</td><td class="${a.lucro >= 0 ? 'pos' : 'neg'}">${usd(a.lucro)}</td></tr>`))
-    .concat([`<tr><td>Liquidação</td><td>${r.liqPx != null ? fmtPx(r.liqPx) : '—'}</td><td class="neg">${r.liqDist != null ? fmt(r.liqDist * 100, 1) + '%' : '—'}</td><td>—</td><td class="neg">${usd(-r.margem)} <span class="muted small">(margem)</span></td></tr>`]).join('');
+    .concat([`<tr><td>Liquidação</td><td>${r.liqPx != null && r.liqPx > 0 ? fmtPx(r.liqPx) : 'sem risco a 1x'}</td><td class="neg">${r.liqDist != null ? fmt(r.liqDist * 100, 1) + '%' : '—'}</td><td>—</td><td class="neg">${usd(-r.margem)} <span class="muted small">(margem)</span></td></tr>`]).join('');
   const custoUsd = r.notional * r.custoStop;
   const seqN = [3, 5, 8, 10];
   const seq = seqN.map(k => { const cap = r.cap * Math.pow(1 - r.rp / 100, k); return `<tr><td>${k} stops seguidos</td><td>${fmt(Math.pow(1 - r.wr, k) * 100, 1)}%</td><td>${usd(cap)}</td><td class="neg">−${fmt((1 - Math.pow(1 - r.rp / 100, k)) * 100, 1)}%</td></tr>`; }).join('');
@@ -2293,7 +2293,7 @@ function hojeCalc(root) {
       <div class="kpi"><span class="lab">Posição</span><span class="val">${usd(r.notional)}</span><span class="note">${fmt(r.qtd, r.qtd < 10 ? 4 : 2)} unidades · ${r.lado} · ${fmt(r.notional / r.cap, 2)}x o capital</span></div>
       <div class="kpi"><span class="lab">Perda no stop</span><span class="val">${usd(r.perdaStop)}</span><span class="note">${fmt(r.perdaStop / r.cap * 100, 2)}% do capital · stop a ${fmt(r.dist * 100, 2)}%${r.stopATR != null ? ' · ' + fmt(r.stopATR, 1) + ' ATR ' + r.atrNome : ''}</span></div>
       <div class="kpi"><span class="lab">Margem usada</span><span class="val">${usd(r.margem)}</span><span class="note">${fmt(r.lev, 0)}x na corretora${r.levAuto ? ' (automático)' : ''} · máx. ${fmt(r.maxLev, 0)}x</span></div>
-      <div class="kpi"><span class="lab">Liquidação</span><span class="val">${r.liqPx != null ? fmtPx(r.liqPx) : '—'}</span><span class="note">${r.liqDist != null ? fmt(r.liqDist * 100, 1) + '% da entrada · ' + fmt(r.liqDist / r.dist, 1) + 'x a distância do stop' : ''}</span></div>
+      <div class="kpi"><span class="lab">Liquidação</span><span class="val">${r.liqPx != null && r.liqPx > 0 ? fmtPx(r.liqPx) : 'sem risco'}</span><span class="note">${r.liqDist != null ? fmt(r.liqDist * 100, 1) + '% da entrada · ' + fmt(r.liqDist / r.dist, 1) + 'x a distância do stop' : ''}</span></div>
     </div>
     <p class="small muted">Gráfico ${HJ_TF[r.tf].nome} · ${r.lado} · funding contado por ${fmt(r.dias, 0)} dia(s)${r.c.dias ? '' : ' (automático para este tempo gráfico)'}.</p>
     ${av.map(([c, t]) => `<p class="chip ${c}" style="white-space:normal;border-radius:8px">${t}</p>`).join('')}

@@ -58,7 +58,7 @@ test('leituras: execução, fluxo com preço e posicionamento', async () => {
   assert.equal(leituraFluxo(0.8, 0.4)[0], 'compra');
   assert.equal(leituraFluxo(0.5, 0)[1], 'equilibrado');
   const p = leituraPosicao({ fundPerc: 0.03, fundAno: -8, dOI: -1.2, dPx: -2.5 });
-  assert.match(p[0][1], /vendidos lotados/); assert.match(p[1][1], /comprados saindo/);
+  assert.match(p[0][1], /vendidos estão pagando/); assert.match(p[1][1], /comprados saindo/);
   assert.match(leituraPosicao({ fundPerc: 0.5, fundAno: 5, dOI: 1, dPx: -1 })[0][1], /vendidos novos/);
   assert.match(leituraPosicao({ fundPerc: 0.5, fundAno: 5, dOI: -1, dPx: 1 })[0][1], /frágil/);
   assert.equal(leituraPosicao({ fundPerc: 0.5, fundAno: 5, dOI: 0.1, dPx: 1 })[0][1], 'sem desequilíbrio');
