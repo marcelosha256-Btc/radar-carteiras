@@ -4,7 +4,7 @@
  *   Funding e OI: quem paga para segurar posição, se o funding está caro frente aos últimos 20 dias, e o OI.
  * Tudo direto da Hyperliquid, no navegador (sem banco). */
 const HL = 'https://api.hyperliquid.xyz/info', WS = 'wss://api.hyperliquid.xyz/ws';
-const ALVOS = { cripto: 'mercCripto', acoes: 'mercAcoes' };
+const ALVOS = { tudo: 'mercUnico' };   // um cartão só para ações e cripto
 const num = (v, d = 0) => (+v).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const usd = v => v >= 1e9 ? 'US$ ' + num(v / 1e9, 2) + ' bi' : v >= 1e6 ? 'US$ ' + num(v / 1e6, 1) + ' mi' : 'US$ ' + num(v / 1e3, 0) + ' mil';
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -12,9 +12,9 @@ const lerPref = (k, d) => { try { return localStorage.getItem('radar-merc-' + k)
 const gravarPref = (k, v) => { try { localStorage.setItem('radar-merc-' + k, v); } catch (e) {} };
 const hl = async corpo => { const r = await fetch(HL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }); if (!r.ok) throw new Error(r.status); return r.json(); };
 
-const E = { cripto: { coin: null, book: null, ctx: null, fund: null, erro: '' }, acoes: { coin: null, book: null, ctx: null, fund: null, erro: '' } };
-const ativos = modo => (typeof DADOS_HOJE !== 'undefined' && DADOS_HOJE && typeof hojeLinhas === 'function' ? hojeLinhas(DADOS_HOJE) : [])
-  .filter(r => (modo === 'acoes') === (r.mercado === 'acoes')).map(r => modo === 'acoes' ? r.id : r.t);
+const E = { tudo: { coin: null, book: null, ctx: null, fund: null, erro: '' } };
+const linhas = () => typeof DADOS_HOJE !== 'undefined' && DADOS_HOJE && typeof hojeLinhas === 'function' ? hojeLinhas(DADOS_HOJE) : [];
+const ativos = () => { const L = linhas(); return [...L.filter(r => r.mercado === 'acoes').map(r => r.id), ...L.filter(r => r.mercado !== 'acoes').map(r => r.t)]; };   // ações primeiro
 
 /* ---------------------------------------------------------------- cálculos (puros) ---- */
 export function derrapagem(niveis, mid, notional, lado) {
@@ -187,7 +187,7 @@ function blocos(modo) {
 function desenhar(modo) {
   const root = document.getElementById(ALVOS[modo]);
   if (!root) return;
-  const lista = ativos(modo);
+  const lista = ativos();
   if (!root.dataset.pronto) {
     if (!lista.length) return;
     root.dataset.pronto = '1';
@@ -199,7 +199,8 @@ function desenhar(modo) {
   const sel = root.querySelector('[data-merc]');
   if (lista.length && sel.options.length !== lista.length) {
     const salvo = lerPref('ativo-' + modo, '');
-    sel.innerHTML = lista.map(c => `<option value="${esc(c)}">${esc(c.replace('xyz:', ''))}</option>`).join('');
+    const op = c => `<option value="${esc(c)}">${esc(c.replace('xyz:', ''))}</option>`;
+    sel.innerHTML = `<optgroup label="Ações">${lista.filter(c => c.startsWith('xyz:')).map(op).join('')}</optgroup><optgroup label="Cripto">${lista.filter(c => !c.startsWith('xyz:')).map(op).join('')}</optgroup>`;
     const ini = lista.includes(salvo) ? salvo : lista[0];
     sel.value = ini;
     if (E[modo].coin !== ini) escolher(modo, ini);
@@ -214,6 +215,6 @@ function escolher(modo, coin) {
 }
 
 /* ---------------------------------------------------------------- ciclo ---- */
-function visivel(modo) { return !document.hidden && !!document.querySelector(modo === 'acoes' ? '#p-a-hoje:not([hidden])' : '#p-hoje:not([hidden])'); }
-setInterval(() => { for (const m of Object.keys(ALVOS)) { if (!document.getElementById(ALVOS[m]).dataset.pronto) desenhar(m); else if (visivel(m)) atualizar(m); } }, 8000);
+function visivel() { return !document.hidden && !!document.querySelector('#p-hoje:not([hidden])'); }
+setInterval(() => { for (const m of Object.keys(ALVOS)) { const el = document.getElementById(ALVOS[m]); if (!el) continue; if (!el.dataset.pronto) desenhar(m); else if (visivel(m)) atualizar(m); } }, 8000);
 setTimeout(() => { for (const m of Object.keys(ALVOS)) desenhar(m); }, 1500);

@@ -111,6 +111,13 @@ function janela() {
 }
 function linhaHora(modo, agora) {   // uma linha só: a hora e se está na sua janela / se o horário é fino
   const hBRT = new Date(agora - BRT).getUTCHours(), J = janela(), v = PERFIL[modo][hBRT];
+  if (modo === 'acoes' && window.radarPregao) {   // ações: a janela é o começo do pregão de Nova York
+    const P = window.radarPregao(agora), hm = t => new Date(t - BRT).toISOString().slice(11, 16), dm = t => new Date(t - BRT).toISOString().slice(8, 10) + '/' + new Date(t - BRT).toISOString().slice(5, 7);
+    let fimJ = 2.5; try { fimJ = JSON.parse(localStorage.getItem('radar-regras') || '{}').acoesJanelaH ?? 2.5; } catch (e) {}
+    const txt = !P.aberto ? `<b style="color:var(--warn)">pregão de NY fechado</b>${P.feriado ? ' (' + P.feriado + ')' : ''} · abre ${dm(P.prox) !== dm(agora) ? dm(P.prox) + ' ' : ''}às ${hm(P.prox)}`
+      : agora <= P.abre + fimJ * 36e5 ? '<b class="pos">dentro da janela das ações</b> (início do pregão de NY)' : `<b style="color:var(--warn)">pregão aberto, fora da sua janela</b> (até ${hm(P.abre + fimJ * 36e5)})`;
+    return `<p class="small muted" style="margin:0">Agora ${String(hBRT).padStart(2, '0')}h: ${txt}.</p>`;
+  }
   const dentro = hBRT >= J.ini && hBRT < J.fim;
   const txt = dentro ? '<b class="pos">dentro da sua janela de entradas</b>' : `<b style="color:var(--warn)">fora da sua janela</b> (${J.ini}h–${J.fim}h)`;
   return `<p class="small muted" style="margin:0">Agora ${String(hBRT).padStart(2, '0')}h: ${txt}${v < 0.8 ? ' · horário fino, entrar custa mais' : v >= 1.3 ? ' · horário de muita liquidez' : ''}.</p>`;
@@ -140,11 +147,11 @@ function desenhar(modo) {
   if (!root) return;
   const c = cache[modo], agora = Date.now();
   if (recolhido()) {
-    root.innerHTML = `<div class="box" style="padding-block:10px"><div class="box-head" style="margin:0"><h2 style="font-size:15px">Radar da manhã</h2><button class="hj-link" data-act="mh-abrir">abrir</button></div></div>`;
+    root.innerHTML = `<div class="box" style="padding-block:10px"><div class="box-head" style="margin:0"><h2 style="font-size:15px">Radar da manhã · ${modo === 'acoes' ? 'Ações' : 'Cripto'}</h2><button class="hj-link" data-act="mh-abrir">abrir</button></div></div>`;
     root.querySelector('[data-act="mh-abrir"]').addEventListener('click', () => { gravarPref('aberto', diaHoje()); desenhar('cripto'); desenhar('acoes'); });
     return;
   }
-  root.innerHTML = `<div class="box"><div class="box-head"><h2>Radar da manhã <span title="${esc(AJUDA)}" style="cursor:help;font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:50%;padding:0 6px">?</span></h2>
+  root.innerHTML = `<div class="box"><div class="box-head"><h2>Radar da manhã · ${modo === 'acoes' ? 'Ações' : 'Cripto'} <span title="${esc(AJUDA)}" style="cursor:help;font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:50%;padding:0 6px">?</span></h2>
       ${modo === 'acoes' ? `<label class="small muted" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-indiv ${lerPref('individuais', '1') === '1' ? 'checked' : ''}> só ações individuais</label>` : ''}</div>
     ${linhaHora(modo, agora)}
     ${c ? tabela(modo, c.linhas) : '<p class="muted small">Lendo os candles da Hyperliquid… (leva até 40 s na primeira vez)</p>'}
@@ -152,7 +159,7 @@ function desenhar(modo) {
   const ck = root.querySelector('[data-indiv]');
   if (ck) ck.addEventListener('change', () => { gravarPref('individuais', ck.checked ? '1' : '0'); cache.acoes = null; ciclo('acoes'); desenhar('acoes'); });
   root.querySelectorAll('tr[data-coin]').forEach(tr => tr.addEventListener('click', () => {   // leva o ativo para o cartão "Mercado agora"
-    const sel = document.querySelector(`#${modo === 'acoes' ? 'mercAcoes' : 'mercCripto'} [data-merc]`);
+    const sel = document.querySelector('#mercUnico [data-merc]');
     if (sel && [...sel.options].some(o => o.value === tr.dataset.coin)) { sel.value = tr.dataset.coin; sel.dispatchEvent(new Event('change')); sel.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   }));
 }
@@ -165,7 +172,7 @@ async function ciclo(modo) {
   emCurso[modo] = false;
   desenhar(modo);
 }
-const visivel = modo => !document.hidden && !!document.querySelector(modo === 'acoes' ? '#p-a-hoje:not([hidden])' : '#p-hoje:not([hidden])');
+const visivel = () => !document.hidden && !!document.querySelector('#p-hoje:not([hidden])');
 for (const m of Object.keys(ALVOS)) desenhar(m);
 /* só carrega o modo que está na tela (e só de novo quando os dados têm mais de 5 min) */
 setInterval(() => {

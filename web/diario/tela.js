@@ -3,7 +3,7 @@
 import { metricas, porGrupo, rAberto, confianca, ordemFechamento } from './metricas.js';
 import { operacoes, carteira } from '../risco/dados.js';
 
-const MODOS = { cripto: 'diarioCripto', acoes: 'diarioAcoes' };
+const MODOS = { tudo: 'diarioUnico' };   // um diário só, com filtro por mercado
 const TFS = [['1h', '1H'], ['4h', '4H'], ['1d', 'Diário'], ['1w', 'Semanal']];
 const MOTIVOS = [['alvo', 'Alvo'], ['stop', 'Stop'], ['manual', 'Saída manual'], ['tempo', 'Tempo'], ['invalidou', 'Setup invalidou']];
 const EMOCOES = [['', '—'], ['calmo', 'Calmo'], ['ansioso', 'Ansioso'], ['fomo', 'FOMO'], ['revenge', 'Revanche'], ['entediado', 'Entediado'], ['confiante', 'Confiante demais']];
@@ -107,8 +107,9 @@ function linhaFechada(t) {
     <td>${t.fonte === 'hyperliquid' ? `<button class="hj-link" data-act="tr-anotar" data-id="${t.id}">anotar</button>` : `<button class="hj-link" data-act="tr-apagar" data-id="${t.id}">excluir</button>`}</td></tr>`;
 }
 function formulario(modo) {
-  const opt = ['<option value="">—</option>'].concat((typeof DADOS_HOJE !== 'undefined' && DADOS_HOJE && typeof hojeLinhas === 'function' ? hojeLinhas(DADOS_HOJE) : [])
-    .filter(r => modo === 'acoes' ? r.mercado === 'acoes' : r.mercado !== 'acoes').map(r => `<option value="${esc(r.t)}">${esc(r.t)}</option>`));
+  const L = typeof DADOS_HOJE !== 'undefined' && DADOS_HOJE && typeof hojeLinhas === 'function' ? hojeLinhas(DADOS_HOJE) : [];
+  const op = r => `<option value="${esc(r.t)}" data-mercado="${r.mercado === 'acoes' ? 'acoes' : 'cripto'}">${esc(r.t)}</option>`;
+  const opt = ['<option value="">—</option>', `<optgroup label="Ações">${L.filter(r => r.mercado === 'acoes').map(op).join('')}</optgroup>`, `<optgroup label="Cripto">${L.filter(r => r.mercado !== 'acoes').map(op).join('')}</optgroup>`];
   return `<div class="box"><div class="box-head"><h2>Nova operação</h2><button class="hj-link" data-act="tr-calc">preencher com a calculadora de risco</button></div>
     <div class="hj-form" data-form>
       <label>Ativo<select data-k="ativo">${opt.join('')}</select></label>
@@ -139,13 +140,13 @@ function desenhar() {
     const dyn = root.querySelector('[data-slot="dyn"]'), topo = root.querySelector('[data-slot="topo"]');
     if (S.erro) { topo.innerHTML = ''; dyn.innerHTML = `<div class="box"><p class="chip down" style="white-space:normal">${esc(S.erro)}</p></div>`; continue; }
     if (!S.lista) { dyn.innerHTML = '<p class="muted">Carregando o diário…</p>'; continue; }
-    const filtro = lerPref('tipo-' + modo, 'todos');
-    const mine = S.lista.filter(t => (t.mercado || 'cripto') === modo);
+    const filtro = lerPref('tipo-' + modo, 'todos'), mercado = lerPref('mercado', 'todos');
+    const mine = S.lista.filter(t => mercado === 'todos' || (t.mercado || 'cripto') === mercado);
     const L = mine.filter(t => filtro === 'todos' || t.tipo === filtro);
     const m = metricas(L), abertas = L.filter(t => t.status !== 'fechado'), fechadas = ordemFechamento(L).reverse();
     root.querySelector('datalist').innerHTML = [...new Set(mine.map(t => t.setup).filter(Boolean))].map(s => `<option value="${esc(s)}">`).join('');
     topo.innerHTML = `<div class="box"><div class="box-head"><h2>Meu diário em R</h2>
-      <span class="facts">${[['todos', 'Todas'], ['papel', 'Papel'], ['real', 'Reais']].map(([v, n]) => `<button class="hj-link" data-act="tr-filtro" data-f="${v}" style="${filtro === v ? 'font-weight:700;text-decoration:none' : ''}">${n}</button>`).join(' · ')}
+      <span class="facts">${[['todos', 'Tudo'], ['acoes', 'Ações'], ['cripto', 'Cripto']].map(([v, n]) => `<button class="hj-link" data-act="tr-mercado" data-f="${v}" style="${mercado === v ? 'font-weight:700;text-decoration:none' : ''}">${n}</button>`).join(' · ')} &nbsp;|&nbsp; ${[['todos', 'Todas'], ['papel', 'Papel'], ['real', 'Reais']].map(([v, n]) => `<button class="hj-link" data-act="tr-filtro" data-f="${v}" style="${filtro === v ? 'font-weight:700;text-decoration:none' : ''}">${n}</button>`).join(' · ')}
       <button class="hj-link" data-act="tr-recarregar">atualizar</button></span></div>
       <p class="small muted">R é o lucro medido em múltiplos do risco da operação: +2 R é ganhar o dobro do que arriscou. O que importa é a expectância (média em R) depois de dezenas de operações, não o resultado de uma.</p>
       ${kpis(m)}${m.n >= 2 ? `<div>${curvaSVG(m.curva)}</div>` : ''}</div>`;
@@ -175,6 +176,7 @@ function ligar(root, modo) {
     const act = el.dataset.act, msg = root.querySelector('[data-msg]'), id = Number(el.dataset.id);
     try {
       if (act === 'tr-filtro') { gravarPref('tipo-' + modo, el.dataset.f); return desenhar(); }
+      if (act === 'tr-mercado') { gravarPref('mercado', el.dataset.f); return desenhar(); }
       if (act === 'tr-recarregar') { return carregar(); }
       if (act === 'tr-calc') {
         if (typeof hojeCalcular !== 'function') return;
@@ -188,7 +190,8 @@ function ligar(root, modo) {
         msg.textContent = 'Preenchido com a calculadora. Revise e registre.'; return;
       }
       if (act === 'tr-add') {
-        const f = lerForm(root); f.mercado = modo; f.acao = 'add'; f.abertura = Date.now();
+        const f = lerForm(root), o = root.querySelector('[data-form] [data-k="ativo"]').selectedOptions[0];
+        f.mercado = o && o.dataset.mercado ? o.dataset.mercado : 'cripto'; f.acao = 'add'; f.abertura = Date.now();
         if (!f.ativo) { msg.textContent = 'Escolha o ativo.'; return; }
         el.disabled = true; msg.textContent = 'Salvando…';
         const { trade } = await api(f);
@@ -230,7 +233,7 @@ function ligar(root, modo) {
 /* ---------------------------------------------------------------- início ---- */
 let iniciou = false;
 function abrir() { if (!iniciou) { iniciou = true; desenhar(); carregar(); } else if (S.lista) desenhar(); }
-document.querySelectorAll('.tab[data-tab="trades"], .tab[data-tab="a-trades"]').forEach(b => b.addEventListener('click', abrir));
+document.querySelectorAll('.tab[data-tab="trades"]').forEach(b => b.addEventListener('click', abrir));
 window.addEventListener('hashchange', () => { if (/^#(a-)?trades$/.test(location.hash)) abrir(); });
 setTimeout(() => { const p = document.querySelector('.panel:not([hidden])'); if (p && /^p-(a-)?trades$/.test(p.id)) abrir(); }, 600);
 setInterval(() => {   // atualiza o R ao vivo das abertas, sem atrapalhar quem está digitando
