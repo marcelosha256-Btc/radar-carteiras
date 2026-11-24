@@ -4,7 +4,7 @@
 const HL = 'https://api.hyperliquid.xyz/info', H = 36e5, BRT = 3 * H;   // Brasília = UTC−3 o ano todo
 const ALVOS = { cripto: 'manhaCripto', acoes: 'manhaAcoes' };
 /* critérios para entrar no ranking (quem está na sua lista de observação ou no painel entra sempre, marcado com ★) */
-const CRIT = { cripto: { volMin: 50e6, levMin: 5, dias: 90, max: 30 }, acoes: { volMin: 5e6, levMin: 5, dias: 90, max: 30 } };
+const CRIT = { cripto: { volMin: 10e6, levMin: 5, dias: 90, max: 30 }, acoes: { volMin: 5e6, levMin: 5, dias: 90, max: 30 } };
 const NAO_INDIVIDUAIS = new Set(['XYZ100', 'SP500', 'GOLD', 'SILVER', 'BRENTOIL', 'CL', 'JPY', 'EWY', 'KORU', 'SOXL']);   // índices, commodities, câmbio e ETFs
 const lerPref = (k, d) => { try { const v = localStorage.getItem('radar-manha-' + k); return v == null ? d : v; } catch (e) { return d; } };
 const gravarPref = (k, v) => { try { localStorage.setItem('radar-manha-' + k, v); } catch (e) {} };
