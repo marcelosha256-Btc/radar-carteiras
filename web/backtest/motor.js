@@ -399,7 +399,7 @@ function normalizar(E, ativo) {
   const S = E.saida || {};
   if ((T.tipo === 'risco' || T.tipo === 'risco_valor') && !S.stop) erros.push('tamanho por risco precisa de "saida.stop"');
   if (T.tipo === 'caixa' && T.valor > 100) erros.push('tamanho por % da caixa vai até 100 (a alavancagem multiplica)');
-  const stopTipos = ['percentual', 'atr', 'trailing', 'minima_sinal'];
+  const stopTipos = ['percentual', 'atr', 'trailing', 'minima_sinal', 'estrutura'];
   if (S.stop && !stopTipos.includes(S.stop.tipo)) erros.push(`stop.tipo deve ser ${stopTipos.join(', ')}`);
   let alvos = S.alvos ? S.alvos.map(a => ({ ...a })) : S.alvo ? [{ ...S.alvo, fracao: 100 }] : [];
   if (alvos.length > MAX_ALVOS) erros.push(`no máximo ${MAX_ALVOS} alvos`);
@@ -443,6 +443,10 @@ export function rodarBacktest(E, V, opc = {}) {
   const sinalEntrada = criarAvaliador(E.entrada, serie);
   const sinalSaida = S.sinal ? criarAvaliador(S.sinal, serie) : null;
   const atrStop = S.stop && S.stop.tipo === 'atr' ? serie({ nome: 'ATR', periodo: S.stop.periodo || 14 }) : null;
+  // stop estrutural: atrás da mínima (compra) ou máxima (venda) dos últimos N candles, com folga em ATR, limitado entre min_atr e max_atr
+  const ES = S.stop && S.stop.tipo === 'estrutura' ? S.stop : null;
+  const estr = ES ? janelaExtremos(V, ES.periodo || 12, true) : null;
+  const atrEs = ES ? serie({ nome: 'ATR', periodo: ES.atr_periodo || 14 }) : null;
   const FUND = custos.funding ? (opc.funding || []) : [];
   const arred = q => Math.floor(q / passo + 1e-9) * passo;
 
@@ -512,6 +516,14 @@ export function rodarBacktest(E, V, opc = {}) {
       if (st.tipo === 'minima_sinal') stop = side === 1 ? V[i].l : V[i].h;
       else if (st.tipo === 'percentual' || st.tipo === 'trailing') stop = ent * (1 - side * st.valor / 100);
       else if (st.tipo === 'atr') stop = atrStop[i] == null ? null : ent - side * st.valor * atrStop[i];   // ATR do candle sinal
+      else if (st.tipo === 'estrutura') {
+        const a = atrEs[i], ext = side === 1 ? estr.ll[i] : estr.hh[i];
+        if (a != null && ext != null && Number.isFinite(ext)) {
+          const lo = (st.min_atr ?? 1) * a, hi = (st.max_atr ?? 3.5) * a;
+          const d = Math.min(hi, Math.max(lo, side * (ent - ext) + (st.folga_atr ?? 0.25) * a));   // distância da entrada ao stop
+          stop = ent - side * d;
+        }
+      }
       if (stop == null || (side === 1 ? stop >= ent : stop <= ent)) { ignorados.stop_invalido++; return; }
     }
     const R = stop == null ? null : Math.abs(ent - stop);
