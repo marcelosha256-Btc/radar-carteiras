@@ -2020,7 +2020,7 @@ function hojeMontar(root, modo) {
   const kpiEv = kpi('Eventos de alto impacto (7 dias)', altos.length, altos.length ? `próximo: ${altos[0].nome} · ${altos[0].dia.slice(8)}/${altos[0].dia.slice(5, 7)}` : 'nenhum na agenda');
   const kpis = modo === 'acoes'
     ? kpi('S&P 500 no diário · 4h', sp ? `${TL[sp.D]} · ${TL[sp.H]}` : '—', sp ? sp.frase : 'sem dados')
-      + kpi('Pregão de Nova York', ny ? (ny.aberta ? 'ABERTO' : 'FECHADO') : '—', ny ? `${ny.aberta ? 'fecha' : 'abre'} às ${hora(ny.muda_em)} · fora do pregão o preço é só da Hyperliquid` : '') + kpiDados + kpiEv
+      + `<div data-pregao>${hojePregaoKpi(kpi, ny, hora)}</div>` + kpiDados + kpiEv
     : kpi('BTC no diário · 4h', btc ? `${TL[btc.D]} · ${TL[btc.H]}` : '—', btc ? btc.frase : '')
       + kpi('Funding do BTC', btc ? fmt(btc.funding, 1) + '% a.a.' : '—', btc ? (btc.funding >= 0 ? 'quem está comprado paga' : 'quem está vendido paga') + ` · ${fmt(Math.abs(btc.funding) / 365, 3)}% ao dia` : '') + kpiDados + kpiEv;
 
@@ -2085,7 +2085,7 @@ function hojeMontar(root, modo) {
           <label>Alvo 1<input data-k="alvo1" inputmode="decimal" value="${calc.alvo1}"></label>
           <label>% fechado no alvo 1<input data-k="pct1" inputmode="decimal" value="${calc.pct1}"></label>
           <label>Alvo 2 (opcional)<input data-k="alvo2" inputmode="decimal" value="${calc.alvo2}"></label>
-          <label>Alavancagem na corretora<input data-k="lev" inputmode="decimal" value="${calc.lev}"></label>
+          <label>Alavancagem na corretora<input data-k="lev" inputmode="decimal" value="${calc.lev}" placeholder="auto (a menor possível)"></label>
           <label>Alavancagem máxima do ativo<input data-k="maxlev" inputmode="decimal" value="${calc.maxlev}" placeholder="auto"></label>
       </div>
       <div class="hj-acoes">
@@ -2135,7 +2135,7 @@ function hojeMontar(root, modo) {
     </div>`;
   hojeCalc(root);
 }
-const HJ_PADRAO = { cap: '1000', posMax: '1000', pico: '', risco: '0.5', ativo: '', entrada: '', stop: '', alvo1: '', pct1: '50', alvo2: '', lev: '3', maxlev: '', lado: '', tf: '4h', sug: '', atrTf: null,
+const HJ_PADRAO = { cap: '1000', posMax: '1000', pico: '', risco: '0.5', ativo: '', entrada: '', stop: '', alvo1: '', pct1: '50', alvo2: '', lev: '', maxlev: '', lado: '', tf: '4h', sug: '', atrTf: null,
   taker: '0.045', maker: '0.015', tipoEntrada: 'taker', slip: '0.03', dias: '', wr: '45', inclCustos: true };
 const HJ_MAXLEV = { BTC: 40, ETH: 25, SOL: 20, XRP: 20, HYPE: 10, NEAR: 10 };   // referência: confira o limite de cada ativo na Hyperliquid
 const hojeCfg = () => { const c = Object.assign({}, HJ_PADRAO, HJ.ler('calc', {})); for (const k of ['cap', 'posMax']) if (String(c[k] ?? '').trim() === '') c[k] = HJ_PADRAO[k]; return c; };
@@ -2195,7 +2195,7 @@ async function hojeSugerir() {
   const dOp = side * (oposto - e) / R;
   const aviso = dOp > 0 && dOp < 1.5 ? ` Atenção: a ${side > 0 ? 'máxima' : 'mínima'} recente (${fmtPx(oposto)}) fica a ${fmt(dOp, 1)}R, antes do alvo 1.` : dOp > 0 ? ` Referência: ${side > 0 ? 'máxima' : 'mínima'} recente em ${fmtPx(oposto)} (a ${fmt(dOp, 1)}R).` : '';
   gravar(`Sugestão ${lado}, gráfico ${j.nome}: stop em ${fmtPx(hojeArred(stop))} (${side > 0 ? 'mínima' : 'máxima'} dos últimos ${j.jan} candles em ${fmtPx(ext)}, ${side > 0 ? 'menos' : 'mais'} 0,25 ATR). ATR(14) = ${fmtPx(atr)} (${fmt(atr / e * 100, 1)}% do preço). Alvos em 1,5R e 3R.${ajuste}${aviso} É um ponto de partida: revise antes de usar.`,
-    { lado, entrada: String(hojeArred(e)), stop: String(hojeArred(stop)), alvo1: String(hojeArred(a1)), alvo2: String(hojeArred(a2)), pct1: '50', atrTf: { tf, ativo: c.ativo, frac: atr / e } });
+    { lado, entrada: String(hojeArred(e)), stop: String(hojeArred(stop)), alvo1: String(hojeArred(a1)), alvo2: String(hojeArred(a2)), pct1: '50', atrTf: { tf, ativo: c.ativo, frac: atr / e }, oposto: { ativo: c.ativo, lado, px: oposto } });
 }
 function hojeCalcular() {
   const c = hojeCfg(), n = k => parseFloat(String(c[k]).replace(',', '.'));
@@ -2210,7 +2210,6 @@ function hojeCalcular() {
   const pico = n('pico'), dd = pico > cap ? (pico - cap) / pico : 0;
   const fator = dd < 0.05 ? 1 : dd < 0.10 ? 0.75 : dd < 0.15 ? 0.5 : 0;
   const rp = rp0 * fator, risco0 = cap * rp / 100;
-  const lev = Math.max(1, n('lev') || 1);
   const maxLev = n('maxlev') > 0 ? n('maxlev') : (A ? (A.mercado === 'acoes' ? 10 : HJ_MAXLEV[A.t] || 10) : 10);
   /* custos como fração do valor da posição */
   const fTaker = n('taker') / 100, fMaker = n('maker') / 100, slip = n('slip') / 100, dias = n('dias') > 0 ? n('dias') : HJ_DIAS[tf];
@@ -2223,6 +2222,7 @@ function hojeCalcular() {
   const posMax = n('posMax'), cortado = posMax > 0 && notionalRisco > posMax;
   const notional = cortado ? posMax : notionalRisco;
   const risco = cortado ? notional * (dist + (incl ? custoStop : 0)) : risco0;   // com a posição no teto, o risco real fica menor que o planejado
+  const levAuto = !(n('lev') > 0), lev = levAuto ? Math.max(1, Math.ceil(notional / cap)) : n('lev');   // automático: a menor alavancagem que cabe no capital
   const qtd = notional / e, margem = notional / lev, perdaStop = notional * (dist + custoStop);
   /* liquidação (margem isolada), fórmula da Hyperliquid: manutenção = 1 / (2 × alavancagem máxima) */
   const l = 1 / (2 * maxLev);
@@ -2244,7 +2244,8 @@ function hojeCalcular() {
   const atrTf = c.atrTf && c.atrTf.tf === tf && c.atrTf.ativo === c.ativo ? c.atrTf.frac : null;
   const atr = atrTf || hojeATR(A), atrNome = atrTf ? HJ_TF[tf].nome : 'diário', stopATR = atr ? dist / atr : null;
   return { c, cap, rp0, rp, fator, pico, dd, e, s, lev, maxLev, lado, side, dist, risco, notional, qtd, margem, perdaStop, liqPx, liqDist,
-    custoStop, fundFrac, feeIn, fTaker, fMaker, slip, dias, tf, atrNome, carrega, posMax, cortado, risco0, alvos, okAlvos, lucroTot, rr, beWR, wr, esp, atr, stopATR, A, incl,
+    custoStop, fundFrac, feeIn, fTaker, fMaker, slip, dias, tf, atrNome, carrega, posMax, cortado, risco0, levAuto,
+    oposto: c.oposto && c.oposto.ativo === c.ativo && c.oposto.lado === lado ? c.oposto.px : null, alvos, okAlvos, lucroTot, rr, beWR, wr, esp, atr, stopATR, A, incl,
     grupo: A && A.mercado === 'acoes' ? 'acoes' : 'cripto' };
 }
 function hojeCalc(root) {
@@ -2264,7 +2265,7 @@ function hojeCalc(root) {
   if (r.dist < 0.003) av.push(['warn', 'Stop muito curto: taxas e derrapagem comem boa parte do resultado.']);
   if (r.lev > r.maxLev) av.push(['down', `Alavancagem ${fmt(r.lev, 0)}x passa do máximo informado do ativo (${fmt(r.maxLev, 0)}x).`]);
   if (r.margem > r.cap) av.push(['down', 'A margem necessária passa do capital: aumente a alavancagem ou reduza o risco.']);
-  if (r.liqDist != null && r.liqDist < r.dist * 3) av.push(['down', `A liquidação (${fmt(r.liqDist * 100, 1)}%) está perto do stop (${fmt(r.dist * 100, 1)}%): deveria estar pelo menos 3 vezes mais longe.`]);
+  if (r.liqDist != null && r.liqDist < r.dist * 3) av.push(['down', `A liquidação (${fmt(r.liqDist * 100, 1)}%) está perto do stop (${fmt(r.dist * 100, 1)}%): deveria estar pelo menos 3 vezes mais longe. Baixe a alavancagem${r.levAuto ? '' : ' (deixe o campo vazio para usar a menor possível: ' + Math.max(1, Math.ceil(r.notional / r.cap)) + 'x)'}.`]);
   if (r.alvos.some(a => !a.valido)) av.push(['down', 'Há alvo do lado errado da entrada para esta operação.']);
   if (r.rr != null && r.rr < 1.5) av.push(['warn', `R:R de ${fmt(r.rr, 2)} é baixo: com custos, o setup precisaria de acerto alto.`]);
   if (r.A && r.A.dir && r.A.dir !== r.lado) av.push(['warn', `Contra a tendência do diário (${TL[r.A.D].toLowerCase()}): operação contra o viés, use risco menor ou fique de fora.`]);
@@ -2291,7 +2292,7 @@ function hojeCalc(root) {
     <div class="kpis hj-mini">
       <div class="kpi"><span class="lab">Posição</span><span class="val">${usd(r.notional)}</span><span class="note">${fmt(r.qtd, r.qtd < 10 ? 4 : 2)} unidades · ${r.lado} · ${fmt(r.notional / r.cap, 2)}x o capital</span></div>
       <div class="kpi"><span class="lab">Perda no stop</span><span class="val">${usd(r.perdaStop)}</span><span class="note">${fmt(r.perdaStop / r.cap * 100, 2)}% do capital · stop a ${fmt(r.dist * 100, 2)}%${r.stopATR != null ? ' · ' + fmt(r.stopATR, 1) + ' ATR ' + r.atrNome : ''}</span></div>
-      <div class="kpi"><span class="lab">Margem usada</span><span class="val">${usd(r.margem)}</span><span class="note">${fmt(r.lev, 0)}x na corretora · máx. ${fmt(r.maxLev, 0)}x</span></div>
+      <div class="kpi"><span class="lab">Margem usada</span><span class="val">${usd(r.margem)}</span><span class="note">${fmt(r.lev, 0)}x na corretora${r.levAuto ? ' (automático)' : ''} · máx. ${fmt(r.maxLev, 0)}x</span></div>
       <div class="kpi"><span class="lab">Liquidação</span><span class="val">${r.liqPx != null ? fmtPx(r.liqPx) : '—'}</span><span class="note">${r.liqDist != null ? fmt(r.liqDist * 100, 1) + '% da entrada · ' + fmt(r.liqDist / r.dist, 1) + 'x a distância do stop' : ''}</span></div>
     </div>
     <p class="small muted">Gráfico ${HJ_TF[r.tf].nome} · ${r.lado} · funding contado por ${fmt(r.dias, 0)} dia(s)${r.c.dias ? '' : ' (automático para este tempo gráfico)'}.</p>
@@ -2315,6 +2316,15 @@ function hojeCalc(root) {
       <div><h3 class="hj-sub">Sequência de perdas</h3><div class="tbl-wrap"><table><thead><tr><th>Cenário</th><th>Chance</th><th>Capital</th><th>Queda</th></tr></thead><tbody>${seq}</tbody></table></div>
         <p class="small muted">Chance = (1 − acerto)^n, supondo operações independentes. Sequências ruins acontecem: o tamanho de posição existe para sobreviver a elas.</p></div>
     </div>`;
+}
+/* pregão de NY pelo relógio (window.radarPregao vem de risco/regras.js); sem ele, cai para a foto do painel */
+function hojePregaoKpi(kpi, ny, hora) {
+  if (window.radarPregao) {
+    const P = window.radarPregao(Date.now()), dia = t => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const quando = P.aberto ? `fecha às ${hora(P.fecha)}${P.meio ? ' (pregão curto: ' + P.meio + ')' : ''}` : `${P.feriado ? 'feriado: ' + P.feriado + ' · ' : ''}abre ${dia(P.prox) !== dia(Date.now()) ? dia(P.prox) + ' ' : ''}às ${hora(P.prox)}`;
+    return kpi('Pregão de Nova York', P.aberto ? 'ABERTO' : 'FECHADO', quando + ' · fora do pregão o preço é só da Hyperliquid', P.aberto ? 'pos' : '');
+  }
+  return kpi('Pregão de Nova York', ny ? (ny.aberta ? 'ABERTO' : 'FECHADO') : '—', ny ? `${ny.aberta ? 'fecha' : 'abre'} às ${hora(ny.muda_em)} · fora do pregão o preço é só da Hyperliquid` : '');
 }
 function hojeRender() {
   const a = document.getElementById('hojeCripto'), b = document.getElementById('hojeAcoes');
@@ -2369,7 +2379,8 @@ function hojeLigar(root) {
   });
 }
 ['hojeCripto', 'hojeAcoes'].forEach(id => { const r = document.getElementById(id); if (r) hojeLigar(r); });
-window.addEventListener('radar-risco', () => ['hojeCripto', 'hojeAcoes'].forEach(id => { const r = document.getElementById(id); if (r && r.querySelector('.hj-out')) hojeCalc(r); }));
+window.addEventListener('radar-risco', () => ['hojeCripto', 'hojeAcoes'].forEach(id => { const r = document.getElementById(id); if (r && r.querySelector('.hj-out')) hojeCalc(r);
+  const pg = r && r.querySelector('[data-pregao]'); if (pg) pg.innerHTML = hojePregaoKpi((lab, val, note, cls = '') => `<div class="kpi"><span class="lab">${lab}</span><span class="val ${cls}">${val}</span><span class="note">${note}</span></div>`, null, ms => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })); }));
 
 /* ---------- cor da tela: sistema, claro ou escuro ---------- */
 (function () {

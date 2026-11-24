@@ -1,7 +1,9 @@
 /* Cartão "Regras do dia" no topo da tela Hoje + checklist da calculadora.
  * Junta o resultado de hoje (execuções reais da corretora e operações em papel do Meu diário), compara com as suas regras e
  * avisa "pare por hoje". A calculadora lê window.radarRisco.checklist(calc) e bloqueia o plano quando alguma regra falha. */
-import { REGRAS_PADRAO, travaDoDia, checklist } from './regras.js';
+import { REGRAS_PADRAO, travaDoDia, checklist, pregaoNY } from './regras.js';
+import { mapaDe, checarMapa } from './zonas.js';
+window.radarPregao = pregaoNY;
 import { carteira, operacoes, conta } from './dados.js';
 
 const ALVOS = ['riscoCripto', 'riscoAcoes'];
@@ -44,7 +46,10 @@ window.radarRisco = {
     const plano = ler('radar-hoje-plano', []), heat = plano.reduce((s, p) => s + (+p.risco || 0), 0);
     let eventos = [];
     try { if (typeof hojeEventos === 'function' && typeof DADOS_HOJE !== 'undefined' && DADOS_HOJE) eventos = hojeEventos(DADOS_HOJE); } catch (e) {}
-    return checklist({ calc, trava: S.trava, eventos, heatAberto: heat, regras: regras() });
+    const A = calc && calc.A, coin = A ? (A.mercado === 'acoes' ? A.id : A.t) : null, R = regras();
+    const d = coin ? mapaDe(coin, () => window.dispatchEvent(new Event('radar-risco'))) : null;   // mapa chega depois: redesenha
+    const extras = calc && d ? checarMapa({ lado: calc.lado, e: calc.e, s: calc.s, d, rrMin: R.rrMin }) : [];
+    return checklist({ calc, trava: S.trava, eventos, heatAberto: heat, regras: R, mercado: A && A.mercado === 'acoes' ? 'acoes' : 'cripto', extras });
   },
 };
 
@@ -63,7 +68,7 @@ function desenhar() {
       <div class="small" style="display:flex;flex-wrap:wrap;gap:6px 18px">
         <span>Real hoje: ${real}</span><span>Papel hoje: ${papel}</span>
         <span>Operações: <b>${t.ops}/${R.opsDia}</b></span><span>Perdas seguidas: <b>${Math.max(t.perdasReal, t.perdasPapel)}/${R.perdasSeguidas}</b></span>
-        <span class="muted">limite ${R.perdaDiaPct}% · entradas ${R.janelaIni}h–${R.janelaFim}h${S.baseCalc ? ' · base: capital da calculadora' : ''}</span></div>
+        <span class="muted">limite ${R.perdaDiaPct}% · entradas: cripto ${R.janelaIni}h–${R.janelaFim}h, ações até ${R.acoesJanelaH ?? 2.5} h após a abertura de NY${S.baseCalc ? ' · base: capital da calculadora' : ''}</span></div>
       ${S.erro ? `<p class="small muted">${S.erro}</p>` : ''}
       ${S.aberto ? `<div class="hj-form" style="margin-top:10px">${CAMPOS.map(([k, n]) => `<label>${n}<input data-rg="${k}" inputmode="decimal" value="${R[k]}"></label>`).join('')}</div>
         <p class="small muted">As regras valem para o real e para o papel. O dia começa às 00h de Brasília.</p>` : ''}</div>`;

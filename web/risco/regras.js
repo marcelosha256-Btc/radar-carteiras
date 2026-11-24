@@ -11,6 +11,7 @@ export const REGRAS_PADRAO = {
   rrMin: 2,            // R:R líquido mínimo
   noticiaMin: 30,      // sem entradas de 15 min antes... até N min depois de notícia de alto impacto
   heatMax: 5,          // risco total aberto máximo, % do capital
+  acoesJanelaH: 2.5,   // ações: entradas da abertura de Nova York até N horas depois
 };
 
 /** início do dia de hoje em Brasília, em ms UTC */
@@ -83,18 +84,34 @@ const fmt = v => (Math.round(v * 100) / 100).toLocaleString('pt-BR');
 
 /** Checklist antes de entrar. calc = resultado da calculadora; eventos = agenda macro [{t, nome, impacto}];
  *  heatAberto = risco já no plano (US$). Itens: ['bloqueia'|'aviso'|'ok', texto]. */
-export function checklist({ calc, trava, eventos = [], heatAberto = 0, regras = REGRAS_PADRAO, agora = Date.now() }) {
+export function checklist({ calc, trava, eventos = [], heatAberto = 0, regras = REGRAS_PADRAO, agora = Date.now(), mercado = 'cripto', extras = [] }) {
   const it = [];
   if (trava && trava.parar) it.push(['bloqueia', 'Trava do dia: ' + trava.motivos.join('; ') + '. Pare por hoje.']);
   else if (trava) it.push(['ok', `Dentro das regras do dia (${trava.ops}/${regras.opsDia} operações).`]);
-  const h = horaBRT(agora);
-  if (h < regras.janelaIni || h >= regras.janelaFim) it.push(['aviso', `Fora da sua janela de entradas (${regras.janelaIni}h–${regras.janelaFim}h de Brasília): só entre se for o plano.`]);
-  else it.push(['ok', 'Dentro da janela de entradas.']);
+  if (mercado === 'acoes') {   // ações seguem o pregão de Nova York
+    const P = pregaoNY(agora), fimJ = P.abre + (regras.acoesJanelaH ?? 2.5) * H;
+    if (!P.aberto) it.push(['aviso', `Fora do pregão de Nova York${P.feriado ? ` (feriado: ${P.feriado})` : ''}: o preço é só da Hyperliquid, a liquidez é fina e há risco de salto na abertura (${horaBRTtxt(P.prox)} de Brasília${new Date(P.prox - BRT).getUTCDate() !== new Date(agora - BRT).getUTCDate() ? ', em ' + new Date(P.prox - BRT).toISOString().slice(8, 10) + '/' + new Date(P.prox - BRT).toISOString().slice(5, 7) : ''}).`]);
+    else {
+      if (agora > fimJ) it.push(['aviso', `Fora da sua janela das ações (abertura de NY às ${horaBRTtxt(P.abre)} até ${horaBRTtxt(fimJ)} de Brasília): só entre se for o plano.`]);
+      else it.push(['ok', 'Dentro da janela das ações (início do pregão de NY).']);
+      if (P.fecha - agora < 15 * 60000) it.push(['aviso', `Faltam ${Math.max(0, Math.round((P.fecha - agora) / 60000))} min para o fechamento de NY.`]);
+      if (P.meio) it.push(['aviso', `Pregão mais curto hoje (${P.meio}): fecha às ${horaBRTtxt(P.fecha)} de Brasília.`]);
+    }
+  } else {
+    const h = horaBRT(agora);
+    if (h < regras.janelaIni || h >= regras.janelaFim) it.push(['aviso', `Fora da sua janela de entradas (${regras.janelaIni}h–${regras.janelaFim}h de Brasília): só entre se for o plano.`]);
+    else it.push(['ok', 'Dentro da janela de entradas.']);
+  }
   const ev = eventos.filter(e => e.impacto === 'alto' && agora >= e.t - 15 * 60000 && agora <= e.t + regras.noticiaMin * 60000);
   if (ev.length) it.push(['bloqueia', `Notícia de alto impacto agora: ${ev.map(e => e.nome).join(', ')}. Espere ${regras.noticiaMin} min depois.`]);
   const prox = eventos.filter(e => e.impacto === 'alto' && e.t > agora + 15 * 60000 && e.t <= agora + 120 * 60000);
   if (prox.length) it.push(['aviso', `Notícia de alto impacto em ${Math.round((prox[0].t - agora) / 60000)} min (${prox[0].nome}): reduza o tamanho ou espere.`]);
   if (!calc) return it;
+  if (calc.oposto > 0 && calc.e > 0 && calc.s > 0) {   // entrando colado no extremo oposto (vender no fundo, comprar no topo)
+    const R = Math.abs(calc.e - calc.s), d = calc.side * (calc.oposto - calc.e) / R;
+    if (d >= 0 && d < 0.5) it.push(['aviso', `${calc.side > 0 ? 'O topo' : 'O fundo'} recente (${fmt(calc.oposto)}) está a ${fmt(d)}R da entrada: você estaria ${calc.side > 0 ? 'comprando no topo' : 'vendendo no fundo'}. Espere ${calc.side > 0 ? 'um recuo' : 'um repique'}.`]);
+  }
+  it.push(...extras);
   if (calc.notional > 0 && calc.notional < ORDEM_MINIMA) it.push(['bloqueia', `Posição de US$ ${fmt(calc.notional)} abaixo da ordem mínima da Hyperliquid (US$ ${ORDEM_MINIMA}): aumente o risco ou afaste o stop.`]);
   if (calc.cortado) it.push(['aviso', `Posição no teto de US$ ${fmt(calc.posMax)}: o risco real é US$ ${fmt(calc.risco)}, menor que o planejado.`]);
   if (calc.rr == null) it.push(['bloqueia', 'Defina o alvo: sem alvo não há R:R para conferir.']);
@@ -107,3 +124,38 @@ export function checklist({ calc, trava, eventos = [], heatAberto = 0, regras = 
     it.push(['bloqueia', `Risco total aberto passaria de ${regras.heatMax}% do capital (${fmt((heatAberto + calc.risco) / calc.cap * 100)}%).`]);
   return it;
 }
+
+/* ---------------------------------------------------------------- pregão de Nova York ---- */
+/* feriados e meios-pregões da bolsa de Nova York (NYSE). Atualizar a lista a cada ano. */
+export const NYSE_FERIADOS = {
+  '2026-01-01': 'Ano-Novo', '2026-01-19': 'Martin Luther King', '2026-02-16': 'Dia dos Presidentes', '2026-04-03': 'Sexta-feira Santa',
+  '2026-05-25': 'Memorial Day', '2026-06-19': 'Juneteenth', '2026-07-03': 'Independência', '2026-09-07': 'Dia do Trabalho',
+  '2026-11-26': 'Ação de Graças', '2026-12-25': 'Natal',
+  '2027-01-01': 'Ano-Novo', '2027-01-18': 'Martin Luther King', '2027-02-15': 'Dia dos Presidentes', '2027-03-26': 'Sexta-feira Santa',
+  '2027-05-31': 'Memorial Day', '2027-06-18': 'Juneteenth', '2027-07-05': 'Independência', '2027-09-06': 'Dia do Trabalho',
+  '2027-11-25': 'Ação de Graças', '2027-12-24': 'Natal',
+};
+export const NYSE_MEIO = { '2026-11-27': 'dia seguinte à Ação de Graças', '2026-12-24': 'véspera de Natal', '2027-11-26': 'dia seguinte à Ação de Graças' };   // fecha às 13h de NY
+
+/** horário de verão americano: do 2º domingo de março ao 1º domingo de novembro (às 2h locais) */
+function deslocNY(t) {
+  const a = new Date(t).getUTCFullYear();
+  const domingo = (mes, n) => { const d = new Date(Date.UTC(a, mes, 1)); const off = (7 - d.getUTCDay()) % 7; return Date.UTC(a, mes, 1 + off + 7 * (n - 1)); };
+  const ini = domingo(2, 2) + 7 * 36e5, fim = domingo(10, 1) + 6 * 36e5;   // 2h EST = 7h UTC; 2h EDT = 6h UTC
+  return t >= ini && t < fim ? -4 : -5;
+}
+/** situação do pregão de NY agora: aberto, horários em ms UTC e o motivo quando fechado */
+export function pregaoNY(agora) {
+  const o = deslocNY(agora) * H, local = new Date(agora + o), dia = local.toISOString().slice(0, 10), dow = local.getUTCDay();
+  const meia = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - o;   // 00h de NY em UTC
+  const abre = meia + 9.5 * H, fecha = meia + (NYSE_MEIO[dia] ? 13 : 16) * H;
+  const util = dow >= 1 && dow <= 5 && !NYSE_FERIADOS[dia];
+  const aberto = util && agora >= abre && agora < fecha;
+  let prox = abre;   // próxima abertura
+  if (!util || agora >= abre) for (let i = 1; i <= 10; i++) {
+    const meio = meia + i * 24 * H + 12 * H, o2 = deslocNY(meio) * H, l = new Date(meio + o2), di = l.toISOString().slice(0, 10), w = l.getUTCDay();
+    if (w >= 1 && w <= 5 && !NYSE_FERIADOS[di]) { prox = Date.UTC(l.getUTCFullYear(), l.getUTCMonth(), l.getUTCDate()) - o2 + 9.5 * H; break; }
+  }
+  return { aberto, abre, fecha, prox, feriado: NYSE_FERIADOS[dia] || null, meio: NYSE_MEIO[dia] || null, util };
+}
+export const horaBRTtxt = t => { const d = new Date(t - BRT); return String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0'); };

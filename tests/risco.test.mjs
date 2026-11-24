@@ -1,7 +1,8 @@
 // Núcleo de risco: consolidação das execuções, trava do dia e checklist.  Rodar: node --test tests/risco.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { consolidarFills, travaDoDia, checklist, inicioDiaBRT, REGRAS_PADRAO } from '../web/risco/regras.js';
+import { consolidarFills, travaDoDia, checklist, inicioDiaBRT, REGRAS_PADRAO, pregaoNY } from '../web/risco/regras.js';
+import { zonasMapa, checarMapa } from '../web/risco/zonas.js';
 
 const H = 36e5, D = 24 * H;
 const perto = (a, b, t = 1e-9) => assert.ok(Math.abs(a - b) <= t, `esperado ${b}, veio ${a}`);
@@ -69,4 +70,32 @@ test('checklist: ordem mínima da Hyperliquid e posição no teto', () => {
   const it = checklist({ calc: { ...base, notional: 1000, cortado: true, posMax: 1000, risco: 3 }, agora });
   assert.ok(it.some(([n, t]) => n === 'aviso' && t.includes('teto')));
   assert.ok(!it.some(([n, t]) => t.includes('ordem mínima')));
+});
+
+test('zonas do mapa: o mesmo critério da Trava, medido da entrada planejada', () => {
+  // comprados liquidam em 595 (abaixo), vendidos em 661 (acima); faixas de 10
+  const d = { bw: 10, L: [[595, 500e3], [610, 20e3]], S: [[661, 120e3], [700, 30e3]] };
+  const z = zonasMapa(d, 627);
+  assert.deepEqual([z.comprados.lo, z.comprados.hi, z.vendidos.lo, z.vendidos.hi], [590, 600, 656, 666]);
+  // venda a 627: stop 666×1,0015 = 667, alvo 600 → R:R 0,67 → bloqueia e diz o preço mínimo
+  const ruim = checarMapa({ lado: 'venda', e: 627, s: 672, d });
+  assert.ok(ruim.some(([n, t]) => n === 'bloqueia' && t.includes('só vale vendendo em')));
+  // venda a 650 com stop 672: R:R (650−600)/(667−650) ≈ 2,9 → ok
+  assert.ok(checarMapa({ lado: 'venda', e: 650, s: 672, d }).some(([n]) => n === 'ok'));
+  // stop 660 fica dentro da zona dos vendidos → aviso
+  assert.ok(checarMapa({ lado: 'venda', e: 640, s: 660, d }).some(([n, t]) => n === 'aviso' && t.includes('dentro da zona')));
+  assert.deepEqual(checarMapa({ lado: 'venda', e: 1, s: 2, d: null }), []);
+});
+
+test('checklist: vender colado no fundo recente e janela das ações pelo pregão de NY', () => {
+  const calc = { rr: 2.5, risco: 5, notional: 100, custoStop: 0.001, cap: 1000, carrega: 0, e: 627, s: 674, side: -1, oposto: 622.85 };
+  const fora = Date.parse('2026-11-24T21:40:00Z');   // 18h40 de Brasília: bolsa fechada
+  const it = checklist({ calc, mercado: 'acoes', agora: fora });
+  assert.ok(it.some(([n, t]) => n === 'aviso' && t.includes('vendendo no fundo')));
+  assert.ok(it.some(([n, t]) => n === 'aviso' && t.includes('Fora do pregão de Nova York')));
+  const abertura = Date.parse('2026-11-25T15:00:00Z');   // 12h de Brasília: 30 min após a abertura
+  assert.ok(checklist({ calc: { ...calc, oposto: null }, mercado: 'acoes', agora: abertura }).some(([n, t]) => n === 'ok' && t.includes('janela das ações')));
+  const feriado = checklist({ calc, mercado: 'acoes', agora: Date.parse('2026-11-26T15:00:00Z') });
+  assert.ok(feriado.some(([, t]) => t.includes('Ação de Graças')));
+  assert.equal(pregaoNY(Date.parse('2026-11-27T17:30:00Z')).meio, 'dia seguinte à Ação de Graças');
 });
