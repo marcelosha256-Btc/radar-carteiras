@@ -48,3 +48,20 @@ test('variação do OI: usa a leitura mais antiga da janela e ignora leituras mu
   assert.equal(variacaoOI([{ t: agora - 60000, oi: 100 }], agora, 150), null);
   assert.equal(variacaoOI([{ t: agora - 4 * 864e5, oi: 100 }], agora, 150), null);
 });
+
+test('leituras: execução, fluxo com preço e posicionamento', async () => {
+  const { leituraExecucao, leituraFluxo, leituraPosicao, fluxo } = await import('../web/mercado/tela.js');
+  assert.equal(leituraExecucao(0.3, true)[0], 'ok'); assert.equal(leituraExecucao(8, true)[0], 'aviso'); assert.equal(leituraExecucao(1, false)[0], 'ruim');
+  assert.match(leituraFluxo(0.25, 0.02)[1], /absorção/);        // muita venda, preço parado
+  assert.equal(leituraFluxo(0.25, -0.5)[0], 'venda');
+  assert.match(leituraFluxo(0.8, 0)[1], /exaustão/);
+  assert.equal(leituraFluxo(0.8, 0.4)[0], 'compra');
+  assert.equal(leituraFluxo(0.5, 0)[1], 'equilibrado');
+  const p = leituraPosicao({ fundPerc: 0.03, fundAno: -8, dOI: -1.2, dPx: -2.5 });
+  assert.match(p[0][1], /vendidos lotados/); assert.match(p[1][1], /comprados saindo/);
+  assert.match(leituraPosicao({ fundPerc: 0.5, fundAno: 5, dOI: 1, dPx: -1 })[0][1], /vendidos novos/);
+  assert.match(leituraPosicao({ fundPerc: 0.5, fundAno: 5, dOI: -1, dPx: 1 })[0][1], /frágil/);
+  assert.equal(leituraPosicao({ fundPerc: 0.5, fundAno: 5, dOI: 0.1, dPx: 1 })[0][1], 'sem desequilíbrio');
+  const f = fluxo([{ t: 0, usd: 100, lado: 'A', px: 100 }, { t: 1000, usd: 100, lado: 'A', px: 101 }], 2000);
+  perto(f.dPx, 1);
+});
