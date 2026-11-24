@@ -23,7 +23,7 @@ export function zonasMapa(d, ref) {
 
 /** itens do checklist a partir das zonas. lado 'compra'|'venda', e = entrada, s = stop, ref = preço atual.
  *  As zonas são escolhidas a partir do PREÇO ATUAL (como a Trava); a entrada planejada só entra no cálculo do R:R. */
-export const ALCANCE_ATR = 6;   // no 15 min e no 1H, a zona só vale se estiver a até 6 ATR do tempo gráfico
+export const ALCANCE_ATR = 3;   // no 15 min e no 1H, a zona só vale se estiver a até 3 ATR do tempo gráfico (mais longe não afeta um day trade)
 export function checarMapa({ lado, e, s, d, ref, rrMin = 2, tf = '4h', atr = null }) {
   const Z = zonasMapa(d, ref > 0 ? ref : (d && d.p) || e);
   if (!Z) return [];
@@ -47,7 +47,7 @@ export function checarMapa({ lado, e, s, d, ref, rrMin = 2, tf = '4h', atr = nul
     if (errado) it.push(['aviso', `Entrada fora do intervalo entre as zonas de liquidação (${fx(zStop.lo)}–${fx(zStop.hi)} e ${fx(zAlvo.lo)}–${fx(zAlvo.hi)}): confira o mapa na Liquidez ao vivo.`]);
     else if (rr < rrMin) {
       const eMin = (alvoZ + rrMin * stopZ) / (1 + rrMin);
-      it.push(['bloqueia', `Pelo mapa de liquidações, da entrada até a zona do outro lado (${fx(zAlvo.lo)}–${fx(zAlvo.hi)}) o R:R é ${rr.toFixed(1).replace('.', ',')}: só vale ${compra ? 'comprando em' : 'vendendo em'} ${fx(eMin)} ou ${compra ? 'abaixo' : 'acima'} (a mesma Trava da Liquidez ao vivo).`, { eMin, base: `Pelo mapa de liquidações, da entrada até a zona do outro lado (${fx(zAlvo.lo)}–${fx(zAlvo.hi)}) o R:R é ${rr.toFixed(1).replace('.', ',')}, abaixo do seu mínimo.` }]);
+      it.push(['bloqueia', `Pelo mapa de liquidações, da entrada até a zona do outro lado (${fx(zAlvo.lo)}–${fx(zAlvo.hi)}) o R:R é ${rr.toFixed(1).replace('.', ',')}: só vale ${compra ? 'comprando em' : 'vendendo em'} ${fx(eMin)} ou ${compra ? 'abaixo' : 'acima'} (a mesma Trava da Liquidez ao vivo).`, { eMin, ref: alvoZ, stop: stopZ, base: `Pelo mapa de liquidações, da entrada até a zona do outro lado (${fx(zAlvo.lo)}–${fx(zAlvo.hi)}) o R:R é ${rr.toFixed(1).replace('.', ',')}, abaixo do seu mínimo.` }]);
     } else it.push(['ok', `Mapa de liquidações: R:R ${rr.toFixed(1).replace('.', ',')} até a zona do outro lado (${fx(zAlvo.lo)}–${fx(zAlvo.hi)}).`]);
   }
   if (zStop && pStop && s > 0) {

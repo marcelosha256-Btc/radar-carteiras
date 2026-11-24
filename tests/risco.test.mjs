@@ -163,14 +163,14 @@ test('checklist: uma entrada mínima só; sem entrada válida quando passa do st
   const agora = Date.UTC(2026, 10, 24, 14, 0);
   // SOL vendido: estrutura pede ≥ 70,28 (válido), mapa pede ≥ 71,78 (acima do stop 71,15) → nenhuma entrada válida
   const calc = { rr: 2.25, risco: 5, notional: 266, custoStop: 0.001, cap: 1000, carrega: 0, e: 69.94, s: 71.15, side: -1, oposto: 68.534, alvos: [{ p: 67.9 }, { p: 65.93 }] };
-  const mapa = [['bloqueia', 'Pelo mapa...: só vale vendendo em 71,78 ou acima', { eMin: 71.78, base: 'Pelo mapa de liquidações, R:R 0,7, abaixo do seu mínimo.' }]];
+  const mapa = [['bloqueia', 'Pelo mapa...: só vale vendendo em 71,78 ou acima', { eMin: 71.78, ref: 67.05, stop: 74.15, base: 'Pelo mapa de liquidações, R:R 0,7, abaixo do seu mínimo.' }]];
   const it = checklist({ calc, agora, extras: mapa });
   const bl = it.filter(([n]) => n === 'bloqueia');
-  assert.ok(bl.some(([, t]) => t.includes('Nenhum preço de entrada passa')));
+  assert.ok(bl.some(([, t]) => t.includes('Plano de espera') && t.includes('72,278') && t.includes('74,15')));   // stop além da zona; entrada que passa nas duas
   assert.ok(!bl.some(([, t]) => t.includes('só vale')));
   // mapa menos restritivo que o stop: uma linha de entrada mínima, a maior (venda) entre as duas
   const ok = checklist({ calc: { ...calc, s: 74 }, agora, extras: mapa }).filter(([n]) => n === 'bloqueia');
-  assert.ok(ok.some(([, t]) => t.includes('Entrada mínima') && t.includes('72,178')));
+  assert.ok(ok.some(([, t]) => t.includes('Espere um repique até 72,178')));
   // alvo 2 além de 8 ATR e stop largo com posição pequena
   const nvda = { ...calc, e: 154.29, s: 172.89, side: -1, oposto: 124.71, alvos: [{ p: 125.9 }, { p: 97.66 }], atr: 0.037, stopATR: 3.3, notional: 41, cap: 1000 };
   const n = checklist({ calc: nvda, agora });
