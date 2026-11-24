@@ -282,6 +282,10 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
 .hoje .hj-btn:disabled { opacity: .6; cursor: wait; }
 .hoje .hj-sug { flex: 1 1 280px; }
 </style>
+<script>
+/* tema: "sistema" (padrão) segue o do aparelho; "claro" e "escuro" ficam salvos neste navegador */
+try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === 'escuro') document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark'); } catch (e) {}
+</script>
 
 <div class="wrap">
   <header class="top">
@@ -300,6 +304,11 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <button data-modo="acoes" aria-pressed="false">Ações</button>
     </div>
     <span class="small muted" id="modoNota"></span>
+    <div class="seg" id="tema" role="group" aria-label="Cor da tela" style="margin-left:auto">
+      <button data-tema="sistema" aria-pressed="true" title="Segue o claro/escuro do aparelho">Sistema</button>
+      <button data-tema="claro" aria-pressed="false">Claro</button>
+      <button data-tema="escuro" aria-pressed="false">Escuro</button>
+    </div>
   </div>
 
   <div class="tabs-scroll">
@@ -2339,6 +2348,23 @@ function hojeLigar(root) {
   });
 }
 ['hojeCripto', 'hojeAcoes'].forEach(id => { const r = document.getElementById(id); if (r) hojeLigar(r); });
+
+/* ---------- cor da tela: sistema, claro ou escuro ---------- */
+(function () {
+  let atual = 'sistema';
+  try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === 'escuro') atual = t; } catch (e) {}
+  const aplicar = t => {
+    if (t === 'sistema') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', t === 'claro' ? 'light' : 'dark');
+    document.querySelectorAll('#tema button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tema === t)));
+    try { if (t === 'sistema') localStorage.removeItem('radar-tema'); else localStorage.setItem('radar-tema', t); } catch (e) {}
+  };
+  document.querySelectorAll('#tema button').forEach(b => b.addEventListener('click', () => {
+    aplicar(b.dataset.tema);
+    window.dispatchEvent(new Event('resize'));   // gráficos que leem as cores ao desenhar se redesenham
+  }));
+  aplicar(atual);
+})();
 
 /* ---------- abas (cada mercado, Cripto ou Ações, tem as suas) ---------- */
 const tabs = [...document.querySelectorAll('.tab')];
