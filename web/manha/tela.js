@@ -67,7 +67,15 @@ function fixos(modo, universo) {
   const nomes = [...obs, ...painel].map(t => modo === 'acoes' ? (String(t).startsWith('xyz:') ? t : 'xyz:' + t) : t);
   return new Set(nomes.filter(n => universo.has(n)));
 }
-const cache = { cripto: null, acoes: null };
+/* a última leitura fica guardada no navegador: a tabela aparece na hora e se atualiza por trás. Só vale dentro da mesma noite e por até 30 min. */
+function lerGuardado(modo) {
+  try {
+    const c = JSON.parse(localStorage.getItem('radar-manha-cache-' + modo) || 'null');
+    if (c && Date.now() - c.t < 30 * 60000 && c.fim === janelaNoite(Date.now()).fim && c.individuais === lerPref('individuais', '1')) return c;
+  } catch (e) {}
+  return null;
+}
+const cache = { cripto: lerGuardado('cripto'), acoes: lerGuardado('acoes') };
 async function carregar(modo) {
   const dex = modo === 'acoes' ? 'xyz' : '', C = CRIT[modo], soIndiv = modo === 'acoes' && lerPref('individuais', '1') === '1';
   const [meta, ctx] = await hl(dex ? { type: 'metaAndAssetCtxs', dex } : { type: 'metaAndAssetCtxs' });
@@ -92,6 +100,7 @@ async function carregar(modo) {
     linhas.push(...lote.filter(Boolean));
   }
   cache[modo] = { t: agora, linhas, soIndiv };
+  try { localStorage.setItem('radar-manha-cache-' + modo, JSON.stringify({ t: agora, linhas, fim: janelaNoite(agora).fim, individuais: lerPref('individuais', '1') })); } catch (e) {}
   return cache[modo];
 }
 
@@ -123,7 +132,8 @@ function desenhar(modo) {
     ${faixaHoras(modo, agora)}
     <h3 class="hj-sub" style="margin-top:12px">Quem mais se mexeu na noite ${modo === 'acoes' ? '(ações)' : '(cripto)'}</h3>
     ${modo === 'acoes' ? `<label class="small muted" style="display:inline-flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" data-indiv ${lerPref('individuais', '1') === '1' ? 'checked' : ''}> só ações individuais (sem índices, commodities e ETFs)</label>` : ''}
-    ${c ? tabela(modo, c.linhas) : '<p class="muted small">Lendo os candles da Hyperliquid…</p>'}
+    ${c ? tabela(modo, c.linhas) : '<p class="muted small">Lendo os candles da Hyperliquid… (leva até 40 s na primeira vez)</p>'}
+    ${c ? `<p class="small muted" style="margin:4px 0 0">Atualizado há ${Math.max(0, Math.round((agora - c.t) / 60000))} min${emCurso[modo] ? ' · atualizando…' : ''}</p>` : ''}
     <p class="small muted" style="margin-top:6px">Entram só ativos com volume de pelo menos US$ ${CRIT[modo].volMin / 1e6} mi em 24 h, alavancagem máxima de ${CRIT[modo].levMin}x ou mais e ${CRIT[modo].dias} dias de histórico. ★ = da sua lista (entram sempre). Força = movimento da noite ÷ amplitude diária normal; acima de 1,5× é fora do comum.</p>
     <p class="small muted" style="margin-top:8px">Volume = quanto negociou contra o normal do mesmo horário (1,0× é o normal). No teste de 208 dias, quem se mexeu muito na noite tendeu a se mexer muito de dia, mas o <b>lado</b> do dia não ficou previsível. Escolha a direção pela estrutura (diário, 4H) e use o stop da calculadora.</p></div>`;
   const ck = root.querySelector('[data-indiv]');
@@ -137,7 +147,7 @@ const emCurso = {};
 async function ciclo(modo) {
   const c = cache[modo];
   if (emCurso[modo] || (c && Date.now() - c.t < 5 * 60000)) return;
-  emCurso[modo] = true;
+  emCurso[modo] = true; if (c) desenhar(modo);
   try { await carregar(modo); } catch (e) { cache[modo] = { t: Date.now() - 4 * 60000, linhas: c ? c.linhas : [] }; }   // falhou: tenta de novo em 1 min, sem martelar a API
   emCurso[modo] = false;
   desenhar(modo);
@@ -145,4 +155,10 @@ async function ciclo(modo) {
 const visivel = modo => !document.hidden && !!document.querySelector(modo === 'acoes' ? '#p-a-hoje:not([hidden])' : '#p-hoje:not([hidden])');
 for (const m of Object.keys(ALVOS)) desenhar(m);
 /* só carrega o modo que está na tela (e só de novo quando os dados têm mais de 5 min) */
-setInterval(() => { for (const m of Object.keys(ALVOS)) if (visivel(m)) ciclo(m); }, 5000);
+setInterval(() => {
+  const ms = Object.keys(ALVOS), vis = ms.filter(visivel);
+  vis.forEach(m => ciclo(m));
+  // com a tela livre, o outro modo carrega em segundo plano (um de cada vez, para não bater no limite da API)
+  if (vis.length && !ms.some(m => emCurso[m])) { const o = ms.find(m => !vis.includes(m) && !cache[m]); if (o) ciclo(o); }
+}, 5000);
+for (const m of Object.keys(ALVOS)) if (cache[m]) desenhar(m);
