@@ -95,4 +95,4 @@ window.addEventListener('storage', ev => { if (ev.key === 'radar-carteira') { op
 
 calcular();
 carregarPapel().then(atualizar);
-setInterval(() => { if (!document.hidden && document.querySelector('#p-hoje:not([hidden]), #p-a-hoje:not([hidden])')) atualizar(); }, 60000);
+setInterval(() => { if (!document.hidden && document.querySelector('#p-hoje:not([hidden])')) atualizar(); }, 60000);

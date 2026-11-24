@@ -86,4 +86,4 @@ document.addEventListener('click', async ev => {
 desenhar();
 if (lerEnd()) buscar();
 else if (senha()) fetch('api/minha', { headers: { 'x-senha': senha() } }).then(r => r.ok ? r.json() : null).then(j => { if (j && j.carteira) { gravarEnd(j.carteira); buscar(); } }).catch(() => {});
-setInterval(() => { if (lerEnd() && !document.hidden && document.querySelector('#p-hoje:not([hidden]), #p-a-hoje:not([hidden])')) buscar(); }, 20000);
+setInterval(() => { if (lerEnd() && !document.hidden && document.querySelector('#p-hoje:not([hidden])')) buscar(); }, 20000);

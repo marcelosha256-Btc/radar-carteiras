@@ -177,6 +177,7 @@ svg { display: block; width: 100%; height: auto; max-width: 100%; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { width: 12px; height: 4px; border-radius: 2px; display: inline-block; }
 
+.tab-grupo { font: 600 11.5px var(--f-body); color: var(--faint); text-transform: uppercase; letter-spacing: .05em; align-self: center; padding: 0 4px 0 10px; white-space: nowrap; }
 .tab-mais { font: 500 13px var(--f-body); border: 1px dashed var(--line); background: none; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; margin-left: 6px; }
 .tab-mais:hover { color: var(--fg); }
 .seg { display: inline-flex; background: var(--surface-2); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap; }
@@ -304,7 +305,7 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
   <div class="info" id="info">Dados reais da Hyperliquid, da Coinbase e on-chain do BTC. Nada aqui é recomendação: os testes mostram o passado, e o Diário mostra se continua funcionando.</div>
 
   <div class="modo">
-    <div class="seg grande" id="modo" role="group" aria-label="Mercado">
+    <div class="seg grande" id="modo" role="group" aria-label="Mercado" hidden>
       <button data-modo="cripto" aria-pressed="true">Cripto</button>
       <button data-modo="acoes" aria-pressed="false">Ações</button>
     </div>
@@ -318,40 +319,37 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
 
   <div class="tabs-scroll">
     <nav class="tabs" role="tablist" aria-label="Seções do radar">
-      <button class="tab" role="tab" data-modo="cripto" data-tab="hoje">Hoje</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="trades">Meu diário</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="resumo" data-sec>Resumo</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="carteiras" data-sec>Carteiras</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="fluxo" data-sec>Fluxo e alertas</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="liquidez" data-sec>Stops e liquidações</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="aovivo">Liquidez ao vivo</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="sr" data-sec>Suportes e resistências</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="sopr" data-sec>SOPR e suportes</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="diario" data-sec>Diário de sinais</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="swing" data-sec>Swing trade</button>
-      <button class="tab" role="tab" data-modo="cripto" data-tab="backtest" data-sec>Backtest</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-hoje" hidden>Hoje</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-trades" hidden>Meu diário</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-resumo" data-sec hidden>Resumo</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-carteiras" data-sec hidden>Carteiras</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-fluxo" data-sec hidden>Fluxo e alertas</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-liquidez" data-sec hidden>Stops e liquidações</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-aovivo" hidden>Liquidez ao vivo</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-eventos" hidden>Balanços e eventos</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-forca" data-sec hidden>Para onde vai o dinheiro</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-diario" data-sec hidden>Diário de sinais</button>
-      <button class="tab" role="tab" data-modo="acoes" data-tab="a-swing" data-sec hidden>Swing trade</button>
-      <button class="tab-mais" id="tabMais" aria-expanded="false" title="Abas de pesquisa e contexto (swing, baleias, on-chain, backtest)">Pesquisa ▾</button>
+      <button class="tab" role="tab" data-tab="hoje">Hoje</button>
+      <button class="tab" role="tab" data-tab="trades">Meu diário</button>
+      <button class="tab" role="tab" data-tab="aovivo" data-alias="a-aovivo">Liquidez ao vivo</button>
+      <button class="tab" role="tab" data-tab="a-eventos">Balanços e eventos</button>
+      <button class="tab-mais" id="tabMais" aria-expanded="false" title="Abas de pesquisa e contexto, por mercado (swing, baleias, on-chain, backtest)">Pesquisa ▾</button>
+      <span class="tab-grupo" data-sec>Ações:</span>
+      <button class="tab" role="tab" data-tab="a-resumo" data-sec>Resumo</button>
+      <button class="tab" role="tab" data-tab="a-carteiras" data-sec>Carteiras</button>
+      <button class="tab" role="tab" data-tab="a-fluxo" data-sec>Fluxo e alertas</button>
+      <button class="tab" role="tab" data-tab="a-liquidez" data-sec>Stops e liquidações</button>
+      <button class="tab" role="tab" data-tab="a-forca" data-sec>Para onde vai o dinheiro</button>
+      <button class="tab" role="tab" data-tab="a-diario" data-sec>Diário de sinais</button>
+      <button class="tab" role="tab" data-tab="a-swing" data-sec>Swing trade</button>
+      <span class="tab-grupo" data-sec>Cripto:</span>
+      <button class="tab" role="tab" data-tab="resumo" data-sec>Resumo</button>
+      <button class="tab" role="tab" data-tab="carteiras" data-sec>Carteiras</button>
+      <button class="tab" role="tab" data-tab="fluxo" data-sec>Fluxo e alertas</button>
+      <button class="tab" role="tab" data-tab="liquidez" data-sec>Stops e liquidações</button>
+      <button class="tab" role="tab" data-tab="sr" data-sec>Suportes e resistências</button>
+      <button class="tab" role="tab" data-tab="sopr" data-sec>SOPR e suportes</button>
+      <button class="tab" role="tab" data-tab="diario" data-sec>Diário de sinais</button>
+      <button class="tab" role="tab" data-tab="swing" data-sec>Swing trade</button>
+      <button class="tab" role="tab" data-tab="backtest" data-sec>Backtest</button>
     </nav>
   </div>
 
-  <!-- HOJE (cripto e ações: a mesma tela, cada modo abre com o seu filtro) -->
-  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="riscoCripto" style="margin-bottom:16px"></div><div class="hoje" id="posCripto" style="margin-bottom:16px"></div><div class="hoje" id="manhaCripto" style="margin-bottom:16px"></div><div class="hoje" id="mercCripto" style="margin-bottom:16px"></div><div class="hoje" id="hojeCripto"><p class="muted">Aguardando os dados do painel…</p></div></section>
-  <section class="panel" id="p-a-hoje" role="tabpanel" hidden><div class="hoje" id="riscoAcoes" style="margin-bottom:16px"></div><div class="hoje" id="posAcoes" style="margin-bottom:16px"></div><div class="hoje" id="manhaAcoes" style="margin-bottom:16px"></div><div class="hoje" id="mercAcoes" style="margin-bottom:16px"></div><div class="hoje" id="hojeAcoes"><p class="muted">Aguardando os dados do painel…</p></div></section>
+  <!-- HOJE: uma tela só para ações e cripto (ações primeiro) -->
+  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="riscoCripto" style="margin-bottom:16px"></div><div class="hoje" id="posCripto" style="margin-bottom:16px"></div><div class="hoje" id="manhaAcoes" style="margin-bottom:16px"></div><div class="hoje" id="manhaCripto" style="margin-bottom:16px"></div><div class="hoje" id="mercUnico" style="margin-bottom:16px"></div><div class="hoje" id="hojeUnico"><p class="muted">Aguardando os dados do painel…</p></div></section>
 
-  <!-- MEU DIÁRIO DE OPERAÇÕES (em R) -->
-  <section class="panel" id="p-trades" role="tabpanel" hidden><div class="hoje" id="diarioCripto"></div></section>
-  <section class="panel" id="p-a-trades" role="tabpanel" hidden><div class="hoje" id="diarioAcoes"></div></section>
+  <!-- MEU DIÁRIO DE OPERAÇÕES (em R), ações e cripto juntos -->
+  <section class="panel" id="p-trades" role="tabpanel" hidden><div class="hoje" id="diarioUnico"></div></section>
 
   <!-- AÇÕES: RESUMO -->
   <section class="panel" id="p-a-resumo" role="tabpanel" hidden>
@@ -457,10 +455,12 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
 
   <!-- LIQUIDEZ AO VIVO (montado por aovivo/aovivo.js; mapa da Coinversa via api/liquidez, preço e livro direto da Hyperliquid) -->
   <section class="panel" id="p-aovivo" role="tabpanel" hidden>
+    <div class="seg" role="group" aria-label="Mercado" style="margin-bottom:12px"><button data-ir="a-aovivo" aria-pressed="false">Ações</button><button data-ir="aovivo" aria-pressed="true">Cripto</button></div>
     <div class="box-head"><h2>Liquidez ao vivo · cripto</h2><p>Mapa de liquidações do mercado inteiro (Coinversa, a cada 2 min), preço e livro de ordens ao vivo da Hyperliquid, liquidações reais, quem está apertado e a trava do seu roteiro.</p></div>
     <div id="lvCripto"><p class="muted">Carregando…</p></div>
   </section>
   <section class="panel" id="p-a-aovivo" role="tabpanel" hidden>
+    <div class="seg" role="group" aria-label="Mercado" style="margin-bottom:12px"><button data-ir="a-aovivo" aria-pressed="true">Ações</button><button data-ir="aovivo" aria-pressed="false">Cripto</button></div>
     <div class="box-head"><h2>Liquidez ao vivo · ações</h2><p>O mesmo painel para os contratos de ações, índices e commodities (grupo xyz). Fora do pregão, o preço é só da Hyperliquid.</p></div>
     <div id="lvAcoes"><p class="muted">Carregando…</p></div>
   </section>
@@ -2005,7 +2005,7 @@ function hojeEventos(D) {
 function hojeMontar(root, modo) {
   const D = DADOS_HOJE;
   if (!D) { root.innerHTML = '<p class="muted">Aguardando os dados do painel…</p>'; return; }
-  const filtro = HJ.ler('filtro-' + modo, modo === 'acoes' ? 'acoes' : 'cripto');
+  const filtro = HJ.ler('filtro-' + modo, modo === 'cripto' ? 'cripto' : 'acoes');   // a tela única abre nas ações
   const obs = HJ.ler('obs', []), chk = hojeChecklist(), calc = hojeCfg();
   const plano = HJ.ler('plano', []);
   const L = hojeLinhas(D);
@@ -2018,7 +2018,11 @@ function hojeMontar(root, modo) {
   const hora = ms => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const kpiDados = kpi('Dados do painel', ha(D.gerado), 'ranking ' + ha(D.coleta.ranking), velho ? 'neg' : '');
   const kpiEv = kpi('Eventos de alto impacto (7 dias)', altos.length, altos.length ? `próximo: ${altos[0].nome} · ${altos[0].dia.slice(8)}/${altos[0].dia.slice(5, 7)}` : 'nenhum na agenda');
-  const kpis = modo === 'acoes'
+  const kpis = modo === 'tudo'   // tela única: contexto dos dois mercados; o funding ao vivo fica no "Mercado agora"
+    ? kpi('S&P 500 no diário · 4h', sp ? `${TL[sp.D]} · ${TL[sp.H]}` : '—', sp ? sp.frase : 'sem dados')
+      + `<div data-pregao>${hojePregaoKpi(kpi, ny, hora)}</div>`
+      + kpi('BTC no diário · 4h', btc ? `${TL[btc.D]} · ${TL[btc.H]}` : '—', btc ? btc.frase : '') + kpiDados + kpiEv
+    : modo === 'acoes'
     ? kpi('S&P 500 no diário · 4h', sp ? `${TL[sp.D]} · ${TL[sp.H]}` : '—', sp ? sp.frase : 'sem dados')
       + `<div data-pregao>${hojePregaoKpi(kpi, ny, hora)}</div>` + kpiDados + kpiEv
     : kpi('BTC no diário · 4h', btc ? `${TL[btc.D]} · ${TL[btc.H]}` : '—', btc ? btc.frase : '')
@@ -2327,8 +2331,8 @@ function hojePregaoKpi(kpi, ny, hora) {
   return kpi('Pregão de Nova York', ny ? (ny.aberta ? 'ABERTO' : 'FECHADO') : '—', ny ? `${ny.aberta ? 'fecha' : 'abre'} às ${hora(ny.muda_em)} · fora do pregão o preço é só da Hyperliquid` : '');
 }
 function hojeRender() {
-  const a = document.getElementById('hojeCripto'), b = document.getElementById('hojeAcoes');
-  try { if (a) hojeMontar(a, 'cripto'); if (b) hojeMontar(b, 'acoes'); } catch (e) { console.error('Hoje:', e); }
+  const u = document.getElementById('hojeUnico');
+  try { if (u) hojeMontar(u, 'tudo'); } catch (e) { console.error('Hoje:', e); }
 }
 function hojeLigar(root) {
   root.addEventListener('click', ev => {
@@ -2337,7 +2341,7 @@ function hojeLigar(root) {
     const act = el.dataset.act;
     if (act === 'sugerir') { el.disabled = true; el.textContent = 'Buscando velas…'; hojeSugerir().then(hojeRender, hojeRender); return; }
     if (act === 'preco-atual') { const c = HJ.ler('calc', {}), A = hojeAtivoLinha(c.ativo); if (A) { c.entrada = String(hojeArred(hojeVivo(A))); HJ.gravar('calc', c); } }
-    else if (act === 'filtro') HJ.gravar('filtro-' + (root.id === 'hojeAcoes' ? 'acoes' : 'cripto'), el.dataset.f);
+    else if (act === 'filtro') HJ.gravar('filtro-tudo', el.dataset.f);
     else if (act === 'obs') {
       let o = HJ.ler('obs', []);
       o = o.includes(el.dataset.t) ? o.filter(x => x !== el.dataset.t) : o.length < 8 ? [...o, el.dataset.t] : (alert('A lista de observação aceita no máximo 8 ativos.'), o);
@@ -2378,8 +2382,8 @@ function hojeLigar(root) {
     hojeCalc(root);
   });
 }
-['hojeCripto', 'hojeAcoes'].forEach(id => { const r = document.getElementById(id); if (r) hojeLigar(r); });
-window.addEventListener('radar-risco', () => ['hojeCripto', 'hojeAcoes'].forEach(id => { const r = document.getElementById(id); if (r && r.querySelector('.hj-out')) hojeCalc(r);
+['hojeUnico'].forEach(id => { const r = document.getElementById(id); if (r) hojeLigar(r); });
+window.addEventListener('radar-risco', () => ['hojeUnico'].forEach(id => { const r = document.getElementById(id); if (r && r.querySelector('.hj-out')) hojeCalc(r);
   const pg = r && r.querySelector('[data-pregao]'); if (pg) pg.innerHTML = hojePregaoKpi((lab, val, note, cls = '') => `<div class="kpi"><span class="lab">${lab}</span><span class="val ${cls}">${val}</span><span class="note">${note}</span></div>`, null, ms => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })); }));
 
 /* ---------- cor da tela: sistema, claro ou escuro ---------- */
@@ -2403,33 +2407,31 @@ window.addEventListener('radar-risco', () => ['hojeCripto', 'hojeAcoes'].forEach
 const tabs = [...document.querySelectorAll('.tab')];
 const SUB = { cripto: '', acoes: '' };
 let modoAtual = 'cripto';
+const ANTIGAS = { 'a-hoje': 'hoje', 'a-trades': 'trades' };   // links antigos (#a-hoje) continuam funcionando
 function show(id) {
+  id = ANTIGAS[id] || id;
+  if (id === 'aovivo-pref') { id = 'a-aovivo'; try { id = localStorage.getItem('radar-aovivo') || 'a-aovivo'; } catch (e) {} }
   if (!document.getElementById('p-' + id)) id = 'hoje';
   const modo = id.startsWith('a-') ? 'acoes' : 'cripto';
   modoAtual = modo;
-  tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === id)));
+  tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === id || t.dataset.alias === id)));
   let mais = false; try { mais = localStorage.getItem('radar-mais') === '1'; } catch (e) {}
-  // no dia a dia ficam à vista só as abas de operação; as de pesquisa aparecem em "Pesquisa"
-  document.querySelectorAll('.tabs [data-modo]').forEach(t => { t.hidden = t.dataset.modo !== modo || (t.hasAttribute('data-sec') && !mais && t.dataset.tab !== id); });
+  // no dia a dia ficam à vista só as abas de operação; as de pesquisa (por mercado) aparecem em "Pesquisa"
+  document.querySelectorAll('.tabs [data-sec]').forEach(t => { t.hidden = !mais && t.dataset.tab !== id; });
   const bm = document.getElementById('tabMais'); if (bm) { bm.setAttribute('aria-expanded', String(mais)); bm.textContent = mais ? 'Menos ▴' : 'Pesquisa ▾'; }
-  document.querySelectorAll('#modo button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.modo === modo)));
   document.querySelectorAll('.panel').forEach(p => { p.hidden = p.id !== 'p-' + id; });
   if (SUB[modo]) $('#sub').textContent = SUB[modo];
-  $('#modoNota').hidden = modo !== 'acoes';
-  try { localStorage.setItem('radar-tab', id); localStorage.setItem('radar-tab-' + modo, id); } catch (e) {}
+  if (id === 'aovivo' || id === 'a-aovivo') try { localStorage.setItem('radar-aovivo', id); } catch (e) {}
+  try { localStorage.setItem('radar-tab', id); } catch (e) {}
 }
-tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab)));
+tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab === 'aovivo' ? 'aovivo-pref' : t.dataset.tab)));
+document.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => show(b.dataset.ir)));   // Ações/Cripto dentro da Liquidez ao vivo
 document.getElementById('tabMais').addEventListener('click', () => {
   let m = false; try { m = localStorage.getItem('radar-mais') === '1'; localStorage.setItem('radar-mais', m ? '0' : '1'); } catch (e) {}
   const atual = (tabs.find(t => t.getAttribute('aria-selected') === 'true') || {}).dataset;
   show(atual && atual.tab ? atual.tab : 'hoje');
 });
 window.addEventListener('hashchange', () => { if (location.hash.length > 1) show(location.hash.slice(1)); });
-document.querySelectorAll('#modo button').forEach(b => b.addEventListener('click', () => {
-  let id = b.dataset.modo === 'acoes' ? 'a-hoje' : 'hoje';
-  try { id = localStorage.getItem('radar-tab-' + b.dataset.modo) || id; } catch (e) {}
-  show(id);
-}));
 let start = location.hash.slice(1);
 if (!start) { try { start = localStorage.getItem('radar-tab') || 'hoje'; } catch (e) { start = 'hoje'; } }
 show(start);
