@@ -34,6 +34,7 @@ const COR = { up: V('up'), dn: V('down'), long: V('lv-long'), short: V('lv-short
 const hlApi = b => fetch(HL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(r => r.json());
 const senha = () => { try { return localStorage.getItem('radar-senha') || ''; } catch (e) { return ''; } };
 async function meuApi(q, coin) {
+  if (!senha()) throw new Error('senha');   // sem senha salva não chama a API: evita o 401 no console na primeira visita
   const r = await fetch(`api/liquidez?q=${q}&coin=${encodeURIComponent(coin)}`, { headers: { 'x-senha': senha() } });
   if (r.status === 401) throw new Error('senha');
   const j = await r.json();
