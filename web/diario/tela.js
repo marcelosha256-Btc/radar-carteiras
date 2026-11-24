@@ -4,7 +4,7 @@ import { metricas, porGrupo, rAberto, confianca, ordemFechamento } from './metri
 import { operacoes, carteira } from '../risco/dados.js';
 
 const MODOS = { tudo: 'diarioUnico' };   // um diário só, com filtro por mercado
-const TFS = [['1h', '1H'], ['4h', '4H'], ['1d', 'Diário'], ['1w', 'Semanal']];
+const TFS = [['15m', '15 min'], ['1h', '1H'], ['4h', '4H'], ['1d', 'Diário'], ['1w', 'Semanal']];
 const MOTIVOS = [['alvo', 'Alvo'], ['stop', 'Stop'], ['manual', 'Saída manual'], ['tempo', 'Tempo'], ['invalidou', 'Setup invalidou']];
 const EMOCOES = [['', '—'], ['calmo', 'Calmo'], ['ansioso', 'Ansioso'], ['fomo', 'FOMO'], ['revenge', 'Revanche'], ['entediado', 'Entediado'], ['confiante', 'Confiante demais']];
 
