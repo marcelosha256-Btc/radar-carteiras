@@ -28,7 +28,10 @@ async function atualizar() {
 }
 function calcular() {
   const calc = ler('radar-hoje-calc', {}), riscoPct = parseFloat(String(calc.risco || '0.5').replace(',', '.')) || 0.5;
-  const capital = S.conta ? S.conta.saldo : (parseFloat(calc.cap) || 0);
+  // base do dia: o saldo real da carteira; enquanto ela não tiver pelo menos 10% do capital da calculadora (conta ainda sem depósito), usa o capital da calculadora
+  const capCalc = parseFloat(String(calc.cap || '1000').replace(',', '.')) || 1000;
+  const capital = S.conta && S.conta.saldo >= capCalc * 0.1 ? S.conta.saldo : capCalc;
+  S.baseCalc = !(S.conta && S.conta.saldo >= capCalc * 0.1);
   S.trava = travaDoDia({ real: S.real, papel: (S.papel || []).filter(t => t.tipo === 'papel'), capital, aberto: S.conta ? S.conta.aberto : 0, riscoPct, regras: regras() });
   desenhar();
   window.dispatchEvent(new Event('radar-risco'));
@@ -60,7 +63,7 @@ function desenhar() {
       <div class="small" style="display:flex;flex-wrap:wrap;gap:6px 18px">
         <span>Real hoje: ${real}</span><span>Papel hoje: ${papel}</span>
         <span>Operações: <b>${t.ops}/${R.opsDia}</b></span><span>Perdas seguidas: <b>${Math.max(t.perdasReal, t.perdasPapel)}/${R.perdasSeguidas}</b></span>
-        <span class="muted">limite ${R.perdaDiaPct}% · entradas ${R.janelaIni}h–${R.janelaFim}h</span></div>
+        <span class="muted">limite ${R.perdaDiaPct}% · entradas ${R.janelaIni}h–${R.janelaFim}h${S.baseCalc ? ' · base: capital da calculadora' : ''}</span></div>
       ${S.erro ? `<p class="small muted">${S.erro}</p>` : ''}
       ${S.aberto ? `<div class="hj-form" style="margin-top:10px">${CAMPOS.map(([k, n]) => `<label>${n}<input data-rg="${k}" inputmode="decimal" value="${R[k]}"></label>`).join('')}</div>
         <p class="small muted">As regras valem para o real e para o papel. O dia começa às 00h de Brasília.</p>` : ''}</div>`;

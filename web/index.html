@@ -2073,6 +2073,7 @@ function hojeMontar(root, modo) {
           <label>Capital atual (US$)<input data-k="cap" inputmode="decimal" value="${calc.cap}"></label>
           <label>Pico do capital (US$, opcional)<input data-k="pico" inputmode="decimal" value="${calc.pico}"></label>
           <label>Risco por operação (%)<input data-k="risco" inputmode="decimal" value="${calc.risco}"></label>
+          <label>Posição máxima (US$)<input data-k="posMax" inputmode="decimal" value="${calc.posMax}"></label>
       </div>
       <h3 class="hj-sub">Operação</h3>
       <div class="hj-form">
@@ -2134,10 +2135,10 @@ function hojeMontar(root, modo) {
     </div>`;
   hojeCalc(root);
 }
-const HJ_PADRAO = { cap: '', pico: '', risco: '0.5', ativo: '', entrada: '', stop: '', alvo1: '', pct1: '50', alvo2: '', lev: '3', maxlev: '', lado: '', tf: '4h', sug: '', atrTf: null,
+const HJ_PADRAO = { cap: '1000', posMax: '1000', pico: '', risco: '0.5', ativo: '', entrada: '', stop: '', alvo1: '', pct1: '50', alvo2: '', lev: '3', maxlev: '', lado: '', tf: '4h', sug: '', atrTf: null,
   taker: '0.045', maker: '0.015', tipoEntrada: 'taker', slip: '0.03', dias: '', wr: '45', inclCustos: true };
 const HJ_MAXLEV = { BTC: 40, ETH: 25, SOL: 20, XRP: 20, HYPE: 10, NEAR: 10 };   // referência: confira o limite de cada ativo na Hyperliquid
-const hojeCfg = () => Object.assign({}, HJ_PADRAO, HJ.ler('calc', {}));
+const hojeCfg = () => { const c = Object.assign({}, HJ_PADRAO, HJ.ler('calc', {})); for (const k of ['cap', 'posMax']) if (String(c[k] ?? '').trim() === '') c[k] = HJ_PADRAO[k]; return c; };
 function hojeAtivoLinha(t) { return DADOS_HOJE ? hojeLinhas(DADOS_HOJE).find(r => r.t === t) : null; }
 function hojeATR(A) {   // ATR diário em fração do preço, do estudo de swing do painel
   const D = DADOS_HOJE;
@@ -2208,7 +2209,7 @@ function hojeCalcular() {
   /* modo de risco: o risco por operação cai conforme a queda desde o pico do capital (regra sugerida) */
   const pico = n('pico'), dd = pico > cap ? (pico - cap) / pico : 0;
   const fator = dd < 0.05 ? 1 : dd < 0.10 ? 0.75 : dd < 0.15 ? 0.5 : 0;
-  const rp = rp0 * fator, risco = cap * rp / 100;
+  const rp = rp0 * fator, risco0 = cap * rp / 100;
   const lev = Math.max(1, n('lev') || 1);
   const maxLev = n('maxlev') > 0 ? n('maxlev') : (A ? (A.mercado === 'acoes' ? 10 : HJ_MAXLEV[A.t] || 10) : 10);
   /* custos como fração do valor da posição */
@@ -2218,7 +2219,10 @@ function hojeCalcular() {
   const fundFrac = carrega != null ? Math.max(0, carrega) / 100 / 365 * dias : 0;   // só conta funding pago, nunca o recebido
   const custoStop = feeIn + fTaker + slip * 2 + fundFrac;
   const incl = c.inclCustos !== false;
-  const notional = risco > 0 ? risco / (dist + (incl ? custoStop : 0)) : 0;
+  const notionalRisco = risco0 > 0 ? risco0 / (dist + (incl ? custoStop : 0)) : 0;
+  const posMax = n('posMax'), cortado = posMax > 0 && notionalRisco > posMax;
+  const notional = cortado ? posMax : notionalRisco;
+  const risco = cortado ? notional * (dist + (incl ? custoStop : 0)) : risco0;   // com a posição no teto, o risco real fica menor que o planejado
   const qtd = notional / e, margem = notional / lev, perdaStop = notional * (dist + custoStop);
   /* liquidação (margem isolada), fórmula da Hyperliquid: manutenção = 1 / (2 × alavancagem máxima) */
   const l = 1 / (2 * maxLev);
@@ -2240,7 +2244,7 @@ function hojeCalcular() {
   const atrTf = c.atrTf && c.atrTf.tf === tf && c.atrTf.ativo === c.ativo ? c.atrTf.frac : null;
   const atr = atrTf || hojeATR(A), atrNome = atrTf ? HJ_TF[tf].nome : 'diário', stopATR = atr ? dist / atr : null;
   return { c, cap, rp0, rp, fator, pico, dd, e, s, lev, maxLev, lado, side, dist, risco, notional, qtd, margem, perdaStop, liqPx, liqDist,
-    custoStop, fundFrac, feeIn, fTaker, fMaker, slip, dias, tf, atrNome, carrega, alvos, okAlvos, lucroTot, rr, beWR, wr, esp, atr, stopATR, A, incl,
+    custoStop, fundFrac, feeIn, fTaker, fMaker, slip, dias, tf, atrNome, carrega, posMax, cortado, risco0, alvos, okAlvos, lucroTot, rr, beWR, wr, esp, atr, stopATR, A, incl,
     grupo: A && A.mercado === 'acoes' ? 'acoes' : 'cripto' };
 }
 function hojeCalc(root) {
@@ -2253,6 +2257,7 @@ function hojeCalc(root) {
   const av = [];
   if (r.fator === 0) av.push(['down', `Queda de ${fmt(r.dd * 100, 1)}% desde o pico: pare de operar e revise o processo (regra sugerida: parar em −15%).`]);
   else if (r.fator < 1) av.push(['warn', `Modo de risco: queda de ${fmt(r.dd * 100, 1)}% desde o pico, risco reduzido de ${fmt(r.rp0, 2)}% para ${fmt(r.rp, 2)}%.`]);
+  if (r.cortado) av.push(['warn', `Posição cortada no seu teto de ${usd(r.posMax)}: o risco real cai de ${usd(r.risco0)} para ${usd(r.risco)} (${fmt(r.risco / r.cap * 100, 2)}% do capital). Stop mais curto não aumenta a posição.`]);
   if (r.rp0 > 1) av.push(['down', `Risco de ${fmt(r.rp0, 2)}% por operação é alto: nos primeiros meses use 0,25% a 0,5%.`]);
   if (r.stopATR != null && r.stopATR < 0.95) av.push(['warn', `Stop a ${fmt(r.stopATR, 1)} ATR ${r.atrNome}: dentro do ruído normal do ativo, tende a ser stopado à toa.`]);
   if (r.stopATR != null && r.stopATR > 4) av.push(['warn', `Stop a ${fmt(r.stopATR, 1)} ATR ${r.atrNome}: largo, a posição fica pequena para o risco que você aceita.`]);

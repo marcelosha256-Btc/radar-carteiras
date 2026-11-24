@@ -2,6 +2,7 @@
  * operações e checklist antes de entrar. Funções puras (sem rede nem tela), testadas em tests/risco.test.mjs. */
 
 export const H = 36e5, BRT = 3 * H;   // Brasília = UTC−3 o ano todo
+export const ORDEM_MINIMA = 10;   // valor mínimo de ordem na Hyperliquid (US$)
 export const REGRAS_PADRAO = {
   perdaDiaPct: 2,      // para no dia ao perder isto do capital (realizado + aberto)
   perdasSeguidas: 3,   // para no dia depois de N perdas seguidas
@@ -94,6 +95,8 @@ export function checklist({ calc, trava, eventos = [], heatAberto = 0, regras = 
   const prox = eventos.filter(e => e.impacto === 'alto' && e.t > agora + 15 * 60000 && e.t <= agora + 120 * 60000);
   if (prox.length) it.push(['aviso', `Notícia de alto impacto em ${Math.round((prox[0].t - agora) / 60000)} min (${prox[0].nome}): reduza o tamanho ou espere.`]);
   if (!calc) return it;
+  if (calc.notional > 0 && calc.notional < ORDEM_MINIMA) it.push(['bloqueia', `Posição de US$ ${fmt(calc.notional)} abaixo da ordem mínima da Hyperliquid (US$ ${ORDEM_MINIMA}): aumente o risco ou afaste o stop.`]);
+  if (calc.cortado) it.push(['aviso', `Posição no teto de US$ ${fmt(calc.posMax)}: o risco real é US$ ${fmt(calc.risco)}, menor que o planejado.`]);
   if (calc.rr == null) it.push(['bloqueia', 'Defina o alvo: sem alvo não há R:R para conferir.']);
   else if (calc.rr < regras.rrMin) it.push(['bloqueia', `R:R líquido de ${fmt(calc.rr)} abaixo do seu mínimo (${regras.rrMin}).`]);
   else it.push(['ok', `R:R líquido de ${fmt(calc.rr)}.`]);
