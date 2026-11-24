@@ -149,7 +149,7 @@ export function leituraPosicao({ fundPerc, fundAno, dOI, dPx }) {
 const COR = { ok: 'var(--up)', compra: 'var(--up)', venda: 'var(--down)', ruim: 'var(--down)', aviso: 'var(--warn)', alerta: 'var(--warn)', neutro: 'var(--muted)' };
 function tamanhoCalc() {
   try { if (typeof hojeCalcular === 'function') { const r = hojeCalcular(); if (r && !r.erro && r.notional > 0) return { v: r.notional, calc: true }; } } catch (e) {}
-  return { v: 10000, calc: false };
+  return { v: 1000, calc: false };   // sem calculadora preenchida: exemplo de US$ 1.000, o tamanho típico da sua conta
 }
 const linha = (rotulo, itens, dica) => `<div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line)">
   <span class="hj-sub" style="margin:0">${rotulo}</span><span class="small"${dica ? ` title="${esc(dica)}" style="cursor:help"` : ''}>${itens.map(([n, t]) => `<span style="color:${COR[n]};${n !== 'neutro' && n !== 'ok' ? 'font-weight:600' : ''}">${t}</span>`).join(' · ')}</span></div>`;
