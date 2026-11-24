@@ -286,6 +286,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <button class="tab" role="tab" data-modo="cripto" data-tab="carteiras">Carteiras</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="fluxo">Fluxo e alertas</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="liquidez">Stops e liquidações</button>
+      <button class="tab" role="tab" data-modo="cripto" data-tab="aovivo">Liquidez ao vivo</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="sr">Suportes e resistências</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="sopr">SOPR e suportes</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="diario">Diário de sinais</button>
@@ -295,6 +296,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-carteiras" hidden>Carteiras</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-fluxo" hidden>Fluxo e alertas</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-liquidez" hidden>Stops e liquidações</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-aovivo" hidden>Liquidez ao vivo</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-eventos" hidden>Balanços e eventos</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-forca" hidden>Para onde vai o dinheiro</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-diario" hidden>Diário de sinais</button>
@@ -402,6 +404,16 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <div class="box-head"><h2 id="a-swingTodosTit">Todos os setups testados</h2><p>Cada linha é um teste em 10 anos de pregões da bolsa (Yahoo). "Fora da amostra" é a média dos 30% finais, que o filtro não usou para escolher. "Só carona na alta" = passa no filtro, mas não ganha de comprar em qualquer dia.</p></div>
       <div class="tbl-wrap"><table id="a-swingTodos"></table></div>
     </div>
+  </section>
+
+  <!-- LIQUIDEZ AO VIVO (montado por aovivo/aovivo.js; mapa da Coinversa via api/liquidez, preço e livro direto da Hyperliquid) -->
+  <section class="panel" id="p-aovivo" role="tabpanel" hidden>
+    <div class="box-head"><h2>Liquidez ao vivo · cripto</h2><p>Mapa de liquidações do mercado inteiro (Coinversa, a cada 2 min), preço e livro de ordens ao vivo da Hyperliquid, liquidações reais, quem está apertado e a trava do seu roteiro.</p></div>
+    <div id="lvCripto"><p class="muted">Carregando…</p></div>
+  </section>
+  <section class="panel" id="p-a-aovivo" role="tabpanel" hidden>
+    <div class="box-head"><h2>Liquidez ao vivo · ações</h2><p>O mesmo painel para os contratos de ações, índices e commodities (grupo xyz). Fora do pregão, o preço é só da Hyperliquid.</p></div>
+    <div id="lvAcoes"><p class="muted">Carregando…</p></div>
   </section>
 
   <!-- CRIPTO: BACKTEST (montado por backtest/tela.js; funciona mesmo sem o banco) -->
@@ -1138,6 +1150,7 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
       $('#aLiqMeta').textContent = msg;
       return;
     }
+    try { window.radarAcoes = A.ativos.map(a => a.t); window.dispatchEvent(new CustomEvent('radar-acoes', { detail: window.radarAcoes })); } catch (e) {}
     const AM = A.amostra, base = A.funding_base;
     // bolsas abertas ou fechadas agora, pelo relógio de quem está vendo (a foto pode ter horas)
     const S = Object.fromEntries(Object.entries(SESSOES).map(([k, fn]) => [k, { aberta: fn(Date.now()), muda_em: proximaMudanca(fn, Date.now()) }]));
@@ -2361,3 +2374,4 @@ if (INJETADO) renderReal(INJETADO); else carregar();
 conectarLiquidacoes();
 </script>
 <script type="module" src="backtest/tela.js"></script>
+<script type="module" src="aovivo/aovivo.js"></script>
