@@ -259,6 +259,21 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
 .callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; font-size: 13px; color: var(--muted); }
 .callout b { color: var(--fg); }
 @media (prefers-reduced-motion: no-preference) { .panel { animation: fade .18s ease-out; } @keyframes fade { from { opacity: .4; } to { opacity: 1; } } }
+
+/* tela Hoje */
+.hoje { display: grid; gap: 16px; min-width: 0; }
+.hoje .hj-estrela { font-size: 18px; line-height: 1; border: 0; background: none; color: var(--warn); cursor: pointer; padding: 2px 4px; }
+.hoje .hj-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.hoje .hj-form label { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.hoje .hj-form input, .hoje .hj-form select { font: inherit; color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+.hoje .hj-btn { font: 600 13px var(--f-body); border: 0; border-radius: 6px; background: var(--accent); color: var(--bg); padding: 8px 14px; cursor: pointer; justify-self: start; }
+.hoje .hj-link { font: inherit; font-size: 12.5px; border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; text-decoration: underline; }
+.hoje .hj-chk { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; padding: 3px 0; }
+.hoje .hj-chk input { margin-top: 3px; }
+.hoje .hj-sub { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 8px; }
+.hoje .hj-mini { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+.hoje .hj-out { display: grid; gap: 8px; }
+.hoje td .facts { display: flex; flex-wrap: wrap; gap: 4px; }
 </style>
 
 <div class="wrap">
@@ -282,6 +297,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
 
   <div class="tabs-scroll">
     <nav class="tabs" role="tablist" aria-label="Seções do radar">
+      <button class="tab" role="tab" data-modo="cripto" data-tab="hoje">Hoje</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="resumo">Resumo</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="carteiras">Carteiras</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="fluxo">Fluxo e alertas</button>
@@ -292,6 +308,7 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <button class="tab" role="tab" data-modo="cripto" data-tab="diario">Diário de sinais</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="swing">Swing trade</button>
       <button class="tab" role="tab" data-modo="cripto" data-tab="backtest">Backtest</button>
+      <button class="tab" role="tab" data-modo="acoes" data-tab="a-hoje" hidden>Hoje</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-resumo" hidden>Resumo</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-carteiras" hidden>Carteiras</button>
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-fluxo" hidden>Fluxo e alertas</button>
@@ -303,6 +320,10 @@ table.clicavel tbody tr.sel { background: var(--accent-soft); }
       <button class="tab" role="tab" data-modo="acoes" data-tab="a-swing" hidden>Swing trade</button>
     </nav>
   </div>
+
+  <!-- HOJE (cripto e ações: a mesma tela, cada modo abre com o seu filtro) -->
+  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="hojeCripto"><p class="muted">Aguardando os dados do painel…</p></div></section>
+  <section class="panel" id="p-a-hoje" role="tabpanel" hidden><div class="hoje" id="hojeAcoes"><p class="muted">Aguardando os dados do painel…</p></div></section>
 
   <!-- AÇÕES: RESUMO -->
   <section class="panel" id="p-a-resumo" role="tabpanel" hidden>
@@ -753,6 +774,7 @@ const sinalCls = v => v == null ? 'muted' : v >= 0 ? 'pos' : 'neg';
 
 function renderReal(DADOS) {
   setTimeout(() => atualizarAoVivo(true), 0);
+  DADOS_HOJE = DADOS; hojeRender();
   const C = DADOS.coleta;
   const velho = (ms, h) => Date.now() - ms > h * 3600000;
   SUB.cripto = `Hyperliquid · ${fmt(C.rastreadas)} carteiras rastreadas · BTC, ETH, SOL, XRP, HYPE, NEAR`;
@@ -1893,12 +1915,244 @@ function proximaMudanca(fn, ms) {
   return null;
 }
 
+/* ---------- tela Hoje: contexto do dia + gestão de risco (rascunho) ---------- */
+let DADOS_HOJE = null;
+const HJ = {
+  ler(k, d) { try { const v = localStorage.getItem('radar-hoje-' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  gravar(k, v) { try { localStorage.setItem('radar-hoje-' + k, JSON.stringify(v)); } catch (e) {} }
+};
+const HJ_ROTINA = {
+  semanal: ['Tendência no semanal e níveis grandes dos ativos da lista', 'Calendário da semana (macro, balanços, vencimentos)', 'Lista de observação com no máximo 8 ativos', 'Revisar as operações da semana anterior, em R'],
+  diario: ['Regime do BTC no diário, funding e open interest', 'Baleias de swing: consenso e mudanças de posição nas últimas 24 h', 'Plano escrito para cada candidato: entrada, stop, alvo, tamanho e o que invalida', 'Risco total aberto abaixo do limite e liquidação longe do stop', 'Alertas no TradingView e sair da tela', 'Depois do fechamento: registrar as operações em R e o estado emocional']
+};
+const hojeDia = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function hojeSemana(d = new Date()) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())), dia = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - dia);
+  const ini = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return t.getUTCFullYear() + '-S' + Math.ceil(((t - ini) / 864e5 + 1) / 7);
+}
+function hojeChecklist() {   // marcas valem só para o dia (diário) ou a semana (semanal) de hoje
+  const chk = HJ.ler('chk', {});
+  for (const [g, chave] of [['diario', hojeDia()], ['semanal', hojeSemana()]]) {
+    if (!chk[g] || chk[g].k !== chave) chk[g] = { k: chave, v: [] };
+  }
+  return chk;
+}
+/* proxy de "baleia de swing/holder": carteira do ranking com mediana de 24 h ou mais por operação */
+function hojeBaleiasSwing(carteiras) {
+  const o = {};
+  (carteiras || []).filter(c => c.horas_mediana != null && c.horas_mediana >= 24).forEach(c => (c.posicoes || []).forEach(p => {
+    const x = o[p.moeda] || (o[p.moeda] = { L: 0, S: 0 });
+    p.lado === 'long' ? x.L++ : x.S++;
+  }));
+  return o;
+}
+function hojeLinhas(D) {
+  const sw = hojeBaleiasSwing(D.carteiras), swA = hojeBaleiasSwing(D.acoes && D.acoes.carteiras && D.acoes.carteiras.carteiras);
+  const linhas = [];
+  const montar = (a, mercado, tk, swMapa) => {
+    const dir = a.D === 'up' ? 'compra' : a.D === 'down' ? 'venda' : null;
+    const s = swMapa[tk] || { L: 0, S: 0 }, n = s.L + s.S;
+    const it = {};
+    it.diario = dir ? ['ok', 'diário ' + TL[a.D].toLowerCase()] : ['neutro', 'diário lateral'];
+    it.h4 = !dir ? ['neutro', '4h sem viés'] : a.H === a.D ? ['ok', '4h a favor'] : a.H === 'flat' ? ['neutro', '4h em pausa'] : ['recuo', '4h em recuo'];
+    it.baleias = !dir || n < 3 ? ['neutro', n < 3 ? 'baleias swing: poucas' : 'baleias swing: sem viés']
+      : (dir === 'compra' ? s.L > s.S * 2 : s.S > s.L * 2) ? ['ok', 'baleias swing a favor']
+      : (dir === 'compra' ? s.S > s.L * 2 : s.L > s.S * 2) ? ['contra', 'baleias swing contra'] : ['neutro', 'baleias swing divididas'];
+    const custo = dir === 'compra' ? a.funding : dir === 'venda' ? -a.funding : null;
+    it.funding = custo == null ? ['neutro', 'funding'] : custo > 20 ? ['contra', 'carregar caro'] : ['ok', 'carregar ok'];
+    const nota = ['diario', 'h4', 'baleias', 'funding'].filter(k => it[k][0] === 'ok').length;
+    linhas.push({ t: tk, id: a.t, mercado, nome: a.nome || '', setor: a.setor || '', px: a.px, ch: a.ch, D: a.D, H: a.H, funding: a.funding, oi: a.oi, L: a.L, S: a.S,
+      sw: s, nSw: n, dir, it, nota, aberta: a.aberta, vol: a.vol });
+  };
+  (D.ativos || []).forEach(a => montar(a, 'cripto', a.t, sw));
+  ((D.acoes && D.acoes.ativos) || []).forEach(a => montar(a, 'acoes', a.tk || a.t, swA));
+  return linhas;
+}
+function hojeEventos(D) {
+  const ev = (D.acoes && D.acoes.eventos && D.acoes.eventos.macro) || [], agora = Date.now();
+  return ev.filter(e => e.t >= agora - 3600e3 && e.t <= agora + 7 * 864e5).sort((a, b) => a.t - b.t);
+}
+function hojeMontar(root, modo) {
+  const D = DADOS_HOJE;
+  if (!D) { root.innerHTML = '<p class="muted">Aguardando os dados do painel…</p>'; return; }
+  const filtro = HJ.ler('filtro-' + modo, modo === 'acoes' ? 'acoes' : 'cripto');
+  const obs = HJ.ler('obs', []), chk = hojeChecklist(), calc = HJ.ler('calc', { cap: '', risco: '0.5', lev: '3', ativo: '', entrada: '', stop: '' });
+  const plano = HJ.ler('plano', []);
+  const L = hojeLinhas(D);
+  const btc = D.ativos.find(a => a.t === 'BTC');
+  const altos = hojeEventos(D).filter(e => e.impacto === 'alto');
+  const velho = Date.now() - D.gerado > 3 * 3600e3;
+  const kpi = (lab, val, note, cls = '') => `<div class="kpi"><span class="lab">${lab}</span><span class="val ${cls}">${val}</span><span class="note">${note}</span></div>`;
+  const kpis = kpi('BTC no diário · 4h', btc ? `${TL[btc.D]} · ${TL[btc.H]}` : '—', btc ? btc.frase : '')
+    + kpi('Funding do BTC', btc ? fmt(btc.funding, 1) + '% a.a.' : '—', btc ? (btc.funding >= 0 ? 'quem está comprado paga' : 'quem está vendido paga') + ` · ${fmt(Math.abs(btc.funding) / 365, 3)}% ao dia` : '')
+    + kpi('Dados do painel', ha(D.gerado), 'ranking ' + ha(D.coleta.ranking), velho ? 'neg' : '')
+    + kpi('Eventos de alto impacto (7 dias)', altos.length, altos.length ? `próximo: ${altos[0].nome} · ${altos[0].dia.slice(8)}/${altos[0].dia.slice(5, 7)}` : 'nenhum na agenda');
+
+  const lista = L.filter(r => filtro === 'todos' ? true : filtro === 'obs' ? obs.includes(r.t) : r.mercado === filtro)
+    .sort((a, b) => b.nota - a.nota || (b.L + b.S) - (a.L + a.S));
+  const chip = ([est, txt]) => `<span class="chip ${est === 'ok' ? 'up' : est === 'contra' ? 'down' : est === 'recuo' ? 'acc' : 'flat'}">${txt}</span>`;
+  const pos = (L_, S_) => L_ + S_ === 0 ? '<span class="muted">—</span>' : `${L_}↑ ${S_}↓`;
+  const linhasHtml = lista.map(r => `<tr>
+      <td><button class="hj-estrela" data-act="obs" data-t="${r.t}" aria-pressed="${obs.includes(r.t)}" title="Lista de observação">${obs.includes(r.t) ? '★' : '☆'}</button></td>
+      <td><b>${r.t}</b>${r.setor ? `<br><span class="small muted">${r.setor}</span>` : ''}${r.mercado === 'acoes' && r.aberta === false ? '<br><span class="chip warn">pregão fechado</span>' : ''}</td>
+      <td>${fmtPx(r.px)}<br><span class="small ${r.ch >= 0 ? 'pos' : 'neg'}">${r.ch >= 0 ? '+' : ''}${fmt(r.ch, 1)}%</span></td>
+      <td><span class="chip ${r.D === 'up' ? 'up' : r.D === 'down' ? 'down' : 'flat'}">${TL[r.D]}</span> <span class="chip ${r.H === 'up' ? 'up' : r.H === 'down' ? 'down' : 'flat'}">${TL[r.H]} 4h</span></td>
+      <td>${fmt(r.funding, 1)}%</td>
+      <td>${pos(r.L, r.S)}</td>
+      <td>${pos(r.sw.L, r.sw.S)}${r.nSw && r.nSw < 3 ? ' <span class="small muted">(poucas)</span>' : ''}</td>
+      <td>${r.dir ? `<b class="${r.dir === 'compra' ? 'pos' : 'neg'}">${r.dir}</b>` : '<span class="muted">sem viés</span>'}</td>
+      <td><div class="facts">${chip(r.it.diario)}${chip(r.it.h4)}${chip(r.it.baleias)}${chip(r.it.funding)}</div></td>
+      <td><b>${r.nota}/4</b></td></tr>`).join('');
+
+  const eventos = hojeEventos(D).slice(0, 10);
+  const evHtml = eventos.length ? eventos.map(e => `<tr><td>${e.dia.slice(8)}/${e.dia.slice(5, 7)}</td><td>${e.nome}</td>
+      <td><span class="chip ${e.impacto === 'alto' ? 'down' : 'flat'}">${e.impacto}</span></td><td>${e.previsto || '—'}</td><td>${e.anterior || '—'}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="muted">Nenhum evento macro na agenda dos próximos 7 dias.</td></tr>';
+
+  const heat = g => plano.filter(p => !g || p.grupo === g).reduce((s, p) => s + p.risco, 0);
+  const capNum = +calc.cap || 0, pct = v => capNum ? fmt(v / capNum * 100, 2) + '%' : '—';
+  const planoHtml = plano.length ? plano.map((p, i) => `<tr><td><b>${p.ativo}</b> <span class="${p.lado === 'compra' ? 'pos' : 'neg'}">${p.lado}</span></td><td>US$ ${fmt(p.risco, 0)}</td>
+      <td>US$ ${fmt(p.notional, 0)}</td><td><button class="hj-link" data-act="plano-rm" data-i="${i}">remover</button></td></tr>`).join('')
+    : '<tr><td colspan="4" class="muted">Nenhuma operação planejada para hoje.</td></tr>';
+  const heatTot = heat(), limite = capNum * 0.05;
+  const opt = L.map(r => `<option value="${r.t}" ${calc.ativo === r.t ? 'selected' : ''}>${r.t}${r.mercado === 'acoes' ? ' (ação)' : ''}</option>`).join('');
+  const chkItem = (g, i, txt) => `<label class="hj-chk"><input type="checkbox" data-act="chk" data-g="${g}" data-i="${i}" ${chk[g].v[i] ? 'checked' : ''}> <span>${txt}</span></label>`;
+
+  root.innerHTML = `
+    <div class="kpis">${kpis}</div>
+    <p class="callout"><b>Contexto, não sinal.</b> A nota de 0 a 4 só conta quantos filtros estão alinhados (diário, 4h, baleias de swing e custo de carregar). Ela não foi testada como estratégia: use para montar a lista de observação e escrever o plano antes de operar. Verde = alinhado ao viés do diário; vermelho = contra; azul = recuo no 4h dentro da tendência do diário. "Baleias swing" são as carteiras do ranking com mediana de 24 h ou mais por operação; a amostra é pequena (cada ativo mostra quantas).</p>
+
+    <div class="box">
+      <div class="box-head"><h2>Lista de observação</h2>
+        <div class="seg" role="group" aria-label="Filtrar ativos">${[['cripto', 'Cripto'], ['acoes', 'Ações'], ['obs', '★ Observação'], ['todos', 'Todos']].map(([f, n]) => `<button data-act="filtro" data-f="${f}" aria-pressed="${filtro === f}">${n}</button>`).join('')}</div></div>
+      <p class="small muted">Confiáveis = carteiras que passam o critério do ranking (↑ compradas, ↓ vendidas). Ordenado pela nota; use a estrela para fixar até 8 ativos.</p>
+      <div class="tbl-wrap"><table><thead><tr><th></th><th>Ativo</th><th>Preço</th><th>Tendência</th><th>Funding a.a.</th><th>Confiáveis</th><th>Baleias swing</th><th>Viés</th><th>Filtros</th><th>Nota</th></tr></thead>
+        <tbody>${linhasHtml || '<tr><td colspan="10" class="muted">Nenhum ativo neste filtro.</td></tr>'}</tbody></table></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="box hj-calc">
+        <div class="box-head"><h2>Calculadora de risco</h2><p>Tamanho sai do stop, não da vontade.</p></div>
+        <div class="hj-form">
+          <label>Capital (US$)<input data-k="cap" inputmode="decimal" value="${calc.cap}"></label>
+          <label>Risco por operação (%)<input data-k="risco" inputmode="decimal" value="${calc.risco}"></label>
+          <label>Ativo<select data-k="ativo" class="hj-ativo"><option value="">—</option>${opt}</select></label>
+          <label>Alavancagem na corretora<input data-k="lev" inputmode="decimal" value="${calc.lev}"></label>
+          <label>Entrada<input data-k="entrada" inputmode="decimal" value="${calc.entrada}"></label>
+          <label>Stop<input data-k="stop" inputmode="decimal" value="${calc.stop}"></label>
+        </div>
+        <div class="hj-out"></div>
+        <button class="hj-btn" data-act="plano-add">Adicionar ao plano do dia</button>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Plano do dia</h2><button class="hj-link" data-act="plano-limpar">limpar</button></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Operação</th><th>Risco</th><th>Posição</th><th></th></tr></thead><tbody>${planoHtml}</tbody></table></div>
+        <div class="facts">
+          <span class="chip ${capNum && heatTot > limite ? 'down' : 'acc'}">risco total ${pct(heatTot)} · limite 5%</span>
+          <span class="chip flat">cripto ${pct(heat('cripto'))}</span><span class="chip flat">ações ${pct(heat('acoes'))}</span>
+          ${capNum ? `<span class="chip flat">parar no dia em −2% (US$ ${fmt(capNum * 0.02, 0)})</span>` : ''}
+        </div>
+        <p class="small muted">Cripto anda junta: trate BTC, ETH, SOL e afins quase como um risco só. Perdeu 5% na semana: pare e revise. Perdeu 10% do capital: metade do risco por operação.</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="box">
+        <div class="box-head"><h2>Agenda macro (7 dias)</h2><p>Eventos de alto impacto mexem com cripto e ações.</p></div>
+        <div class="tbl-wrap"><table><thead><tr><th>Dia</th><th>Evento</th><th>Impacto</th><th>Previsto</th><th>Anterior</th></tr></thead><tbody>${evHtml}</tbody></table></div>
+      </div>
+      <div class="box">
+        <div class="box-head"><h2>Rotina</h2><button class="hj-link" data-act="chk-limpar">desmarcar tudo</button></div>
+        <h3 class="hj-sub">Diária</h3>${HJ_ROTINA.diario.map((t, i) => chkItem('diario', i, t)).join('')}
+        <h3 class="hj-sub">Semanal (domingo)</h3>${HJ_ROTINA.semanal.map((t, i) => chkItem('semanal', i, t)).join('')}
+      </div>
+    </div>`;
+  hojeCalc(root);
+}
+function hojeAtivoLinha(t) { return DADOS_HOJE ? hojeLinhas(DADOS_HOJE).find(r => r.t === t) : null; }
+function hojeCalcular() {
+  const c = HJ.ler('calc', {});
+  const cap = +c.cap, rp = +c.risco, e = +c.entrada, s = +c.stop, lev = +c.lev || 1;
+  if (!(cap > 0 && rp > 0 && e > 0 && s > 0) || e === s) return null;
+  const lado = s < e ? 'compra' : 'venda', dist = Math.abs(e - s) / e, risco = cap * rp / 100, notional = risco / dist;
+  const A = hojeAtivoLinha(c.ativo);
+  const carrega = A ? (lado === 'compra' ? A.funding : -A.funding) : null;   // % a.a. que este lado paga (negativo = recebe)
+  return { c, cap, rp, e, s, lev, lado, dist, risco, notional, qtd: notional / e, margem: notional / lev, liq: Math.max(0, 1 / lev - 0.01),
+    taxas: notional * 0.00045 * 2, carrega, carregaDia: carrega == null ? null : notional * carrega / 100 / 365, grupo: A && A.mercado === 'acoes' ? 'acoes' : 'cripto' };
+}
+function hojeCalc(root) {
+  const out = root.querySelector('.hj-out');
+  if (!out) return;
+  const r = hojeCalcular();
+  if (!r) { out.innerHTML = '<p class="muted small">Preencha capital, risco, entrada e stop para ver o tamanho da posição.</p>'; return; }
+  const av = [];
+  if (r.rp > 1) av.push(['down', `Risco de ${fmt(r.rp, 2)}% é alto: nos primeiros meses use 0,25% a 0,5%.`]);
+  if (r.dist < 0.003) av.push(['warn', 'Stop muito curto: taxas e derrapagem comem boa parte do resultado.']);
+  if (r.margem > r.cap) av.push(['down', 'A margem necessária passa do capital: reduza o risco ou aumente a alavancagem escolhida.']);
+  if (r.liq < r.dist * 3) av.push(['down', `A liquidação (≈ ${fmt(r.liq * 100, 1)}%) está perto do stop (${fmt(r.dist * 100, 1)}%): ela deveria estar pelo menos 3 vezes mais longe.`]);
+  if (r.taxas / r.risco > 0.1) av.push(['warn', `Taxas de ida e volta = ${fmt(r.taxas / r.risco * 100, 0)}% do risco.`]);
+  if (r.carregaDia != null && r.carrega > 20) av.push(['warn', `Carregar este lado custa ${fmt(r.carrega, 1)}% a.a. de funding.`]);
+  out.innerHTML = `<div class="kpis hj-mini">
+      <div class="kpi"><span class="lab">Posição</span><span class="val">US$ ${fmt(r.notional, 0)}</span><span class="note">${fmt(r.qtd, r.qtd < 10 ? 4 : 2)} unidades · ${r.lado}</span></div>
+      <div class="kpi"><span class="lab">Risco no stop</span><span class="val">US$ ${fmt(r.risco, 0)}</span><span class="note">stop a ${fmt(r.dist * 100, 2)}% da entrada</span></div>
+      <div class="kpi"><span class="lab">Margem usada</span><span class="val">US$ ${fmt(r.margem, 0)}</span><span class="note">${fmt(r.notional / r.cap, 2)}x o capital na posição</span></div>
+      <div class="kpi"><span class="lab">Liquidação ≈</span><span class="val">${fmt(r.liq * 100, 1)}%</span><span class="note">da entrada (estimativa; confira na Hyperliquid)</span></div></div>
+    <p class="small muted">Taxas de ida e volta ≈ US$ ${fmt(r.taxas, 2)} (0,045% por lado)${r.carregaDia != null ? ` · funding ≈ ${r.carregaDia >= 0 ? 'US$ ' + fmt(r.carregaDia, 2) + ' pagos' : 'US$ ' + fmt(-r.carregaDia, 2) + ' recebidos'} por dia` : ''}</p>
+    ${av.map(([c, t]) => `<p class="chip ${c}" style="white-space:normal;border-radius:8px">${t}</p>`).join('')}`;
+}
+function hojeRender() {
+  const a = document.getElementById('hojeCripto'), b = document.getElementById('hojeAcoes');
+  try { if (a) hojeMontar(a, 'cripto'); if (b) hojeMontar(b, 'acoes'); } catch (e) { console.error('Hoje:', e); }
+}
+function hojeLigar(root) {
+  root.addEventListener('click', ev => {
+    const el = ev.target.closest('[data-act]');
+    if (!el || el.tagName === 'INPUT') return;
+    const act = el.dataset.act;
+    if (act === 'filtro') HJ.gravar('filtro-' + (root.id === 'hojeAcoes' ? 'acoes' : 'cripto'), el.dataset.f);
+    else if (act === 'obs') {
+      let o = HJ.ler('obs', []);
+      o = o.includes(el.dataset.t) ? o.filter(x => x !== el.dataset.t) : o.length < 8 ? [...o, el.dataset.t] : (alert('A lista de observação aceita no máximo 8 ativos.'), o);
+      HJ.gravar('obs', o);
+    } else if (act === 'plano-add') {
+      const r = hojeCalcular();
+      if (!r) return alert('Preencha capital, risco, entrada e stop primeiro.');
+      const p = HJ.ler('plano', []);
+      p.push({ ativo: r.c.ativo || 'ativo', lado: r.lado, risco: r.risco, notional: r.notional, grupo: r.grupo });
+      HJ.gravar('plano', p);
+    } else if (act === 'plano-rm') { const p = HJ.ler('plano', []); p.splice(+el.dataset.i, 1); HJ.gravar('plano', p); }
+    else if (act === 'plano-limpar') HJ.gravar('plano', []);
+    else if (act === 'chk-limpar') { const c = hojeChecklist(); c.diario.v = []; c.semanal.v = []; HJ.gravar('chk', c); }
+    else return;
+    hojeRender();
+  });
+  root.addEventListener('change', ev => {
+    const el = ev.target;
+    if (el.dataset.act === 'chk') {
+      const c = hojeChecklist(); c[el.dataset.g].v[+el.dataset.i] = el.checked; HJ.gravar('chk', c);
+    } else if (el.matches('.hj-ativo')) {   // trocar de ativo preenche a entrada com o preço atual
+      const c = HJ.ler('calc', {}); c.ativo = el.value;
+      const A = hojeAtivoLinha(el.value); if (A) c.entrada = String(A.px);
+      HJ.gravar('calc', c); hojeRender();
+    }
+  });
+  root.addEventListener('input', ev => {   // a calculadora recalcula sem redesenhar (não perde o foco)
+    const el = ev.target;
+    if (!el.dataset.k || el.matches('.hj-ativo')) return;
+    const c = HJ.ler('calc', {}); c[el.dataset.k] = el.value.replace(',', '.'); HJ.gravar('calc', c);
+    hojeCalc(root);
+  });
+}
+['hojeCripto', 'hojeAcoes'].forEach(id => { const r = document.getElementById(id); if (r) hojeLigar(r); });
+
 /* ---------- abas (cada mercado, Cripto ou Ações, tem as suas) ---------- */
 const tabs = [...document.querySelectorAll('.tab')];
 const SUB = { cripto: '', acoes: '' };
 let modoAtual = 'cripto';
 function show(id) {
-  if (!document.getElementById('p-' + id)) id = 'resumo';
+  if (!document.getElementById('p-' + id)) id = 'hoje';
   const modo = id.startsWith('a-') ? 'acoes' : 'cripto';
   modoAtual = modo;
   tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === id)));
@@ -1912,12 +2166,12 @@ function show(id) {
 tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab)));
 window.addEventListener('hashchange', () => { if (location.hash.length > 1) show(location.hash.slice(1)); });
 document.querySelectorAll('#modo button').forEach(b => b.addEventListener('click', () => {
-  let id = b.dataset.modo === 'acoes' ? 'a-resumo' : 'resumo';
+  let id = b.dataset.modo === 'acoes' ? 'a-hoje' : 'hoje';
   try { id = localStorage.getItem('radar-tab-' + b.dataset.modo) || id; } catch (e) {}
   show(id);
 }));
 let start = location.hash.slice(1);
-if (!start) { try { start = localStorage.getItem('radar-tab') || 'resumo'; } catch (e) { start = 'resumo'; } }
+if (!start) { try { start = localStorage.getItem('radar-tab') || 'hoje'; } catch (e) { start = 'hoje'; } }
 show(start);
 
 /* ---------- dados: injetados (painel.html local) ou buscados no site (com senha) ---------- */
