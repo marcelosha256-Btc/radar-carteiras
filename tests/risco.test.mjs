@@ -140,3 +140,21 @@ test('zonas no 15 min: a mensagem lista só a zona que está longe', () => {
   const info = it.find(([n]) => n === 'info');
   assert.ok(info && info[1].includes('590') && !info[1].includes('656'));
 });
+
+test('checklist: estrutura (máxima/mínima recente) antes do alvo 1 bloqueia quando o espaço real é menor que o R:R mínimo', () => {
+  const agora = Date.UTC(2026, 10, 24, 14, 0);   // 11h de Brasília, dentro da janela
+  // compra a 353,9, stop 346,9 (R = 7), topo a 354,2 (0,04R), alvo 1 a 365,5 (1,66R)
+  const calc = { rr: 2.25, risco: 5, notional: 235, custoStop: 0.001, cap: 1000, carrega: 0, e: 353.9, s: 346.9, side: 1, oposto: 354.2, alvos: [{ p: 365.5 }, { p: 376.8 }] };
+  const it = checklist({ calc, agora });
+  assert.ok(it.some(([n, t]) => n === 'bloqueia' && t.includes('Estrutura no caminho') && t.includes('só vale comprando em')));
+  // XRP vendido: mínima a 1,1R antes do alvo 1 (1,66R) → bloqueia com rrMin 2
+  const x = { ...calc, e: 0.9236, s: 0.9374, side: -1, oposto: 0.9084, alvos: [{ p: 0.8999 }] };
+  assert.ok(checklist({ calc: x, agora }).some(([n, t]) => n === 'bloqueia' && t.includes('mínima recente')));
+  // estrutura além do alvo 1: nada
+  const livre = { ...calc, oposto: 380 };
+  assert.ok(!checklist({ calc: livre, agora }).some(([, t]) => t.includes('Estrutura no caminho') || t.includes('antes do alvo 1')));
+  // estrutura a 2,3R com alvo 1 a 3R e mínimo 2 → só aviso
+  const media = { ...calc, oposto: 353.9 + 2.3 * 7, alvos: [{ p: 353.9 + 3 * 7 }] };
+  const m = checklist({ calc: media, agora });
+  assert.ok(m.some(([n, t]) => n === 'aviso' && t.includes('antes do alvo 1')) && !m.some(([n, t]) => n === 'bloqueia' && t.includes('Estrutura')));
+});
