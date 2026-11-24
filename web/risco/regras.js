@@ -117,11 +117,32 @@ export function checklist({ calc, trava, eventos = [], heatAberto = 0, regras = 
       const nome = calc.side > 0 ? 'máxima' : 'mínima', rm = regras.rrMin;
       if (d < rm) {
         const eMin = (calc.oposto + rm * calc.s) / (1 + rm);
-        it.push(['bloqueia', `Estrutura no caminho: a ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R da entrada, antes do alvo 1 (${fmt(a1)}R). O espaço real é menor que o seu mínimo de ${rm}:1; só vale ${calc.side > 0 ? 'comprando em' : 'vendendo em'} ${fpx(eMin)} ou ${calc.side > 0 ? 'abaixo' : 'acima'}, ou com alvo até a ${nome}.`]);
+        it.push(['bloqueia', `Estrutura no caminho: a ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R da entrada, antes do alvo 1 (${fmt(a1)}R). O espaço real é menor que o seu mínimo de ${rm}:1; só vale ${calc.side > 0 ? 'comprando em' : 'vendendo em'} ${fpx(eMin)} ou ${calc.side > 0 ? 'abaixo' : 'acima'}, ou com alvo até a ${nome}.`, { eMin, base: `Estrutura no caminho: a ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R da entrada, antes do alvo 1 (${fmt(a1)}R). O espaço real é menor que o seu mínimo de ${rm}:1.` }]);
       } else it.push(['aviso', `A ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R, antes do alvo 1 (${fmt(a1)}R): o preço pode parar ali.`]);
     }
   }
   it.push(...extras);
+  // "só vale entrar em X": várias regras viram UMA entrada mínima (a mais restritiva); se ela passar do stop, não há entrada válida
+  const metas = it.filter(x => x[0] === 'bloqueia' && x[2] && x[2].eMin > 0);
+  if (metas.length && calc.s > 0) {
+    const compra = calc.side > 0, eMin = compra ? Math.min(...metas.map(x => x[2].eMin)) : Math.max(...metas.map(x => x[2].eMin));
+    const valido = compra ? eMin > calc.s : eMin < calc.s;
+    if (metas.length > 1 || !valido) {
+      const ultimo = it.indexOf(metas[metas.length - 1]);
+      metas.forEach(x => { x[1] = x[2].base; });
+      it.splice(ultimo + 1, 0, ['bloqueia', valido
+        ? `Entrada mínima que passa nas regras acima: ${compra ? 'comprando em' : 'vendendo em'} ${fpx(eMin)} ou ${compra ? 'abaixo' : 'acima'}.`
+        : `Nenhum preço de entrada passa nas regras acima com o stop em ${fpx(calc.s)} (o preço mínimo seria ${fpx(eMin)}, ${compra ? 'abaixo' : 'acima'} do stop): espere outro setup ou mude o plano.`]);
+    }
+  }
+  if (calc.e > 0 && calc.atr > 0 && calc.alvos && calc.alvos.length > 1) {   // alvo 2 realista?
+    const a2 = calc.alvos[calc.alvos.length - 1], R2 = Math.abs(calc.e - calc.s) || 1;
+    const dF = Math.abs(a2.p - calc.e) / calc.e, passa = calc.oposto > 0 && calc.side * (a2.p - calc.e) / R2 > calc.side * (calc.oposto - calc.e) / R2 && calc.side * (calc.oposto - calc.e) > 0;
+    if (a2.p > 0 && (dF > 8 * calc.atr || passa))
+      it.push(['aviso', `Alvo 2 (${fpx(a2.p)}): ${[passa ? `passa da ${calc.side > 0 ? 'máxima' : 'mínima'} recente (${fpx(calc.oposto)})` : '', dF > 8 * calc.atr ? `fica a ${fmt(dF * 100)}% do preço, ${fmt(dF / calc.atr)} ATR do tempo gráfico` : ''].filter(Boolean).join(' e ')}. O R:R depende de romper a estrutura: considere sair tudo no alvo 1.`]);
+  }
+  if (calc.stopATR != null && calc.stopATR > 3)
+    it.push(['aviso', `Stop largo (${fmt(calc.stopATR)} ATR do tempo gráfico): a posição fica em US$ ${fmt(calc.notional)} (${fmt(calc.notional / (calc.cap || 1) * 100)}% do capital). Isso é swing, não day trade: ${calc.notional < 0.1 * calc.cap ? 'a posição pequena não paga o esforço' : 'confira se é o que você quer'}.`]);
   if (calc.notional > 0 && calc.notional < ORDEM_MINIMA) it.push(['bloqueia', `Posição de US$ ${fmt(calc.notional)} abaixo da ordem mínima da Hyperliquid (US$ ${ORDEM_MINIMA}): aumente o risco ou afaste o stop.`]);
   if (calc.cortado) it.push(['aviso', `Posição no teto de US$ ${fmt(calc.posMax)}: o risco real é US$ ${fmt(calc.risco)}, menor que o planejado.`]);
   if (calc.rr == null) it.push(['bloqueia', 'Defina o alvo: sem alvo não há R:R para conferir.']);
