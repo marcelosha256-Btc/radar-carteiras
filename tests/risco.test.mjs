@@ -61,3 +61,12 @@ test('checklist: trava, notícia, R:R e risco total', () => {
   assert.ok(it2.some(([n, t]) => n === 'aviso' && t.includes('Fora da sua janela')));
   assert.equal(REGRAS_PADRAO.rrMin, 2);
 });
+
+test('checklist: ordem mínima da Hyperliquid e posição no teto', () => {
+  const agora = 20000 * D + 14 * H;
+  const base = { rr: 2.5, risco: 5, notional: 8, custoStop: 0.001, cap: 1000, carrega: 0 };
+  assert.ok(checklist({ calc: base, agora }).some(([n, t]) => n === 'bloqueia' && t.includes('ordem mínima')));
+  const it = checklist({ calc: { ...base, notional: 1000, cortado: true, posMax: 1000, risco: 3 }, agora });
+  assert.ok(it.some(([n, t]) => n === 'aviso' && t.includes('teto')));
+  assert.ok(!it.some(([n, t]) => t.includes('ordem mínima')));
+});
