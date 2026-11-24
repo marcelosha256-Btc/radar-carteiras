@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { consolidarFills, travaDoDia, checklist, inicioDiaBRT, REGRAS_PADRAO, pregaoNY } from '../web/risco/regras.js';
-import { zonasMapa, checarMapa } from '../web/risco/zonas.js';
+import { zonasMapa, checarMapa, construir } from '../web/risco/zonas.js';
 
 const H = 36e5, D = 24 * H;
 const perto = (a, b, t = 1e-9) => assert.ok(Math.abs(a - b) <= t, `esperado ${b}, veio ${a}`);
@@ -98,4 +98,12 @@ test('checklist: vender colado no fundo recente e janela das ações pelo pregã
   const feriado = checklist({ calc, mercado: 'acoes', agora: Date.parse('2026-11-26T15:00:00Z') });
   assert.ok(feriado.some(([, t]) => t.includes('Ação de Graças')));
   assert.equal(pregaoNY(Date.parse('2026-11-27T17:30:00Z')).meio, 'dia seguinte à Ação de Graças');
+});
+
+test('construir: formato da /api/liquidez vira [preço, US$] como na Liquidez ao vivo', () => {
+  // preço 100, faixa ±10% em 4 colunas de 5: comprados nas 2 de baixo (92,5 e 97,5), vendidos nas 2 de cima (102,5 e 107,5)
+  const d = construir({ p: 100, R: 10, nb: 4, L: [1, 0.5], S: [0.2, 2] });
+  perto(d.bw, 5); assert.deepEqual(d.L.map(a => a[0]), [92.5, 97.5]); assert.deepEqual(d.S.map(a => a[0]), [102.5, 107.5]);
+  assert.equal(d.L[0][1], 1e6);
+  assert.equal(construir(null), null);
 });

@@ -4,6 +4,13 @@
 
 const STOP_BUF = 0.0015;   // stop 0,15% além da zona (igual à Trava)
 
+/** converte o formato da /api/liquidez (faixas em volta do preço) em [preço, US$], igual ao build() da Liquidez ao vivo */
+export function construir(d) {
+  if (!d || !(d.p > 0) || !(d.R > 0) || !(d.nb > 0) || !Array.isArray(d.L) || !Array.isArray(d.S)) return null;
+  const lo = d.p * (1 - d.R / 100), w = d.p * 2 * d.R / 100 / d.nb, h = d.nb / 2;
+  return { bw: w, L: d.L.map((v, i) => [lo + (i + 0.5) * w, v * 1e6]), S: d.S.map((v, i) => [lo + (h + i + 0.5) * w, v * 1e6]) };
+}
+
 /** d = { bw, L: [[preço, US$], ...] liquidações de comprados, S: [[preço, US$], ...] de vendidos }; ref = preço de referência */
 export function zonasMapa(d, ref) {
   if (!d || !(d.bw > 0) || !Array.isArray(d.L) || !Array.isArray(d.S)) return null;
@@ -46,7 +53,7 @@ export function mapaDe(coin, aoChegar) {
   const c = cache[coin];
   if (!c || (Date.now() - c.t > 5 * 60000 && !c.p)) {
     const p = fetch(`api/liquidez?q=mapa&coin=${encodeURIComponent(coin)}`, { headers: { 'x-senha': senha() } })
-      .then(r => r.ok ? r.json() : null).catch(() => null)
+      .then(r => r.ok ? r.json() : null).then(construir).catch(() => null)
       .then(d => { cache[coin] = { t: Date.now(), d, p: null }; if (aoChegar) aoChegar(); });
     cache[coin] = { t: c ? c.t : 0, d: c ? c.d : null, p };
   }
