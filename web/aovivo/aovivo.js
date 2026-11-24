@@ -9,8 +9,8 @@ const ATIVOS = { cripto: ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'],
 const ROTEIRO = {               // regras do roteiro do Marcelo (ajuste aqui)
   rrMin: 2,                     // R:R mínimo: abaixo disso, BLOQUEADO
   stopBuf: 0.0015,              // stop 0,15% além da zona de liquidação mais próxima
-  shortSwingVeto: true,         // backtest do Connors RSI: short sem edge → venda no swing bloqueada
-  semEdgeLong: ['ETH'],         // backtest: ETH sem edge nem no long
+  // as regras do Connors RSI (veto de venda no swing, ETH sem edge, bônus de RSI diário em sobrevenda) saíram em 25/11/2026:
+  // o estudo do CRSI não achou vantagem clara contra entrar em qualquer dia do mesmo regime
   liberado: 70, cuidado: 50,
 };
 const TF = [['Semana', '1w', 7 * 864e5], ['Dia', '1d', 864e5], ['4H', '4h', 144e5], ['15 min', '15m', 9e5]];
@@ -256,11 +256,8 @@ function avaliar(k, A, modo, lado) {
   } else {
     const eD = estrutura(k, '1d', cur, 'Diário'); if (eD) add(10 * eD.s * sL, eD.t);
     const rD = rsiAt(k, '1d', 864e5, cur), rW = rsiAt(k, '1w', 7 * 864e5, cur);
-    if (isBuy && rD && rD.v <= 30) add(10, `RSI diário em sobrevenda (${f1(rD.v)}) — compra de queda, como no seu Connors`);
     if (!isBuy && rD && rD.v >= 70) add(5, `RSI diário em sobrecompra (${f1(rD.v)})`);
     if (rW && rW.v >= 70) add(isBuy ? -5 : 5, `RSI semanal esticado (${f1(rW.v)})`);
-    if (isBuy && ROTEIRO.semEdgeLong.includes(nome(k))) add(-15, `seu backtest: ${nome(k)} sem edge nem no long`);
-    if (!isBuy && ROTEIRO.shortSwingVeto) blocks.push('venda no swing: seu backtest mostrou short sem edge — use só como veto');
   }
   const q = squeeze(k, press[k]);
   if (q && q.t === 'Longs apertados') add(isBuy ? -10 : 10, 'longs apertados');
@@ -449,7 +446,7 @@ function criarApp(mercado, painel, raiz) {
         ${open ? `<div class="small" style="grid-column:1/-1">${r.alvo && r.stop ? `<span class="muted">entrada ~${fpx(A.cur)} · stop ${fpx(r.stop)} · alvo ${fpx(r.alvo)}${r.rr != null ? ' · R:R ' + f1(r.rr) : ''}</span>` : ''}<ul>${r.blocks.slice(1).map(t => `<li style="color:${COR.dn}">⛔ ${t}</li>`).join('')}${r.pros.map(t => `<li style="color:${COR.up}">${t}</li>`).join('')}${r.cons.map(t => `<li style="color:${COR.am}">${t}</li>`).join('')}</ul></div>` : ''}</div>`; };
     $('.lv-rot').innerHTML = `<div class="box-head"><h2>Trava do seu roteiro</h2><span class="chip warn">não é recomendação</span></div>
       ${row('day', 'compra')}${row('day', 'venda')}${row('swing', 'compra')}${row('swing', 'venda')}
-      <p class="small muted lv-full" style="margin-top:8px">Bloqueiam: R:R &lt; ${ROTEIRO.rrMin}:1 · venda no swing (backtest do Connors) · cascata de liquidações contra você. O resto soma ou tira pontos (base 50; liberado ≥ ${ROTEIRO.liberado}). Stop além da zona de liquidação mais próxima; alvo na zona do outro lado. Day trade usa 4 h; swing usa 24 h e o diário. Clique numa linha para ver os motivos. Confira balanços e agenda na aba de eventos.</p>`;
+      <p class="small muted lv-full" style="margin-top:8px">Bloqueiam: R:R &lt; ${ROTEIRO.rrMin}:1 · cascata de liquidações contra você. O resto soma ou tira pontos (base 50; liberado ≥ ${ROTEIRO.liberado}). Stop além da zona de liquidação mais próxima; alvo na zona do outro lado. Day trade usa 4 h; swing usa 24 h e o diário. Clique numa linha para ver os motivos. Confira balanços e agenda na aba de eventos.</p>`;
   }
   function renderPress() {
     const k = SEL, P = press[k], el = $('.lv-press');

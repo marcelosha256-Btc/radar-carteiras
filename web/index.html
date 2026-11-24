@@ -805,7 +805,7 @@ function renderReal(DADOS) {
   DADOS_HOJE = DADOS; hojeRender();
   const C = DADOS.coleta;
   const velho = (ms, h) => Date.now() - ms > h * 3600000;
-  SUB.cripto = `Hyperliquid · ${fmt(C.rastreadas)} carteiras rastreadas · BTC, ETH, SOL, XRP, HYPE, NEAR`;
+  SUB.cripto = `Hyperliquid · ${fmt(C.rastreadas)} carteiras rastreadas · BTC, ETH, SOL, XRP, HYPE, NEAR`; SUB.carteiras = fmt(C.rastreadas);
   const proxColeta = (() => { const d = new Date(Math.max(Date.now(), C.ultima_foto)); d.setMinutes(7, 0, 0); if (d.getTime() <= Date.now()) d.setHours(d.getHours() + 1); return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); })();
   const soprAte = DADOS.sopr && DADOS.sopr.sopr_horario ? DADOS.sopr.sopr_horario.atualizado_ate : null;
   $('#fresh').innerHTML = '<span class="chip" id="aoVivo"><span class="dot"></span>preço ao vivo: conectando…</span>'
@@ -1212,7 +1212,7 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
       const dia = d.toDateString() === hoje.toDateString() ? 'hoje' : d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
       return `${dia} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`; };
     const sesTxt = k => S[k].aberta ? `aberta · fecha ${quandoMuda(S[k].muda_em)}` : `fechada · abre ${quandoMuda(S[k].muda_em)}`;
-    SUB.acoes = `Hyperliquid · grupo xyz · ${A.ativos.length} mercados mais líquidos · ${fmt(AM.com_posicao_24h)} carteiras com posição`;
+    SUB.acoes = `Hyperliquid · grupo xyz · ${A.ativos.length} mercados mais líquidos · ${fmt(AM.com_posicao_24h)} carteiras com posição`; SUB.acoesN = A.ativos.length;
 
     const ny = S['Nova York'];
     const oiTot = A.ativos.reduce((s, a) => s + a.oi, 0), volTot = A.ativos.reduce((s, a) => s + a.vol24, 0);
@@ -1920,7 +1920,7 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
     datas.forEach((d, i) => { const [a, m, dia] = d.split('-'); if (dia === '01' && (+m - 1) % 3 === 0) svgEl('text', { x: X(i), y: y1 + 18, 'text-anchor': 'middle', class: 'ax' }, s, `${MES[+m - 1]}/${a.slice(2)}`); });
   }
   renderSoprAtivo(soprSel);
-  $('#sub').textContent = SUB[modoAtual] || SUB.cripto;
+  atualizarSub();
 }
 
 /* ---------- horário das bolsas (o mesmo cálculo do coletor, acoes.py) ---------- */
@@ -2423,6 +2423,15 @@ window.addEventListener('radar-risco', () => ['hojeUnico'].forEach(id => { const
 const tabs = [...document.querySelectorAll('.tab')];
 const SUB = { cripto: '', acoes: '' };
 let modoAtual = 'cripto';
+let abaAtual = 'hoje';
+const UNICAS = new Set(['hoje', 'trades']);   // telas que juntam ações e cripto
+function atualizarSub() {
+  const el = document.getElementById('sub'); if (!el) return;
+  if (UNICAS.has(abaAtual)) {
+    const a = SUB.acoesN ? `ações (${SUB.acoesN} mercados do grupo xyz)` : 'ações (grupo xyz)';
+    el.textContent = `Hyperliquid · ${a} e cripto (BTC, ETH, SOL, XRP, HYPE, NEAR)${SUB.carteiras ? ' · ' + SUB.carteiras + ' carteiras rastreadas' : ''}`;
+  } else { const t = SUB[abaAtual.startsWith('a-') ? 'acoes' : 'cripto']; if (t) el.textContent = t; }
+}
 const ANTIGAS = { 'a-hoje': 'hoje', 'a-trades': 'trades' };   // links antigos (#a-hoje) continuam funcionando
 function show(id) {
   id = ANTIGAS[id] || id;
@@ -2436,7 +2445,7 @@ function show(id) {
   document.querySelectorAll('.tabs [data-sec]').forEach(t => { t.hidden = !mais && t.dataset.tab !== id; });
   const bm = document.getElementById('tabMais'); if (bm) { bm.setAttribute('aria-expanded', String(mais)); bm.textContent = mais ? 'Menos ▴' : 'Pesquisa ▾'; }
   document.querySelectorAll('.panel').forEach(p => { p.hidden = p.id !== 'p-' + id; });
-  if (SUB[modo]) $('#sub').textContent = SUB[modo];
+  abaAtual = id; atualizarSub();
   if (id === 'aovivo' || id === 'a-aovivo') try { localStorage.setItem('radar-aovivo', id); } catch (e) {}
   try { localStorage.setItem('radar-tab', id); } catch (e) {}
 }
