@@ -10,6 +10,8 @@ const lerEnd = () => { try { return localStorage.getItem('radar-carteira') || ''
 const gravarEnd = v => { try { localStorage.setItem('radar-carteira', v); } catch (e) {} };
 const px = v => typeof fmtPx === 'function' ? fmtPx(v) : num(v, 2);
 
+const ESTAVEIS = new Set(['USDC', 'USDT0', 'USDH', 'USDE']);
+const hl2 = async corpo => { const r = await fetch(HL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }); if (!r.ok) throw new Error(r.status); return r.json(); };
 let S = { pos: null, conta: null, erro: '', t: 0 };
 
 async function estado(user, dex) {
@@ -21,7 +23,8 @@ async function buscar() {
   const user = lerEnd();
   if (!user) return;
   try {
-    const [a, b] = await Promise.all([estado(user), estado(user, 'xyz').catch(() => null)]);   // cripto e ações (grupo xyz)
+    const [a, b, sp] = await Promise.all([estado(user), estado(user, 'xyz').catch(() => null),
+      hl2({ type: 'spotClearinghouseState', user }).catch(() => null)]);   // cripto, ações (grupo xyz) e saldo spot
     const pos = [];
     for (const st of [a, b]) if (st) for (const x of st.assetPositions || []) {
       const p = x.position, szi = +p.szi;
@@ -30,9 +33,13 @@ async function buscar() {
       pos.push({ coin: p.coin, lado: szi > 0 ? 'compra' : 'venda', valor: +p.positionValue, pnl: +p.unrealizedPnl, roe: +p.returnOnEquity,
         entrada: +p.entryPx, mark, liq, dist: liq ? Math.abs(mark - liq) / mark : null });
     }
-    const conta = (+a.marginSummary.accountValue) + (b ? +b.marginSummary.accountValue : 0);
+    const perp = (+a.marginSummary.accountValue) + (b ? +b.marginSummary.accountValue : 0);
     const margem = (+a.marginSummary.totalMarginUsed) + (b ? +b.marginSummary.totalMarginUsed : 0);
-    S = { pos: pos.sort((x, y) => y.valor - x.valor), conta: { valor: conta, margem }, erro: '', t: Date.now() };
+    const bal = sp && sp.balances ? sp.balances.filter(x => +x.total > 0) : [];
+    const spot = bal.filter(x => ESTAVEIS.has(x.coin)).reduce((t, x) => t + +x.total, 0);   // stablecoins valem 1; outros tokens não entram na soma
+    const outros = bal.filter(x => !ESTAVEIS.has(x.coin)).map(x => x.coin);
+    const valor = perp + spot;
+    S = { pos: pos.sort((x, y) => y.valor - x.valor), conta: { valor, perp, spot, outros, livre: Math.max(0, valor - margem), margem }, erro: '', t: Date.now() };
   } catch (e) { S.erro = 'Não consegui ler a carteira agora.'; }
   desenhar();
 }
@@ -58,7 +65,7 @@ function desenhar() {
         <td>${p.liq ? `<span ${perigo ? 'class="neg"' : atencao ? 'style="color:var(--warn)"' : ''}>${p.dist > 1 ? 'longe' : num(p.dist * 100, 1) + '%'}</span> <span class="muted small">${px(p.liq)}</span>` : '<span class="muted small">sem risco de liquidação</span>'}</td></tr>`;
     }).join('');
     el.innerHTML = `<div class="box"><div class="box-head"><h2>Minhas posições</h2>
-      <span class="small muted">conta US$ ${num(S.conta.valor)} · margem em uso ${num(uso * 100, 0)}% · PnL aberto <b class="${tot >= 0 ? 'pos' : 'neg'}">${sinal(tot)}</b> · <button class="hj-link" data-act="pos-trocar">trocar carteira</button></span></div>
+      <span class="small muted"><b style="color:var(--fg);font-size:15px" title="Conta de trading US$ ${num(S.conta.perp, 2)} + spot US$ ${num(S.conta.spot, 2)}${S.conta.outros.length ? ' (fora da soma: ' + esc(S.conta.outros.join(', ')) + ')' : ''}">Saldo US$ ${num(S.conta.valor, 2)}</b> · livre US$ ${num(S.conta.livre, 2)} · margem em uso ${num(S.conta.valor > 0 ? S.conta.margem / S.conta.valor * 100 : 0, 0)}% · PnL aberto <b class="${tot >= 0 ? 'pos' : 'neg'}">${sinal(tot)}</b> · <button class="hj-link" data-act="pos-trocar">trocar carteira</button></span></div>
       ${P.length ? `<div class="tbl-wrap"><table><thead><tr><th>Posição</th><th>Tamanho</th><th>PnL (US$)</th><th>Liquidação a</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<p class="muted small">Nenhuma posição aberta agora.</p>'}</div>`;
   }
 }
