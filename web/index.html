@@ -1982,13 +1982,19 @@ function hojeMontar(root, modo) {
   const plano = HJ.ler('plano', []);
   const L = hojeLinhas(D);
   const btc = D.ativos.find(a => a.t === 'BTC');
+  const sp = ((D.acoes && D.acoes.ativos) || []).find(a => a.tk === 'SP500');
+  const ny = D.acoes && D.acoes.sessoes && D.acoes.sessoes['Nova York'];
   const altos = hojeEventos(D).filter(e => e.impacto === 'alto');
   const velho = Date.now() - D.gerado > 3 * 3600e3;
   const kpi = (lab, val, note, cls = '') => `<div class="kpi"><span class="lab">${lab}</span><span class="val ${cls}">${val}</span><span class="note">${note}</span></div>`;
-  const kpis = kpi('BTC no diário · 4h', btc ? `${TL[btc.D]} · ${TL[btc.H]}` : '—', btc ? btc.frase : '')
-    + kpi('Funding do BTC', btc ? fmt(btc.funding, 1) + '% a.a.' : '—', btc ? (btc.funding >= 0 ? 'quem está comprado paga' : 'quem está vendido paga') + ` · ${fmt(Math.abs(btc.funding) / 365, 3)}% ao dia` : '')
-    + kpi('Dados do painel', ha(D.gerado), 'ranking ' + ha(D.coleta.ranking), velho ? 'neg' : '')
-    + kpi('Eventos de alto impacto (7 dias)', altos.length, altos.length ? `próximo: ${altos[0].nome} · ${altos[0].dia.slice(8)}/${altos[0].dia.slice(5, 7)}` : 'nenhum na agenda');
+  const hora = ms => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const kpiDados = kpi('Dados do painel', ha(D.gerado), 'ranking ' + ha(D.coleta.ranking), velho ? 'neg' : '');
+  const kpiEv = kpi('Eventos de alto impacto (7 dias)', altos.length, altos.length ? `próximo: ${altos[0].nome} · ${altos[0].dia.slice(8)}/${altos[0].dia.slice(5, 7)}` : 'nenhum na agenda');
+  const kpis = modo === 'acoes'
+    ? kpi('S&P 500 no diário · 4h', sp ? `${TL[sp.D]} · ${TL[sp.H]}` : '—', sp ? sp.frase : 'sem dados')
+      + kpi('Pregão de Nova York', ny ? (ny.aberta ? 'ABERTO' : 'FECHADO') : '—', ny ? `${ny.aberta ? 'fecha' : 'abre'} às ${hora(ny.muda_em)} · fora do pregão o preço é só da Hyperliquid` : '') + kpiDados + kpiEv
+    : kpi('BTC no diário · 4h', btc ? `${TL[btc.D]} · ${TL[btc.H]}` : '—', btc ? btc.frase : '')
+      + kpi('Funding do BTC', btc ? fmt(btc.funding, 1) + '% a.a.' : '—', btc ? (btc.funding >= 0 ? 'quem está comprado paga' : 'quem está vendido paga') + ` · ${fmt(Math.abs(btc.funding) / 365, 3)}% ao dia` : '') + kpiDados + kpiEv;
 
   const lista = L.filter(r => filtro === 'todos' ? true : filtro === 'obs' ? obs.includes(r.t) : r.mercado === filtro)
     .sort((a, b) => b.nota - a.nota || (b.L + b.S) - (a.L + a.S));
