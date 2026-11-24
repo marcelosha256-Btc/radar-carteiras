@@ -105,37 +105,50 @@ async function carregar(modo) {
 }
 
 /* ---------------------------------------------------------------- desenho ---- */
-function faixaHoras(modo, agora) {
-  const hBRT = new Date(agora - BRT).getUTCHours(), P = PERFIL[modo], mx = Math.max(...P);
-  const cel = P.map((v, h) => `<div title="${String(h).padStart(2, '0')}h — volume típico ${num(v, 1)}×" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
-      <div style="width:100%;height:${Math.max(3, v / mx * 34)}px;border-radius:2px;background:${v >= 1.3 ? 'var(--up)' : v >= 0.9 ? 'var(--accent)' : 'var(--line)'};${h === hBRT ? 'outline:2px solid var(--fg);outline-offset:1px' : ''}"></div>
-      <span style="font-size:9px;color:${h === hBRT ? 'var(--fg)' : 'var(--faint)'};font-weight:${h === hBRT ? 700 : 400}">${h % 3 === 0 || h === hBRT ? String(h).padStart(2, '0') : ''}</span></div>`).join('');
-  const bom = P[hBRT] >= 1.3, fino = P[hBRT] < 0.8;
-  return `<div style="display:flex;align-items:flex-end;gap:2px;height:56px">${cel}</div>
-    <p class="small muted" style="margin:4px 0 0">Agora são <b style="color:var(--fg)">${String(hBRT).padStart(2, '0')}h</b> em Brasília: ${bom ? '<b class="pos">janela boa de liquidez</b>' : fino ? '<b style="color:var(--warn)">horário fino</b>, custo de entrada maior e movimentos menos confiáveis' : 'liquidez normal'}. Barras = volume típico por hora (verde: acima de 1,3×).</p>`;
+function janela() {
+  let r = {}; try { r = JSON.parse(localStorage.getItem('radar-regras') || '{}'); } catch (e) {}
+  return { ini: r.janelaIni ?? 10, fim: r.janelaFim ?? 13 };
 }
+function linhaHora(modo, agora) {   // uma linha só: a hora e se está na sua janela / se o horário é fino
+  const hBRT = new Date(agora - BRT).getUTCHours(), J = janela(), v = PERFIL[modo][hBRT];
+  const dentro = hBRT >= J.ini && hBRT < J.fim;
+  const txt = dentro ? '<b class="pos">dentro da sua janela de entradas</b>' : `<b style="color:var(--warn)">fora da sua janela</b> (${J.ini}h–${J.fim}h)`;
+  return `<p class="small muted" style="margin:0">Agora ${String(hBRT).padStart(2, '0')}h: ${txt}${v < 0.8 ? ' · horário fino, entrar custa mais' : v >= 1.3 ? ' · horário de muita liquidez' : ''}.</p>`;
+}
+const RELEVANTE = r => (r.forca || 0) >= 0.7 || (r.rvolNoite || 0) >= 1.5;
 function tabela(modo, linhas) {
   const ord = (x, y) => (y.forca || 0) - (x.forca || 0);
-  const top = [...linhas.filter(r => r.fixo).sort(ord).slice(0, 8), ...linhas.filter(r => !r.fixo).sort(ord).slice(0, 6)];
-  if (!top.length) return '<p class="muted small">Nenhum ativo passou nos critérios agora (ou os candles não carregaram).</p>';
+  const fixosMov = linhas.filter(r => r.fixo && RELEVANTE(r)).sort(ord), fixosParados = linhas.filter(r => r.fixo && !RELEVANTE(r));
+  const top = [...fixosMov, ...linhas.filter(r => !r.fixo).sort(ord)].slice(0, 5);
+  const nome = r => esc(r.coin.replace('xyz:', ''));
+  const parados = fixosParados.length ? `<p class="small muted" style="margin:6px 0 0">★ Sua lista sem movimento relevante: ${fixosParados.map(nome).join(', ')}.</p>` : '';
+  if (!top.length) return '<p class="muted small">Nada se mexeu fora do comum na noite.</p>' + parados;
+  const fr = v => v == null ? '' : ` <span class="muted small" ${v >= 1.5 ? 'style="color:var(--warn);font-weight:600"' : ''}>(${num(v, 1)}×)</span>`;
   const rv = v => v == null ? '<span class="muted">—</span>' : `<span ${v >= 1.5 ? 'class="pos"' : v < 0.7 ? 'class="muted"' : ''}>${num(v, 1)}×</span>`;
-  const fr = v => v == null ? '<span class="muted">—</span>' : `<span ${v >= 1.5 ? 'style="color:var(--warn);font-weight:600"' : ''}>${num(v, 1)}×</span>`;
-  return `<div class="tbl-wrap"><table><thead><tr><th>Ativo</th><th>Noite (22h→8h)</th><th title="Movimento da noite dividido pela amplitude diária normal do ativo">Força (× normal)</th><th>Desde as 8h</th><th>Volume da noite</th><th>Volume agora</th></tr></thead><tbody>${
-    top.map(r => `<tr data-coin="${esc(r.coin)}" style="cursor:pointer" title="Ver execução e funding deste ativo"><td>${r.fixo ? '<span title="Na sua lista" style="color:var(--warn)">★</span> ' : ''}<b>${esc(r.coin.replace('xyz:', ''))}</b></td>
-      <td class="${cls(r.noite)}"><b>${pct(r.noite)}</b></td><td>${fr(r.forca)}</td><td class="${cls(r.desde8)}">${pct(r.desde8)}</td><td>${rv(r.rvolNoite)}</td><td>${rv(r.rvolAgora)}</td></tr>`).join('')}</tbody></table></div>`;
+  return `<div class="tbl-wrap"><table><thead><tr><th>Ativo</th><th title="Variação das 22h às 8h e, entre parênteses, a força: o movimento dividido pela amplitude diária normal do ativo (acima de 1,5× é fora do comum)">Noite e força</th><th>Desde as 8h</th><th title="Volume da noite contra o normal do mesmo horário (1,0× = normal)">Volume da noite</th></tr></thead><tbody>${
+    top.map(r => `<tr data-coin="${esc(r.coin)}" style="cursor:pointer" title="Ver execução e funding deste ativo"><td>${r.fixo ? '<span title="Na sua lista" style="color:var(--warn)">★</span> ' : ''}<b>${nome(r)}</b></td>
+      <td><b class="${cls(r.noite)}">${pct(r.noite)}</b>${fr(r.forca)}</td><td class="${cls(r.desde8)}">${pct(r.desde8)}</td><td>${rv(r.rvolNoite)}</td></tr>`).join('')}</tbody></table></div>${parados}`;
+}
+const AJUDA = 'Onde olhar primeiro: quem mais se mexeu na noite (22h às 8h de Brasília) entre ativos líquidos (volume mínimo, alavancagem de 5x ou mais e 90 dias de histórico). É filtro de atenção, não de direção: no teste de 208 dias o movimento da noite previu o tamanho do movimento do dia, mas não o lado. Escolha a direção pela estrutura e use o stop da calculadora.';
+const diaHoje = () => new Date(Date.now() - BRT).toISOString().slice(0, 10);
+function recolhido() {   // depois do fim da janela o cartão recolhe sozinho (dá para abrir de novo no dia)
+  const h = new Date(Date.now() - BRT).getUTCHours();
+  return h >= janela().fim && lerPref('aberto', '') !== diaHoje();
 }
 function desenhar(modo) {
   const root = document.getElementById(ALVOS[modo]);
   if (!root) return;
   const c = cache[modo], agora = Date.now();
-  root.innerHTML = `<div class="box"><div class="box-head"><h2>Radar da manhã</h2><p>Onde olhar primeiro. Filtro de atenção, não de direção.</p></div>
-    ${faixaHoras(modo, agora)}
-    <h3 class="hj-sub" style="margin-top:12px">Quem mais se mexeu na noite ${modo === 'acoes' ? '(ações)' : '(cripto)'}</h3>
-    ${modo === 'acoes' ? `<label class="small muted" style="display:inline-flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" data-indiv ${lerPref('individuais', '1') === '1' ? 'checked' : ''}> só ações individuais (sem índices, commodities e ETFs)</label>` : ''}
+  if (recolhido()) {
+    root.innerHTML = `<div class="box" style="padding-block:10px"><div class="box-head" style="margin:0"><h2 style="font-size:15px">Radar da manhã</h2><button class="hj-link" data-act="mh-abrir">abrir</button></div></div>`;
+    root.querySelector('[data-act="mh-abrir"]').addEventListener('click', () => { gravarPref('aberto', diaHoje()); desenhar('cripto'); desenhar('acoes'); });
+    return;
+  }
+  root.innerHTML = `<div class="box"><div class="box-head"><h2>Radar da manhã <span title="${esc(AJUDA)}" style="cursor:help;font-size:13px;color:var(--muted);border:1px solid var(--line);border-radius:50%;padding:0 6px">?</span></h2>
+      ${modo === 'acoes' ? `<label class="small muted" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-indiv ${lerPref('individuais', '1') === '1' ? 'checked' : ''}> só ações individuais</label>` : ''}</div>
+    ${linhaHora(modo, agora)}
     ${c ? tabela(modo, c.linhas) : '<p class="muted small">Lendo os candles da Hyperliquid… (leva até 40 s na primeira vez)</p>'}
-    ${c ? `<p class="small muted" style="margin:4px 0 0">Atualizado há ${Math.max(0, Math.round((agora - c.t) / 60000))} min${emCurso[modo] ? ' · atualizando…' : ''}</p>` : ''}
-    <p class="small muted" style="margin-top:6px">Entram só ativos com volume de pelo menos US$ ${CRIT[modo].volMin / 1e6} mi em 24 h, alavancagem máxima de ${CRIT[modo].levMin}x ou mais e ${CRIT[modo].dias} dias de histórico. ★ = da sua lista (entram sempre). Força = movimento da noite ÷ amplitude diária normal; acima de 1,5× é fora do comum.</p>
-    <p class="small muted" style="margin-top:8px">Volume = quanto negociou contra o normal do mesmo horário (1,0× é o normal). No teste de 208 dias, quem se mexeu muito na noite tendeu a se mexer muito de dia, mas o <b>lado</b> do dia não ficou previsível. Escolha a direção pela estrutura (diário, 4H) e use o stop da calculadora.</p></div>`;
+    ${c ? `<p class="small muted" style="margin:2px 0 0;font-size:11.5px">atualizado há ${Math.max(0, Math.round((agora - c.t) / 60000))} min${emCurso[modo] ? ' · atualizando…' : ''}</p>` : ''}</div>`;
   const ck = root.querySelector('[data-indiv]');
   if (ck) ck.addEventListener('change', () => { gravarPref('individuais', ck.checked ? '1' : '0'); cache.acoes = null; ciclo('acoes'); desenhar('acoes'); });
   root.querySelectorAll('tr[data-coin]').forEach(tr => tr.addEventListener('click', () => {   // leva o ativo para o cartão "Mercado agora"
