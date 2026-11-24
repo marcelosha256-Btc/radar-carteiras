@@ -2083,7 +2083,7 @@ function hojeMontar(root, modo) {
       <div class="hj-form">
           <label>Ativo<select data-k="ativo" class="hj-ativo"><option value="">—</option>${opt}</select></label>
           <label>Lado<select data-k="lado"><option value="" ${!calc.lado ? 'selected' : ''}>automático (pelo stop)</option><option value="compra" ${calc.lado === 'compra' ? 'selected' : ''}>compra</option><option value="venda" ${calc.lado === 'venda' ? 'selected' : ''}>venda</option></select></label>
-          <label>Tempo gráfico<select data-k="tf">${[['1h', '1H'], ['4h', '4H'], ['1d', 'Diário'], ['1w', 'Semanal']].map(([v, n]) => `<option value="${v}" ${calc.tf === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+          <label>Tempo gráfico<select data-k="tf">${[['15m', '15 min'], ['1h', '1H'], ['4h', '4H'], ['1d', 'Diário'], ['1w', 'Semanal']].map(([v, n]) => `<option value="${v}" ${calc.tf === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
           <label>Entrada<input data-k="entrada" inputmode="decimal" value="${calc.entrada}"></label>
           <label>Stop<input data-k="stop" inputmode="decimal" value="${calc.stop}"></label>
           <label>Alvo 1<input data-k="alvo1" inputmode="decimal" value="${calc.alvo1}"></label>
@@ -2139,7 +2139,7 @@ function hojeMontar(root, modo) {
     </div>`;
   hojeCalc(root);
 }
-const HJ_PADRAO = { cap: '1000', posMax: '1000', pico: '', risco: '0.5', ativo: '', entrada: '', stop: '', alvo1: '', pct1: '50', alvo2: '', lev: '', maxlev: '', lado: '', tf: '4h', sug: '', atrTf: null,
+const HJ_PADRAO = { cap: '1000', posMax: '1000', pico: '', risco: '0.5', ativo: '', entrada: '', stop: '', alvo1: '', pct1: '50', alvo2: '', lev: '', maxlev: '', lado: '', tf: '15m', sug: '', atrTf: null,
   taker: '0.045', maker: '0.015', tipoEntrada: 'taker', slip: '0.03', dias: '', wr: '45', inclCustos: true };
 const HJ_MAXLEV = { BTC: 40, ETH: 25, SOL: 20, XRP: 20, HYPE: 10, NEAR: 10 };   // referência: confira o limite de cada ativo na Hyperliquid
 const hojeCfg = () => { const c = Object.assign({}, HJ_PADRAO, HJ.ler('calc', {})); for (const k of ['cap', 'posMax']) if (String(c[k] ?? '').trim() === '') c[k] = HJ_PADRAO[k]; return c; };
@@ -2151,8 +2151,8 @@ function hojeATR(A) {   // ATR diário em fração do preço, do estudo de swing
   const x = (lista || []).find(i => i.t === A.id || i.t === A.t);
   return x && x.contexto && x.contexto.atr_pct != null ? x.contexto.atr_pct : null;
 }
-const HJ_TF = { '1h': { ms: 36e5, jan: 12, nome: '1H' }, '4h': { ms: 144e5, jan: 12, nome: '4H' }, '1d': { ms: 864e5, jan: 10, nome: 'diário' }, '1w': { ms: 6048e5, jan: 8, nome: 'semanal' } };
-const HJ_DIAS = { '1h': 1, '4h': 3, '1d': 10, '1w': 30 };   // dias típicos na posição por tempo gráfico (conta o funding)
+const HJ_TF = { '15m': { ms: 9e5, jan: 16, nome: '15 min' }, '1h': { ms: 36e5, jan: 12, nome: '1H' }, '4h': { ms: 144e5, jan: 12, nome: '4H' }, '1d': { ms: 864e5, jan: 10, nome: 'diário' }, '1w': { ms: 6048e5, jan: 8, nome: 'semanal' } };
+const HJ_DIAS = { '15m': 0.25, '1h': 1, '4h': 3, '1d': 10, '1w': 30 };   // dias típicos na posição por tempo gráfico (conta o funding)
 const hojeChave = A => A.mercado === 'acoes' ? A.id : A.t;   // cripto "BTC", ações "xyz:NVDA"
 function hojeVivo(A) {   // preço ao vivo da Hyperliquid (o mesmo do topo da página); cai para a foto do painel se não houver
   const v = A && typeof ultimosMids !== 'undefined' && ultimosMids ? +ultimosMids[hojeChave(A)] : 0;
@@ -2246,11 +2246,27 @@ function hojeCalcular() {
   const wr = (n('wr') || 0) / 100;
   const esp = rr != null ? wr * rr - (1 - wr) : null;
   const atrTf = c.atrTf && c.atrTf.tf === tf && c.atrTf.ativo === c.ativo ? c.atrTf.frac : null;
-  const atr = atrTf || hojeATR(A), atrNome = atrTf ? HJ_TF[tf].nome : 'diário', stopATR = atr ? dist / atr : null;
+  if (!atrTf && A && tf !== '1d') hojeATRauto(A, tf, c.ativo);   // busca em segundo plano e redesenha
+  const atr = atrTf || (tf === '1d' ? hojeATR(A) : null), atrNome = atrTf ? HJ_TF[tf].nome : 'diário', stopATR = atr ? dist / atr : null;
   return { c, cap, rp0, rp, fator, pico, dd, e, s, lev, maxLev, lado, side, dist, risco, notional, qtd, margem, perdaStop, liqPx, liqDist,
     custoStop, fundFrac, feeIn, fTaker, fMaker, slip, dias, tf, atrNome, carrega, posMax, cortado, risco0, levAuto,
     oposto: c.oposto && c.oposto.ativo === c.ativo && c.oposto.lado === lado ? c.oposto.px : null, alvos, okAlvos, lucroTot, rr, beWR, wr, esp, atr, stopATR, A, incl,
     grupo: A && A.mercado === 'acoes' ? 'acoes' : 'cripto' };
+}
+/* ATR(14) do tempo gráfico da calculadora, direto das velas da Hyperliquid; uma busca por ativo e tempo gráfico de cada vez */
+const hojeATRbusca = {};
+function hojeATRauto(A, tf, ativo) {
+  const k = ativo + '|' + tf;
+  if (hojeATRbusca[k] && Date.now() - hojeATRbusca[k] < 60000) return;
+  hojeATRbusca[k] = Date.now();
+  hojeVelas(A, tf).then(V => {
+    const a = hojeATRvelas(V), px = V.length ? V[V.length - 1].c : 0;
+    if (!a || !(px > 0)) return;
+    const c = HJ.ler('calc', {});
+    if (c.ativo !== ativo || (c.tf || HJ_PADRAO.tf) !== tf) return;   // mudou de ativo ou de tempo gráfico enquanto buscava
+    c.atrTf = { tf, ativo, frac: a / px }; HJ.gravar('calc', c);
+    const r = document.getElementById('hojeUnico'); if (r) hojeCalc(r);
+  }).catch(() => {});
 }
 function hojeCalc(root) {
   const out = root.querySelector('.hj-out');
@@ -2299,7 +2315,7 @@ function hojeCalc(root) {
       <div class="kpi"><span class="lab">Margem usada</span><span class="val">${usd(r.margem)}</span><span class="note">${fmt(r.lev, 0)}x na corretora${r.levAuto ? ' (automático)' : ''} · máx. ${fmt(r.maxLev, 0)}x</span></div>
       <div class="kpi"><span class="lab">Liquidação</span><span class="val">${r.liqPx != null && r.liqPx > 0 ? fmtPx(r.liqPx) : 'sem risco'}</span><span class="note">${r.liqDist != null ? fmt(r.liqDist * 100, 1) + '% da entrada · ' + fmt(r.liqDist / r.dist, 1) + 'x a distância do stop' : ''}</span></div>
     </div>
-    <p class="small muted">Gráfico ${HJ_TF[r.tf].nome} · ${r.lado} · funding contado por ${fmt(r.dias, 0)} dia(s)${r.c.dias ? '' : ' (automático para este tempo gráfico)'}.</p>
+    <p class="small muted">Gráfico ${HJ_TF[r.tf].nome} · ${r.lado} · funding contado por ${r.dias < 1 ? Math.round(r.dias * 24) + ' h' : fmt(r.dias, 0) + ' dia(s)'}${r.c.dias ? '' : ' (automático para este tempo gráfico)'}${r.atr == null && r.tf !== '1d' ? ' · buscando o ATR do ' + HJ_TF[r.tf].nome + '…' : r.atr ? ' · ATR ' + r.atrNome + ' = ' + fmt(r.atr * 100, 2) + '% do preço' : ''}.</p>
     ${av.map(([c, t]) => `<p class="chip ${c}" style="white-space:normal;border-radius:8px">${t}</p>`).join('')}
     <div class="grid-2">
       <div><h3 class="hj-sub">Cenários</h3><div class="tbl-wrap"><table><thead><tr><th>Nível</th><th>Preço</th><th>Distância</th><th>Resultado</th><th>Líquido</th></tr></thead><tbody>${linhasCen}</tbody></table></div>
