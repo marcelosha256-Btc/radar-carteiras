@@ -119,3 +119,16 @@ test('zonas pelo preço atual: comprar dentro da zona de apoio não empurra o st
   const meio = checarMapa({ lado: 'compra', e: 59842, s: 58520, d, ref: 59842 });
   assert.ok(meio.some(([n, t]) => n === 'bloqueia' && t.includes('59.150')), JSON.stringify(meio));
 });
+
+test('zonas do mapa no 15 min: só valem se estiverem ao alcance do ATR; longe viram informação', () => {
+  const d = { bw: 10, L: [[595, 500e3], [610, 20e3]], S: [[661, 120e3], [700, 30e3]] };
+  // venda a 627 (R:R 0,67 pelo mapa): no 4H bloqueia; no 15 min com ATR de 0,3% as zonas estão a >6 ATR → só informa
+  assert.ok(checarMapa({ lado: 'venda', e: 627, s: 672, d, tf: '4h', atr: 0.02 }).some(([n]) => n === 'bloqueia'));
+  const curto = checarMapa({ lado: 'venda', e: 627, s: 672, d, tf: '15m', atr: 0.003 });
+  assert.ok(!curto.some(([n]) => n === 'bloqueia' || n === 'aviso'));
+  assert.ok(curto.some(([n, t]) => n === 'info' && t.includes('longe')));
+  // no 15 min com ATR grande (zonas ao alcance) volta a bloquear
+  assert.ok(checarMapa({ lado: 'venda', e: 627, s: 672, d, tf: '15m', atr: 0.02 }).some(([n]) => n === 'bloqueia'));
+  // sem ATR do tempo gráfico ainda: não julga
+  assert.deepEqual(checarMapa({ lado: 'venda', e: 627, s: 672, d, tf: '15m', atr: null }), []);
+});

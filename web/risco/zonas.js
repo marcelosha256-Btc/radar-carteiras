@@ -23,13 +23,23 @@ export function zonasMapa(d, ref) {
 
 /** itens do checklist a partir das zonas. lado 'compra'|'venda', e = entrada, s = stop, ref = preço atual.
  *  As zonas são escolhidas a partir do PREÇO ATUAL (como a Trava); a entrada planejada só entra no cálculo do R:R. */
-export function checarMapa({ lado, e, s, d, ref, rrMin = 2 }) {
+export const ALCANCE_ATR = 6;   // no 15 min e no 1H, a zona só vale se estiver a até 6 ATR do tempo gráfico
+export function checarMapa({ lado, e, s, d, ref, rrMin = 2, tf = '4h', atr = null }) {
   const Z = zonasMapa(d, ref > 0 ? ref : (d && d.p) || e);
   if (!Z) return [];
   const compra = lado === 'compra', it = [];
   const zStop = compra ? Z.comprados : Z.vendidos, zAlvo = compra ? Z.vendidos : Z.comprados;
   const fx = v => (+v).toLocaleString('pt-BR', { maximumFractionDigits: v >= 1000 ? 0 : 2 });
-  if (zStop && zAlvo) {
+  // no 15 min e no 1H, zonas longe demais não servem de alvo nem de stop: viram só referência
+  const curto = tf === '15m' || tf === '5m' || tf === '1h';
+  const perto = z => !curto || !z ? !!z : (atr > 0 && Math.min(Math.abs(z.lo - e), Math.abs(z.hi - e)) / e <= ALCANCE_ATR * atr);
+  const pStop = perto(zStop), pAlvo = perto(zAlvo);
+  if (curto && !(atr > 0)) return it;   // sem o ATR do tempo gráfico ainda: não julga
+  if (curto && (!pStop || !pAlvo) && (zStop || zAlvo)) {
+    const lista = [zAlvo, zStop].filter(Boolean).map(z => `${fx(z.lo)}–${fx(z.hi)} (${((((z.lo + z.hi) / 2) / e - 1) * 100).toFixed(1).replace('.', ',')}%)`).join(' e ');
+    it.push(['info', `Zonas de liquidação longe para o ${tf === '1h' ? '1H' : tf}: ${lista}. Alvo e stop pela estrutura; o mapa fica só como referência.`]);
+  }
+  if (zStop && zAlvo && pStop && pAlvo) {
     const stopZ = compra ? zStop.lo * (1 - STOP_BUF) : zStop.hi * (1 + STOP_BUF);
     const alvoZ = compra ? zAlvo.lo : zAlvo.hi;
     const errado = compra ? e <= stopZ || e >= alvoZ : e >= stopZ || e <= alvoZ;   // entrada fora do intervalo entre as zonas
@@ -40,7 +50,7 @@ export function checarMapa({ lado, e, s, d, ref, rrMin = 2 }) {
       it.push(['bloqueia', `Pelo mapa de liquidações, da entrada até a zona do outro lado (${fx(zAlvo.lo)}–${fx(zAlvo.hi)}) o R:R é ${rr.toFixed(1).replace('.', ',')}: só vale ${compra ? 'comprando em' : 'vendendo em'} ${fx(eMin)} ou ${compra ? 'abaixo' : 'acima'} (a mesma Trava da Liquidez ao vivo).`]);
     } else it.push(['ok', `Mapa de liquidações: R:R ${rr.toFixed(1).replace('.', ',')} até a zona do outro lado (${fx(zAlvo.lo)}–${fx(zAlvo.hi)}).`]);
   }
-  if (zStop && s > 0) {
+  if (zStop && pStop && s > 0) {
     const antes = compra ? s >= zStop.lo && s < e : s <= zStop.hi && s > e;   // stop antes ou dentro da zona: o preço costuma ir buscá-la
     if (antes) it.push(['aviso', `Seu stop (${fx(s)}) fica antes ou dentro da zona de liquidação ${compra ? 'dos comprados' : 'dos vendidos'} (${fx(zStop.lo)}–${fx(zStop.hi)}): o preço costuma ir buscar essas zonas. Stop do mapa: ${fx(compra ? zStop.lo * (1 - STOP_BUF) : zStop.hi * (1 + STOP_BUF))}.`]);
   }
