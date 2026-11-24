@@ -81,6 +81,7 @@ export function travaDoDia({ real = [], papel = [], capital = 0, aberto = 0, ris
   return { parar: motivos.length > 0, motivos, pctReal, realizado, aberto, base, rPapel, pctPapel, perdasReal, perdasPapel, opsReal, opsPapel, ops: opsReal + opsPapel };
 }
 const fmt = v => (Math.round(v * 100) / 100).toLocaleString('pt-BR');
+const fpx = v => (+v).toLocaleString('pt-BR', { maximumFractionDigits: v >= 100 ? 2 : v >= 1 ? 3 : 5 });
 
 /** Checklist antes de entrar. calc = resultado da calculadora; eventos = agenda macro [{t, nome, impacto}];
  *  heatAberto = risco já no plano (US$). Itens: ['bloqueia'|'aviso'|'ok', texto]. */
@@ -110,6 +111,15 @@ export function checklist({ calc, trava, eventos = [], heatAberto = 0, regras = 
   if (calc.oposto > 0 && calc.e > 0 && calc.s > 0) {   // entrando colado no extremo oposto (vender no fundo, comprar no topo)
     const R = Math.abs(calc.e - calc.s), d = calc.side * (calc.oposto - calc.e) / R;
     if (d >= 0 && d < 0.5) it.push(['aviso', `${calc.side > 0 ? 'O topo' : 'O fundo'} recente (${fmt(calc.oposto)}) está a ${fmt(d)}R da entrada: você estaria ${calc.side > 0 ? 'comprando no topo' : 'vendendo no fundo'}. Espere ${calc.side > 0 ? 'um recuo' : 'um repique'}.`]);
+    // espaço real: o alvo 1 fica além do extremo recente → o R:R de verdade é até esse extremo
+    const a1 = calc.alvos && calc.alvos[0] && calc.alvos[0].p > 0 ? calc.side * (calc.alvos[0].p - calc.e) / R : null;
+    if (d >= 0 && a1 != null && a1 > d) {
+      const nome = calc.side > 0 ? 'máxima' : 'mínima', rm = regras.rrMin;
+      if (d < rm) {
+        const eMin = (calc.oposto + rm * calc.s) / (1 + rm);
+        it.push(['bloqueia', `Estrutura no caminho: a ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R da entrada, antes do alvo 1 (${fmt(a1)}R). O espaço real é menor que o seu mínimo de ${rm}:1; só vale ${calc.side > 0 ? 'comprando em' : 'vendendo em'} ${fpx(eMin)} ou ${calc.side > 0 ? 'abaixo' : 'acima'}, ou com alvo até a ${nome}.`]);
+      } else it.push(['aviso', `A ${nome} recente (${fpx(calc.oposto)}) fica a ${fmt(d)}R, antes do alvo 1 (${fmt(a1)}R): o preço pode parar ali.`]);
+    }
   }
   it.push(...extras);
   if (calc.notional > 0 && calc.notional < ORDEM_MINIMA) it.push(['bloqueia', `Posição de US$ ${fmt(calc.notional)} abaixo da ordem mínima da Hyperliquid (US$ ${ORDEM_MINIMA}): aumente o risco ou afaste o stop.`]);
