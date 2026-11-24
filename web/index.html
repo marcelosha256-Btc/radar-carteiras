@@ -2305,7 +2305,7 @@ function hojeCalc(root) {
 
   const linhasCen = [`<tr><td>Stop</td><td>${fmtPx(r.s)}</td><td class="neg">${fmt(r.dist * 100, 2)}%</td><td>${rf(-r.perdaStop / (r.risco || 1))}</td><td class="neg">${usd(-r.perdaStop)}</td></tr>`,
     `<tr><td>Entrada</td><td>${fmtPx(r.e)}</td><td>—</td><td>—</td><td>—</td></tr>`]
-    .concat(r.alvos.map(a => `<tr><td>${a.nome} <span class="muted small">(${fmt(a.f * 100, 0)}% da posição)</span></td><td>${fmtPx(a.p)}</td><td class="${a.valido ? 'pos' : 'neg'}">${fmt(a.dT * 100, 2)}%</td><td>${rf(a.r)}</td><td class="${a.lucro >= 0 ? 'pos' : 'neg'}">${usd(a.lucro)}</td></tr>`))
+    .concat(r.alvos.map(a => `<tr><td>${a.nome} <span class="muted small">(${fmt(a.f * 100, 0)}% da posição)</span></td><td>${fmtPx(a.p)}</td><td class="${a.valido ? 'pos' : 'neg'}">${fmt(a.dT * 100, 2)}%</td><td>${rf(a.r)}${a.f < 1 && a.f > 0 ? ` <span class="muted small">(${rf(a.r / a.f)} no alvo)</span>` : ''}</td><td class="${a.lucro >= 0 ? 'pos' : 'neg'}">${usd(a.lucro)}</td></tr>`))
     .concat([`<tr><td>Liquidação</td><td>${r.liqPx != null && r.liqPx > 0 ? fmtPx(r.liqPx) : 'sem risco a 1x'}</td><td class="neg">${r.liqDist != null ? fmt(r.liqDist * 100, 1) + '%' : '—'}</td><td>—</td><td class="neg">${usd(-r.margem)} <span class="muted small">(margem)</span></td></tr>`]).join('');
   const custoUsd = r.notional * r.custoStop;
   const seqN = [3, 5, 8, 10];
@@ -2342,7 +2342,7 @@ function hojeCalc(root) {
       <div><h3 class="hj-sub">Relação risco/retorno e expectativa</h3><div class="tbl-wrap"><table><tbody>
         <tr><td>R:R líquido (todos os alvos)</td><td>${r.rr != null ? '1 : ' + fmt(r.rr, 2) : '<span class="muted">informe o alvo</span>'}</td></tr>
         <tr><td>Acerto mínimo para empatar</td><td>${r.beWR != null ? fmt(r.beWR * 100, 0) + '%' : '—'}</td></tr>
-        <tr><td>Expectativa por operação com acerto de ${fmt(r.wr * 100, 0)}%</td><td>${r.esp != null ? `<b class="${r.esp >= 0 ? 'pos' : 'neg'}">${rf(r.esp)}</b> · ${r.esp >= 0 ? '+' : '−'}${fmt(Math.abs(r.esp) * r.rp, 2)}% do capital` : '—'}</td></tr></tbody></table></div>
+        <tr><td>Expectativa por operação com acerto de ${fmt(r.wr * 100, 0)}%${String(r.c.wr) === HJ_PADRAO.wr ? ' <span class="chip warn">padrão, sem histórico</span>' : ''}</td><td>${r.esp != null ? `<b class="${r.esp >= 0 ? 'pos' : 'neg'}">${rf(r.esp)}</b> · ${r.esp >= 0 ? '+' : '−'}${fmt(Math.abs(r.esp) * r.rp, 2)}% do capital` : '—'}</td></tr></tbody></table></div>
         <p class="small muted">O acerto vem do seu histórico (Diário, Backtest ou o seu registro). Sem pelo menos 30 operações fechadas, é chute: não tire conclusão.</p></div>
       <div><h3 class="hj-sub">Sequência de perdas</h3><div class="tbl-wrap"><table><thead><tr><th>Cenário</th><th>Chance</th><th>Capital</th><th>Queda</th></tr></thead><tbody>${seq}</tbody></table></div>
         <p class="small muted">Chance = (1 − acerto)^n, supondo operações independentes. Sequências ruins acontecem: o tamanho de posição existe para sobreviver a elas.</p></div>

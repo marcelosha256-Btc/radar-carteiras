@@ -50,6 +50,10 @@ window.radarRisco = {
     const d = coin ? mapaDe(coin, () => window.dispatchEvent(new Event('radar-risco'))) : null;   // mapa chega depois: redesenha
     let ref = null; try { if (typeof hojeVivo === 'function' && A) ref = hojeVivo(A); } catch (e) {}
     const extras = calc && d ? checarMapa({ lado: calc.lado, e: calc.e, s: calc.s, d, ref, rrMin: R.rrMin, tf: calc.tf, atr: calc.atr }) : [];
+    if (A && calc) {   // a própria tabela do Hoje: o plano não deve contrariar a leitura que ela mostra
+      if (!A.dir) extras.push(['aviso', `A tabela do Hoje lê ${A.t || coin} como "sem viés" (diário lateral): o plano não tem tendência a favor.`]);
+      else if (A.dir !== calc.lado) extras.push(['aviso', `Contra o diário: a tabela lê ${A.t || coin} em ${A.D === 'up' ? 'alta' : 'baixa'} no diário e o plano é de ${calc.lado}. Só se for recuo ou reversão planejada.`]);
+    }
     return checklist({ calc, trava: S.trava, eventos, heatAberto: heat, regras: R, mercado: A && A.mercado === 'acoes' ? 'acoes' : 'cripto', extras });
   },
 };

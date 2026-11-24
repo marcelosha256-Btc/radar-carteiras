@@ -36,8 +36,8 @@ export function checarMapa({ lado, e, s, d, ref, rrMin = 2, tf = '4h', atr = nul
   const pStop = perto(zStop), pAlvo = perto(zAlvo);
   if (curto && !(atr > 0)) return it;   // sem o ATR do tempo gráfico ainda: não julga
   if (curto && (!pStop || !pAlvo) && (zStop || zAlvo)) {
-    const lista = [zAlvo, zStop].filter(Boolean).map(z => `${fx(z.lo)}–${fx(z.hi)} (${((((z.lo + z.hi) / 2) / e - 1) * 100).toFixed(1).replace('.', ',')}%)`).join(' e ');
-    it.push(['info', `Zonas de liquidação longe para o ${tf === '1h' ? '1H' : tf}: ${lista}. Alvo e stop pela estrutura; o mapa fica só como referência.`]);
+    const lista = [[zAlvo, pAlvo], [zStop, pStop]].filter(([z, p]) => z && !p).map(([z]) => z).map(z => `${fx(z.lo)}–${fx(z.hi)} (${((((z.lo + z.hi) / 2) / e - 1) * 100).toFixed(1).replace('.', ',')}%)`).join(' e ');
+    it.push(['info', `Zona de liquidação longe para o ${tf === '1h' ? '1H' : tf}: ${lista}. Essa fica só como referência; alvo e stop pela estrutura.`]);
   }
   if (zStop && zAlvo && pStop && pAlvo) {
     const stopZ = compra ? zStop.lo * (1 - STOP_BUF) : zStop.hi * (1 + STOP_BUF);
