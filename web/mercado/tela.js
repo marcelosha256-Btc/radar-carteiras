@@ -134,8 +134,8 @@ export function leituraFluxo(pctCompra, dPx) {
 /** posicionamento: funding (percentil nos últimos 20 dias) e OI contra o preço no mesmo período */
 export function leituraPosicao({ fundPerc, fundAno, dOI, dPx }) {
   const partes = [];
-  if (fundPerc != null && fundPerc <= 0.1 && fundAno < 0) partes.push(['alerta', 'vendidos lotados (funding no ponto mais baixo em 20 dias): risco de alta forçada']);
-  else if (fundPerc != null && fundPerc >= 0.9 && fundAno > 20) partes.push(['alerta', 'comprados lotados e pagando caro: risco de queda forçada']);
+  if (fundPerc != null && fundPerc <= 0.1 && fundAno < 0) partes.push(['alerta', 'funding no ponto mais baixo em 20 dias: os vendidos estão pagando, e uma alta pode forçá-los a fechar (confira "Quem está apertado" na Liquidez ao vivo: a multidão pode estar do outro lado)']);
+  else if (fundPerc != null && fundPerc >= 0.9 && fundAno > 20) partes.push(['alerta', 'funding no ponto mais alto em 20 dias: os comprados estão pagando caro, e uma queda pode forçá-los a fechar (confira "Quem está apertado" na Liquidez ao vivo)']);
   if (dOI != null && dPx != null && Math.abs(dOI) >= 0.5) {
     const sobeOI = dOI > 0;
     if (Math.abs(dPx) < 0.2) partes.push(['neutro', sobeOI ? 'posições sendo abertas com o preço parado: energia acumulando' : 'posições sendo fechadas com o preço parado']);
@@ -147,8 +147,9 @@ export function leituraPosicao({ fundPerc, fundAno, dOI, dPx }) {
 
 /* ---------------------------------------------------------------- desenho ---- */
 const COR = { ok: 'var(--up)', compra: 'var(--up)', venda: 'var(--down)', ruim: 'var(--down)', aviso: 'var(--warn)', alerta: 'var(--warn)', neutro: 'var(--muted)' };
-function tamanhoCalc() {
-  try { if (typeof hojeCalcular === 'function') { const r = hojeCalcular(); if (r && !r.erro && r.notional > 0) return { v: r.notional, calc: true }; } } catch (e) {}
+function tamanhoCalc(coin) {
+  try { if (typeof hojeCalcular === 'function') { const r = hojeCalcular(), A = r && r.A, c = A ? (A.mercado === 'acoes' ? A.id : A.t) : null;
+    if (r && !r.erro && r.notional > 0 && c === coin) return { v: r.notional, calc: true }; } } catch (e) {}
   return { v: 1000, calc: false };   // sem calculadora preenchida: exemplo de US$ 1.000, o tamanho típico da sua conta
 }
 const linha = (rotulo, itens, dica) => `<div style="display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid var(--line)">
@@ -158,7 +159,7 @@ function blocos(modo) {
   if (!e.book) return `<p class="muted small">${esc(e.erro || 'Lendo o livro de ordens…')}</p>`;
   const { bids, asks, largoBids, largoAsks } = e.book;
   const mid = (+bids[0].px + +asks[0].px) / 2, spread = (+asks[0].px - +bids[0].px) / mid * 1e4;
-  const dp = profundidade(largoBids, largoAsks, mid), tam = tamanhoCalc();
+  const dp = profundidade(largoBids, largoAsks, mid), tam = tamanhoCalc(e.coin);
   const sc = derrapagem(asks, mid, tam.v, 'compra'), sv = derrapagem(bids, mid, tam.v, 'venda');
   const pior = Math.max(sc ? sc.bps : 99, sv ? sv.bps : 99), completo = !!(sc && sc.completo && sv && sv.completo);
   const [ne, te] = leituraExecucao(pior, completo);

@@ -8,7 +8,7 @@ const STOP_BUF = 0.0015;   // stop 0,15% além da zona (igual à Trava)
 export function construir(d) {
   if (!d || !(d.p > 0) || !(d.R > 0) || !(d.nb > 0) || !Array.isArray(d.L) || !Array.isArray(d.S)) return null;
   const lo = d.p * (1 - d.R / 100), w = d.p * 2 * d.R / 100 / d.nb, h = d.nb / 2;
-  return { bw: w, L: d.L.map((v, i) => [lo + (i + 0.5) * w, v * 1e6]), S: d.S.map((v, i) => [lo + (h + i + 0.5) * w, v * 1e6]) };
+  return { p: d.p, bw: w, L: d.L.map((v, i) => [lo + (i + 0.5) * w, v * 1e6]), S: d.S.map((v, i) => [lo + (h + i + 0.5) * w, v * 1e6]) };
 }
 
 /** d = { bw, L: [[preço, US$], ...] liquidações de comprados, S: [[preço, US$], ...] de vendidos }; ref = preço de referência */
@@ -21,9 +21,10 @@ export function zonasMapa(d, ref) {
   return { comprados: z(ap), vendidos: z(ve) };   // comprados = zona abaixo (apoio); vendidos = zona acima
 }
 
-/** itens do checklist a partir das zonas. lado 'compra'|'venda', e = entrada, s = stop */
-export function checarMapa({ lado, e, s, d, rrMin = 2 }) {
-  const Z = zonasMapa(d, e);
+/** itens do checklist a partir das zonas. lado 'compra'|'venda', e = entrada, s = stop, ref = preço atual.
+ *  As zonas são escolhidas a partir do PREÇO ATUAL (como a Trava); a entrada planejada só entra no cálculo do R:R. */
+export function checarMapa({ lado, e, s, d, ref, rrMin = 2 }) {
+  const Z = zonasMapa(d, ref > 0 ? ref : (d && d.p) || e);
   if (!Z) return [];
   const compra = lado === 'compra', it = [];
   const zStop = compra ? Z.comprados : Z.vendidos, zAlvo = compra ? Z.vendidos : Z.comprados;
@@ -31,8 +32,10 @@ export function checarMapa({ lado, e, s, d, rrMin = 2 }) {
   if (zStop && zAlvo) {
     const stopZ = compra ? zStop.lo * (1 - STOP_BUF) : zStop.hi * (1 + STOP_BUF);
     const alvoZ = compra ? zAlvo.lo : zAlvo.hi;
-    const rr = Math.abs(alvoZ - e) / Math.abs(e - stopZ);
-    if (rr < rrMin) {
+    const errado = compra ? e <= stopZ || e >= alvoZ : e >= stopZ || e <= alvoZ;   // entrada fora do intervalo entre as zonas
+    const rr = errado ? 0 : Math.abs(alvoZ - e) / Math.abs(e - stopZ);
+    if (errado) it.push(['aviso', `Entrada fora do intervalo entre as zonas de liquidação (${fx(zStop.lo)}–${fx(zStop.hi)} e ${fx(zAlvo.lo)}–${fx(zAlvo.hi)}): confira o mapa na Liquidez ao vivo.`]);
+    else if (rr < rrMin) {
       const eMin = (alvoZ + rrMin * stopZ) / (1 + rrMin);
       it.push(['bloqueia', `Pelo mapa de liquidações, da entrada até a zona do outro lado (${fx(zAlvo.lo)}–${fx(zAlvo.hi)}) o R:R é ${rr.toFixed(1).replace('.', ',')}: só vale ${compra ? 'comprando em' : 'vendendo em'} ${fx(eMin)} ou ${compra ? 'abaixo' : 'acima'} (a mesma Trava da Liquidez ao vivo).`]);
     } else it.push(['ok', `Mapa de liquidações: R:R ${rr.toFixed(1).replace('.', ',')} até a zona do outro lado (${fx(zAlvo.lo)}–${fx(zAlvo.hi)}).`]);

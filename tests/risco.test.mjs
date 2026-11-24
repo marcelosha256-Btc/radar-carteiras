@@ -107,3 +107,15 @@ test('construir: formato da /api/liquidez vira [preço, US$] como na Liquidez ao
   assert.equal(d.L[0][1], 1e6);
   assert.equal(construir(null), null);
 });
+
+test('zonas pelo preço atual: comprar dentro da zona de apoio não empurra o stop para a zona seguinte', () => {
+  // BTC: apoio 58.611–59.209, zona mais funda 57.415–58.013; venda 60.405–61.003; preço atual 59.842
+  const d = { p: 59842, bw: 598, L: [[57714, 400e3], [58910, 19e6]], S: [[60704, 18e6], [62498, 9e6]] };
+  // a Trava diz: comprar em 59.150 ou abaixo. Comprando em 59.150 com stop 58.520 → R:R ≈ 2 (passa)
+  const it = checarMapa({ lado: 'compra', e: 59150, s: 58520, d, ref: 59842 });
+  assert.ok(it.some(([n]) => n === 'ok'), JSON.stringify(it));
+  assert.ok(!it.some(([n]) => n === 'bloqueia'));
+  // no meio (59.842) continua bloqueado, com o mesmo preço da Trava
+  const meio = checarMapa({ lado: 'compra', e: 59842, s: 58520, d, ref: 59842 });
+  assert.ok(meio.some(([n, t]) => n === 'bloqueia' && t.includes('59.150')), JSON.stringify(meio));
+});
