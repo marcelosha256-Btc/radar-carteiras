@@ -30,7 +30,7 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   if (rsiPreco) for (const { p } of rsiPreco) if (p >= lo - 0.15 * r0 && p <= hi + 0.15 * r0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }   // RSI 70/30 perto da tela: alarga um pouco para caber
   const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
   const Y = p => T + (hi - p) / (hi - lo) * (y1 - T), xc = perfil && perfil.bw ? x1 - 64 : x1, step = (xc - L) / c.length, X = i => L + (i + 0.5) * step, bw = Math.max(1.5, Math.min(12, step * 0.64));
-  const HR = rsi ? 124 : 0, HB = bolhas ? 74 : 0;   // HB = faixa das liquidações por vela
+  const HR = rsi ? 200 : 0, HB = bolhas ? 74 : 0;   // HB = faixa das liquidações por vela
   let s = `<svg viewBox="0 0 ${W} ${H + HB + HR}" width="100%" role="img" aria-label="Gráfico de velas com níveis do dia e estrutura${rsi ? ' e RSI' : ''}">`;
   // grade e escala de preço
   for (let g = 0; g <= 5; g++) { const p = lo + (hi - lo) * g / 5, y = Y(p);
