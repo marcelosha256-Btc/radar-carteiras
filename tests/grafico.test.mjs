@@ -124,7 +124,7 @@ test('gráfico: bolhas de liquidação e perfil da liquidez em risco', () => {
   const bolhas = [{ t: 5 * M15 + 1000, px: 99, usd: 50000, side: 'long' }, { t: 6 * M15, px: 101, usd: 5000, side: 'short' }, { t: -M15, px: 100, usd: 1e6, side: 'long' }];
   const { svg } = graficoSvg({ candles: c, niv: null, est: null, preco: 100.5, ms: M15, perfil, bolhas });
   assert.equal((svg.match(/<circle/g) || []).length, 2);              // a bolha anterior às velas fica de fora
-  assert.match(svg, /Long liquidado · US\$ 50\.000/);
+  assert.match(svg, /Longs liquidados · US\$ 50\.000 em 1 evento \(0 com preço e lado exatos\)/);
   assert.match(svg, /liquidez em risco · foto 12:00/);
   assert.equal((svg.match(/stroke-dasharray:2 2/g) || []).length, 1);  // contorno só onde a faixa mudou (99,5: 4 mi → 2 mi)
   assert.ok(!graficoSvg({ candles: c, ms: M15 }).svg.includes('liquidez em risco'));

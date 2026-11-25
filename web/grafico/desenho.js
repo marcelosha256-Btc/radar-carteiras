@@ -93,10 +93,15 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   // bolhas: liquidações reais no preço e na hora em que aconteceram (área proporcional ao valor)
   if (bolhas && bolhas.length) {
     const t0 = c[0].t, tf = c[c.length - 1].t + ms, vis = bolhas.filter(b => b.px != null && b.t >= t0 && b.t < tf && b.px >= lo && b.px <= hi);
-    const mb = Math.max(1, ...vis.map(b => b.usd));
-    vis.sort((a, b) => b.usd - a.usd).slice(0, 200).reverse().forEach(b => {
-      const i = Math.min(c.length - 1, Math.floor((b.t - t0) / ms)), r = 2.5 + Math.sqrt(b.usd / mb) * 13, col = b.side === 'long' ? 'var(--lv-long)' : b.side === 'short' ? 'var(--lv-short)' : 'var(--muted)';
-      s += `<circle cx="${X(i).toFixed(1)}" cy="${Y(b.px).toFixed(1)}" r="${r.toFixed(1)}" style="fill:${col};fill-opacity:.35;stroke:${col};stroke-width:1"><title>${b.side === 'long' ? 'Long liquidado' : b.side === 'short' ? 'Short liquidado' : 'Liquidação'} · US$ ${Math.round(b.usd).toLocaleString('pt-BR')} · ${fmtPreco(b.px)} · ${hora(b.t)}</title></circle>`;
+    // uma bolha por vela e por lado: soma dos valores, no preço médio ponderado (evita dezenas de círculos empilhados)
+    const g = new Map();
+    for (const b of vis) { const i = Math.min(c.length - 1, Math.floor((b.t - t0) / ms)), k = i + '|' + b.side, o = g.get(k) || { i, side: b.side, usd: 0, pu: 0, n: 0, nx: 0, t0: b.t, t1: b.t };
+      o.usd += b.usd; o.pu += b.px * b.usd; o.n++; if (b.ex) o.nx++; o.t0 = Math.min(o.t0, b.t); o.t1 = Math.max(o.t1, b.t); g.set(k, o); }
+    const gs = [...g.values()], mb = Math.max(1, ...gs.map(o => o.usd));
+    gs.sort((a, b) => a.usd - b.usd).forEach(o => {
+      const px = o.pu / o.usd, r = 2.5 + Math.sqrt(o.usd / mb) * 13, col = o.side === 'long' ? 'var(--lv-long)' : o.side === 'short' ? 'var(--lv-short)' : 'var(--muted)';
+      const nome = o.side === 'long' ? 'Longs liquidados' : o.side === 'short' ? 'Shorts liquidados' : 'Liquidações (lado incerto)';
+      s += `<circle cx="${X(o.i).toFixed(1)}" cy="${Y(px).toFixed(1)}" r="${r.toFixed(1)}" style="fill:${col};fill-opacity:.35;stroke:${col};stroke-width:1.2${o.nx * 2 < o.n ? ';stroke-dasharray:3 2' : ''}"><title>${nome} · US$ ${Math.round(o.usd).toLocaleString('pt-BR')} em ${o.n} ${o.n > 1 ? 'eventos' : 'evento'} (${o.nx} com preço e lado exatos) · perto de ${fmtPreco(px)} · ${hora(o.t0)}${o.t1 - o.t0 > 6e4 ? '–' + hora(o.t1) : ''}</title></circle>`;
     });
   }
   // preço atual

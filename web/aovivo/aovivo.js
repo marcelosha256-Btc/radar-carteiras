@@ -575,7 +575,7 @@ function criarApp(mercado, painel, raiz) {
   function guardarLiqs(k) {
     const h = liqHist[k] || (liqHist[k] = (() => { try { return JSON.parse(localStorage.getItem('radar-liqhist-' + k) || '[]'); } catch (e) { return []; } })());
     const chave = e => e.t + '|' + (e.addr || '') + '|' + Math.round(e.usd), ja = new Set(h.map(chave)); let novo = false;
-    for (const e of realLiqs(k)) if (e.px != null && e.usd > 0 && !ja.has(chave(e))) { h.push({ t: e.t, px: e.px, usd: e.usd, side: e.side, addr: e.addr }); novo = true; }
+    for (const e of realLiqs(k)) if (e.px != null && e.usd > 0 && !ja.has(chave(e))) { h.push({ t: e.t, px: e.px, usd: e.usd, side: e.side, addr: e.addr, ex: !!e.exact }); novo = true; }
     if (novo) { const lim = Date.now() - 3 * 864e5; liqHist[k] = h.filter(e => e.t >= lim).sort((a, b) => a.t - b.t).slice(-3000);
       try { localStorage.setItem('radar-liqhist-' + k, JSON.stringify(liqHist[k])); } catch (e) {} }
     return liqHist[k];
@@ -604,7 +604,7 @@ function criarApp(mercado, painel, raiz) {
     const { svg, fora } = graficoSvg({ candles: c, niv, est, preco: cur, ms, perfil: perf, bolhas: bol });
     $('.lv-gsvg').innerHTML = svg;
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
-    $('.lv-gnota').textContent = (curto ? `Bolhas = liquidações reais (laranja = long liquidado, azul = short liquidado; tamanho = valor; passe o mouse para ver), guardadas neste navegador desde que a página abre (a fonte só dá a última hora: ${bol ? bol.length : 0} até agora). Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ` + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') : '') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
+    $('.lv-gnota').textContent = (curto ? `Bolhas = liquidações reais (laranja = long liquidado, azul = short liquidado; tamanho = valor; passe o mouse para ver), guardadas neste navegador desde que a página abre (${bol ? bol.length : 0} até agora; a fonte entrega só os últimos ~200 registros, então numa rajada cobre poucos segundos). Contorno cheio = preço e lado exatos; tracejado = estimados pelo movimento do minuto. Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ` + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') : '') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
       (fora.length ? `Fora da vista: ${fora.map(n => n.rot + ' ' + fpx(n.preco)).join(', ')}. ` : '') +
       'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Medido em BTC, ETH e SOL (15 min, 1 h, 4 h e diário) e em ações (diário): nenhum desses sinais deu ganho firme depois dos custos, e vários foram piores que entrar sem sinal. Uma pista no diário de cripto (fechar abaixo da mínima do mês passado) não se repetiu em 30 ações dos EUA (15 anos). É mapa de contexto, não gatilho (estudo em estudos/niveis_estrutura).';
   }
