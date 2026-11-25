@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { graficoSvg } from '../web/grafico/desenho.js';
-import { grupos, niveisDia, niveisPeriodo, pivos, rotular, estrutura, leitura, atrAbs, diaUTC, nyHora } from '../web/grafico/calc.js';
+import { zonasSR, grupos, niveisDia, niveisPeriodo, pivos, rotular, estrutura, leitura, atrAbs, diaUTC, nyHora } from '../web/grafico/calc.js';
 
 const M15 = 9e5;
 const vela = (t, o, h, l, c, v = 10) => ({ t, o, h, l, c, v });
@@ -161,4 +161,14 @@ test('gráfico: trades do diário (entrada, saída, aberto e fora da janela)', (
   assert.match(svg, /Compra · papel · entrada 99,00 → saída 101,50 · stop 98,00 · \+2,50R/);
   assert.match(svg, /Venda · real · entrada 101,00 \(aberto\) · stop 102,00/);
   assert.equal((svg.match(/<path d="M/g) || []).length, 1);            // só o fechado tem ✕ de saída
+});
+
+test('zonasSR: suporte e resistência mais próximos, juntando fontes vizinhas', () => {
+  const F = [{ p: 98, nome: 'mín. ontem' }, { p: 97.8, nome: 'fundo' }, { p: 95, nome: 'mín. semana' }, { p: 103, nome: 'máx. ontem' }, { p: 110, nome: 'parede' }, { p: 100.01, nome: 'colado' }];
+  const z = zonasSR(100, F, 1);
+  assert.equal(z.sup.itens.length, 2); assert.equal(z.sup.lo, 97.8); assert.equal(z.sup.hi, 98);   // 95 fica de fora (longe), 100,01 é o próprio preço
+  assert.equal(z.res.itens.length, 1); assert.equal(z.res.lo, 103); assert.ok(Math.abs(z.res.dist - 3) < 1e-9);
+  assert.equal(zonasSR(100, [], 1).sup, null);
+  const { svg } = graficoSvg({ candles: Array.from({ length: 30 }, (_, i) => vela(i * M15, 100, 102, 98, 101)), ms: M15, sr: z });
+  assert.match(svg, /Suporte 97,80–98,00 \(-2,10%\) · 2 fontes/); assert.match(svg, /Resistência 103,00 \(\+3,00%\) · 1 fonte/);
 });

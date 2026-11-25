@@ -168,3 +168,20 @@ export function leitura(est, niv, px, f = v => String(v)) {
   }
   return (base + ' ' + e).trim();
 }
+
+/**
+ * Suporte e resistência mais próximos do preço: junta as fontes que caem a menos de `tol` ATR umas das outras.
+ * fontes = [{ p, nome }]. Devolve { sup, res } com { lo, hi, meio, itens, dist } (dist em % do preço) ou null.
+ * "Mais próximo", não "mais forte": medido em 25/11/2026, juntar níveis não fez o preço segurar mais (estudos/niveis_estrutura).
+ */
+export function zonasSR(px, fontes, atr, { tol = 0.3, folga = 0.05 } = {}) {
+  if (!px || !(atr > 0)) return { sup: null, res: null };
+  const lado = s => {
+    const c = fontes.filter(f => f.p != null && isFinite(f.p) && (s < 0 ? f.p < px - folga * atr : f.p > px + folga * atr)).sort((a, b) => Math.abs(a.p - px) - Math.abs(b.p - px));
+    if (!c.length) return null;
+    const base = c[0].p, itens = c.filter(f => Math.abs(f.p - base) <= tol * atr);
+    const lo = Math.min(...itens.map(f => f.p)), hi = Math.max(...itens.map(f => f.p)), meio = (lo + hi) / 2;
+    return { lo, hi, meio, itens, dist: (meio / px - 1) * 100 };
+  };
+  return { sup: lado(-1), res: lado(1) };
+}

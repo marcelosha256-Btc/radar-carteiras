@@ -15,7 +15,7 @@ const diaHora = t => new Date(t).toLocaleString('pt-BR', { day: '2-digit', month
 /** opts: { candles, niv (niveisDia), est (estrutura), preco, ms, W, H, perfil, bolhas } → { svg, fora }
  *  perfil = { bw, L: [[preço, US$, US$ da foto anterior]], S: [...], hora } (liquidez em risco por faixa de preço, Coinversa)
  *  bolhas = [{ t, px, usd, side }] (liquidações reais) */
-export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null, rsi = null, regimeDia = null, plano = null, trades = null, rsiMedia = null, rsiNiveis = null }) {
+export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null, rsi = null, regimeDia = null, plano = null, trades = null, rsiMedia = null, rsiNiveis = null, sr = null }) {
   const c = candles; if (!c || c.length < 5) return { svg: '', fora: [] };
   const L = 8, R = 74, T = 14, B = 26, x1 = W - R, y1 = H - B;
   let lo = Math.min(...c.map(x => x.l)), hi = Math.max(...c.map(x => x.h)); const r0 = hi - lo || 1;
@@ -23,6 +23,7 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   const dentro = niveis.filter(n => n.preco >= lo - 0.3 * r0 && n.preco <= hi + 0.3 * r0), outros = niveis.filter(n => !dentro.includes(n));
   outros.forEach(n => fora.push(n));
   dentro.forEach(n => { lo = Math.min(lo, n.preco); hi = Math.max(hi, n.preco); });
+  if (sr) for (const z of [sr.sup, sr.res]) if (z && z.lo >= lo - 0.6 * r0 && z.hi <= hi + 0.6 * r0) { lo = Math.min(lo, z.lo); hi = Math.max(hi, z.hi); }   // suporte e resistência à vista
   if (plano) for (const p of [plano.stop, plano.alvo]) if (p >= lo - 0.5 * r0 && p <= hi + 0.5 * r0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }   // o plano sempre à vista
   const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
   const Y = p => T + (hi - p) / (hi - lo) * (y1 - T), xc = perfil && perfil.bw ? x1 - 128 : x1, step = (xc - L) / c.length, X = i => L + (i + 0.5) * step, bw = Math.max(1.5, Math.min(12, step * 0.64));
@@ -46,6 +47,15 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
       if (ant != null && Math.abs(ant - v) > 0.05 * mx) { const wa = ant / mx * PW; s += `<rect x="${(x1 - wa).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${wa.toFixed(1)}" height="${h.toFixed(1)}" style="fill:none;stroke:${col};stroke-width:1;stroke-dasharray:2 2;opacity:.8"/>`; }
     });
     s += `<text x="${x1 - 4}" y="${T + 10}" text-anchor="end" style="${HALO}fill:var(--muted);font-size:10.5px">liquidez em risco${perfil.hora ? ' · foto ' + perfil.hora : ''}</text>`;
+  }
+  // suporte e resistência mais próximos: faixa sombreada atrás das velas, com o que a compõe no rótulo e na dica
+  const srRot = [];
+  if (sr) for (const [z, col, nome] of [[sr.sup, 'var(--up)', 'Suporte'], [sr.res, 'var(--down)', 'Resistência']]) {
+    if (!z) continue; const ya = Y(z.hi), yb = Y(z.lo); if (yb < T || ya > y1) continue;
+    const y0 = Math.max(T, ya - 3), h = Math.max(6, Math.min(y1, yb + 3) - y0), dist = (z.dist >= 0 ? '+' : '') + z.dist.toFixed(2).replace('.', ',') + '%';
+    const txt = `${nome} ${z.lo === z.hi ? fmtPreco(z.lo) : fmtPreco(z.lo) + '–' + fmtPreco(z.hi)} (${dist}) · ${z.itens.length} ${z.itens.length > 1 ? 'fontes' : 'fonte'}`;
+    s += `<rect x="${L}" y="${y0.toFixed(1)}" width="${(xc - L).toFixed(1)}" height="${h.toFixed(1)}" style="fill:${col};opacity:.13"><title>${esc(txt + ': ' + z.itens.map(i => i.nome + ' ' + fmtPreco(i.p)).join(', '))}</title></rect>`;
+    srRot.push(`<text x="${(L + (xc - L) * 0.42).toFixed(1)}" y="${(nome === 'Suporte' ? Math.min(y1 - 3, y0 + h + 12) : Math.max(T + 10, y0 - 4)).toFixed(1)}" style="${HALO}fill:${col};font-size:11px;font-weight:800">${esc(txt)}</text>`);
   }
   // velas
   c.forEach((v, i) => { const up = v.c >= v.o, col = up ? 'var(--up)' : 'var(--down)', yo = Y(v.o), yc = Y(v.c);
@@ -156,5 +166,5 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
     s += `<text x="${L + 4}" y="${r0 + 11}" style="${HALO}fill:var(--fg);font-size:11px;font-weight:700">RSI 14${ult != null ? ' · ' + ult.toFixed(1).replace('.', ',') : ''}${pm.length > 1 ? ' <tspan style="fill:#d4a72c">· média 14</tspan>' : ''}</text>`;
     if (regimeDia) s += `<text x="${xe - 4}" y="${r0 + 11}" text-anchor="end" style="${HALO}fill:${regimeDia.lado > 0 ? 'var(--up)' : regimeDia.lado < 0 ? 'var(--down)' : 'var(--muted)'};font-size:11px;font-weight:700">Diário: ${esc(regimeDia.t)}${regimeDia.v != null ? ' (RSI ' + regimeDia.v.toFixed(0) + ')' : ''}</text>`;
   }
-  return { svg: s + rot.join('') + '</svg>', fora };
+  return { svg: s + rot.join('') + srRot.join('') + '</svg>', fora };
 }
