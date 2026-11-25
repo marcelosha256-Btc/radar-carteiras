@@ -137,12 +137,13 @@ test('gráfico: liquidações por vela (histograma), rajada no pavio e perfil da
 
 test('gráfico: valores da liquidez (maiores barras, totais, mudança e dica)', () => {
   const c = Array.from({ length: 30 }, (_, i) => vela(i * M15, 100, 102, 98, 101));
-  const perfil = { bw: 1, L: [[99.5, 2e6, 4e6, 120], [98.5, 1e6, 1e6, 40], [97.5, 3e5, null, 9]], S: [[100.5, 3e6, null, 200], [101.5, 5e5, 5e5, 30]], hora: '12:00' };
+  const perfil = { bw: 1, L: [[99.5, 2e6, 4e6, 120], [98.5, 1e6, 1e6, 40], [97.5, 3e5, null, 9], [96.5, 1e5, null, 3]], S: [[100.5, 3e6, null, 200], [101.5, 5e5, 5e5, 30]], hora: '12:00' };
   const { svg } = graficoSvg({ candles: c, ms: M15, preco: 100, perfil });
   assert.match(svg, /acima US\$ 3,5 mi/); assert.match(svg, /abaixo US\$ 3,3 mi/);
   assert.match(svg, />US\$ 2,0 mi \(−2,0 mi\)</);                    // maior de longs, consumida desde a foto anterior
   assert.match(svg, />US\$ 3,0 mi</);                                 // maior de shorts, sem foto anterior
-  assert.ok(!/>US\$ 300 mil</.test(svg));                              // a 3ª de longs não ganha rótulo
+  assert.match(svg, />US\$ 300 mil</);                                // as 3 maiores de cada lado ganham rótulo
+  assert.ok(!/>US\$ 100 mil</.test(svg));                              // a 4ª não
   assert.match(svg, /99,00–100,00 · longs a liquidar US\$ 2,00 mi · 120 posições · na foto anterior US\$ 4,00 mi/);
 });
 
