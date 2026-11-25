@@ -570,19 +570,41 @@ function criarApp(mercado, painel, raiz) {
   function renderComo() {
     $('.lv-como').innerHTML = `<div class="box-head"><h2>O que ficou de fora</h2></div><p class="small muted">"Qual lado é capturado primeiro" e "escada/possível cascata" não aparecem aqui: testados no radar em 11/11/2026, o primeiro é só a distância e o segundo aparecia em 99% das zonas, com resultado guiado pela queda do mês. As chances usam o mesmo método do Resumo (excursão histórica ÷ volatilidade), calculadas no seu navegador para este ativo.</p>`;
   }
+  /* histórico local para o gráfico: liquidações reais (guardadas por 3 dias neste navegador) e a foto anterior do mapa */
+  const liqHist = {}, mapaPrev = {};
+  function guardarLiqs(k) {
+    const h = liqHist[k] || (liqHist[k] = (() => { try { return JSON.parse(localStorage.getItem('radar-liqhist-' + k) || '[]'); } catch (e) { return []; } })());
+    const chave = e => e.t + '|' + (e.addr || '') + '|' + Math.round(e.usd), ja = new Set(h.map(chave)); let novo = false;
+    for (const e of realLiqs(k)) if (e.px != null && e.usd > 0 && !ja.has(chave(e))) { h.push({ t: e.t, px: e.px, usd: e.usd, side: e.side, addr: e.addr }); novo = true; }
+    if (novo) { const lim = Date.now() - 3 * 864e5; liqHist[k] = h.filter(e => e.t >= lim).sort((a, b) => a.t - b.t).slice(-3000);
+      try { localStorage.setItem('radar-liqhist-' + k, JSON.stringify(liqHist[k])); } catch (e) {} }
+    return liqHist[k];
+  }
+  function perfilDe(k) {
+    const m = mapas[k]; if (!m) return null;
+    const p = mapaPrev[k] || (mapaPrev[k] = { cur: null, ant: null });
+    if (!p.cur || p.cur.ts !== m.ts) { p.ant = p.cur; p.cur = m; }
+    const d = build(m), da = p.ant ? build(p.ant) : null;
+    // valor da foto anterior no mesmo preço (as faixas andam com o preço de cada foto, então casa pelo preço, não pela posição)
+    const antEm = px => { if (!da) return null; const x = da.L.concat(da.S).find(f => Math.abs(f[0] - px) <= da.bw / 2); return x ? x[1] : 0; };
+    const casa = arr => arr.map(x => [x[0], x[1], antEm(x[0])]);
+    return { bw: d.bw, L: casa(d.L), S: casa(d.S),
+      hora: new Date(m.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
+  }
   function renderGrafico() {
     const box = $('.lv-graf'); if (!box) return;
     const k = SEL, G = graf[k], cur = live[k];
     box.querySelectorAll('.lv-gtf button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.g === GTF)));
     if (!G || !cur) { if (gSig !== 'x') { $('.lv-gsvg').innerHTML = '<p class="muted small">Buscando as velas…</p>'; $('.lv-gleit').textContent = ''; gSig = 'x'; } return; }
     const ms = { '15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5 }[GTF] || 9e5, todas = { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] || G.c15, c = todas.slice(-({ '15m': 120, '1h': 96, '4h': 120, '1d': 120 }[GTF] || 120));
-    const sig = [k, GTF, G.t, cur, c.length].join('|'); if (sig === gSig) return; gSig = sig;
+    const curto = ms < 144e5, bol = curto ? guardarLiqs(k) : null, perf = curto ? perfilDe(k) : null;
+    const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0].join('|'); if (sig === gSig) return; gSig = sig;
     const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
     if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
-    const { svg, fora } = graficoSvg({ candles: c, niv, est, preco: cur, ms });
+    const { svg, fora } = graficoSvg({ candles: c, niv, est, preco: cur, ms, perfil: perf, bolhas: bol });
     $('.lv-gsvg').innerHTML = svg;
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
-    $('.lv-gnota').textContent = `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
+    $('.lv-gnota').textContent = (curto ? `Bolhas = liquidações reais (vermelho/verde conforme o lado; tamanho = valor; passe o mouse para ver), guardadas neste navegador desde que a página abre (a fonte só dá a última hora: ${bol ? bol.length : 0} até agora). Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ` + (mapas[k] ? '' : 'Mapa indisponível (senha do radar). ') : '') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
       (fora.length ? `Fora da vista: ${fora.map(n => n.rot + ' ' + fpx(n.preco)).join(', ')}. ` : '') +
       'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Medido em BTC, ETH e SOL (15 min, 1 h, 4 h e diário) e em ações (diário): nenhum desses sinais deu ganho firme depois dos custos, e vários foram piores que entrar sem sinal. Uma pista no diário de cripto (fechar abaixo da mínima do mês passado) não se repetiu em 30 ações dos EUA (15 anos). É mapa de contexto, não gatilho (estudo em estudos/niveis_estrutura).';
   }

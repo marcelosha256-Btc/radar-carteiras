@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { graficoSvg } from '../web/grafico/desenho.js';
 import { grupos, niveisDia, niveisPeriodo, pivos, rotular, estrutura, leitura, atrAbs, diaUTC, nyHora } from '../web/grafico/calc.js';
 
 const M15 = 9e5;
@@ -115,4 +116,16 @@ test('níveis da semana e do mês passados (velas diárias)', () => {
   assert.equal(n.PWH, 140); assert.equal(n.PWL, 100);   // 16 a 22/11
   assert.equal(n.PMH, 200); assert.equal(n.PML, 150);   // outubro
   assert.deepEqual(niveisPeriodo([]), []);
+});
+
+test('gráfico: bolhas de liquidação e perfil da liquidez em risco', () => {
+  const c = Array.from({ length: 30 }, (_, i) => vela(i * M15, 100, 102, 98, 101));
+  const perfil = { bw: 1, L: [[99.5, 2e6, 4e6], [97.5, 1e6, 1e6]], S: [[101.5, 3e6, null], [150, 9e6, null]], hora: '12:00' };
+  const bolhas = [{ t: 5 * M15 + 1000, px: 99, usd: 50000, side: 'long' }, { t: 6 * M15, px: 101, usd: 5000, side: 'short' }, { t: -M15, px: 100, usd: 1e6, side: 'long' }];
+  const { svg } = graficoSvg({ candles: c, niv: null, est: null, preco: 100.5, ms: M15, perfil, bolhas });
+  assert.equal((svg.match(/<circle/g) || []).length, 2);              // a bolha anterior às velas fica de fora
+  assert.match(svg, /Long liquidado · US\$ 50\.000/);
+  assert.match(svg, /liquidez em risco · foto 12:00/);
+  assert.equal((svg.match(/stroke-dasharray:2 2/g) || []).length, 1);  // contorno só onde a faixa mudou (99,5: 4 mi → 2 mi)
+  assert.ok(!graficoSvg({ candles: c, ms: M15 }).svg.includes('liquidez em risco'));
 });

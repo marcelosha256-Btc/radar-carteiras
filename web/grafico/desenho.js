@@ -12,8 +12,10 @@ const hora = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', min
 const soDia = t => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 const diaHora = t => new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
-/** opts: { candles, niv (niveisDia), est (estrutura), preco, ms, W, H } → { svg, fora } */
-export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440 }) {
+/** opts: { candles, niv (niveisDia), est (estrutura), preco, ms, W, H, perfil, bolhas } → { svg, fora }
+ *  perfil = { bw, L: [[preço, US$, US$ da foto anterior]], S: [...], hora } (liquidez em risco por faixa de preço, Coinversa)
+ *  bolhas = [{ t, px, usd, side }] (liquidações reais) */
+export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null }) {
   const c = candles; if (!c || c.length < 5) return { svg: '', fora: [] };
   const L = 8, R = 74, T = 14, B = 26, x1 = W - R, y1 = H - B;
   let lo = Math.min(...c.map(x => x.l)), hi = Math.max(...c.map(x => x.h)); const r0 = hi - lo || 1;
@@ -22,7 +24,7 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440 }) {
   outros.forEach(n => fora.push(n));
   dentro.forEach(n => { lo = Math.min(lo, n.preco); hi = Math.max(hi, n.preco); });
   const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
-  const Y = p => T + (hi - p) / (hi - lo) * (y1 - T), step = (x1 - L) / c.length, X = i => L + (i + 0.5) * step, bw = Math.max(1.5, Math.min(12, step * 0.64));
+  const Y = p => T + (hi - p) / (hi - lo) * (y1 - T), xc = perfil && perfil.bw ? x1 - 128 : x1, step = (xc - L) / c.length, X = i => L + (i + 0.5) * step, bw = Math.max(1.5, Math.min(12, step * 0.64));
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Gráfico de velas com níveis do dia e estrutura">`;
   // grade e escala de preço
   for (let g = 0; g <= 5; g++) { const p = lo + (hi - lo) * g / 5, y = Y(p);
@@ -30,6 +32,19 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440 }) {
   // horas no eixo
   const cada = Math.max(1, Math.round(c.length / 6));
   for (let i = 0; i < c.length; i += cada) s += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" style="fill:var(--muted);font-size:10.5px">${ms >= 864e5 ? soDia(c[i].t) : ms >= 36e5 ? diaHora(c[i].t) : hora(c[i].t)}</text>`;
+  // perfil da liquidez em risco: barras deitadas a partir da borda direita, no mesmo eixo de preço.
+  // Preenchido = foto atual; contorno = foto anterior (mostra se a faixa cresceu ou foi consumida).
+  if (perfil && perfil.bw) {
+    s += `<line x1="${xc + 4}" x2="${xc + 4}" y1="${T}" y2="${y1}" style="stroke:var(--line)"/>`;
+    const PW = 122, faixas = [...perfil.L.map(a => [...a, 'L']), ...perfil.S.map(a => [...a, 'S'])].filter(a => a[0] + perfil.bw / 2 > lo && a[0] - perfil.bw / 2 < hi);
+    const mx = Math.max(1, ...faixas.map(a => Math.max(a[1], a[2] || 0)));
+    faixas.forEach(([p, v, ant, lado]) => {
+      const ya = Y(Math.min(hi, p + perfil.bw / 2)), yb = Y(Math.max(lo, p - perfil.bw / 2)), h = Math.max(1, yb - ya - 1), col = lado === 'L' ? 'var(--lv-long)' : 'var(--lv-short)';
+      const w = v / mx * PW; if (w >= 0.5) s += `<rect x="${(x1 - w).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" style="fill:${col};opacity:.22"/>`;
+      if (ant != null && Math.abs(ant - v) > 0.05 * mx) { const wa = ant / mx * PW; s += `<rect x="${(x1 - wa).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${wa.toFixed(1)}" height="${h.toFixed(1)}" style="fill:none;stroke:${col};stroke-width:1;stroke-dasharray:2 2;opacity:.8"/>`; }
+    });
+    s += `<text x="${x1 - 4}" y="${T + 10}" text-anchor="end" style="${HALO}fill:var(--muted);font-size:10.5px">liquidez em risco${perfil.hora ? ' · foto ' + perfil.hora : ''}</text>`;
+  }
   // velas
   c.forEach((v, i) => { const up = v.c >= v.o, col = up ? 'var(--up)' : 'var(--down)', yo = Y(v.o), yc = Y(v.c);
     s += `<line x1="${X(i).toFixed(1)}" x2="${X(i).toFixed(1)}" y1="${Y(v.h).toFixed(1)}" y2="${Y(v.l).toFixed(1)}" style="stroke:${col}"/>`
@@ -74,6 +89,15 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440 }) {
         rot.push(`<text x="${(ext ? Math.min(X(j) + 6, x1 - 2) : X(j)).toFixed(1)}" y="${(q.sobe ? Y(c[j].l) + 16 : Y(c[j].h) - 8).toFixed(1)}" text-anchor="${ext ? 'end' : 'middle'}" style="${HALO}fill:${col};font-size:11px;font-weight:800">${esc(txt)}</text>`);
       }
     }
+  }
+  // bolhas: liquidações reais no preço e na hora em que aconteceram (área proporcional ao valor)
+  if (bolhas && bolhas.length) {
+    const t0 = c[0].t, tf = c[c.length - 1].t + ms, vis = bolhas.filter(b => b.px != null && b.t >= t0 && b.t < tf && b.px >= lo && b.px <= hi);
+    const mb = Math.max(1, ...vis.map(b => b.usd));
+    vis.sort((a, b) => b.usd - a.usd).slice(0, 200).reverse().forEach(b => {
+      const i = Math.min(c.length - 1, Math.floor((b.t - t0) / ms)), r = 2.5 + Math.sqrt(b.usd / mb) * 13, col = b.side === 'long' ? 'var(--lv-long)' : b.side === 'short' ? 'var(--lv-short)' : 'var(--muted)';
+      s += `<circle cx="${X(i).toFixed(1)}" cy="${Y(b.px).toFixed(1)}" r="${r.toFixed(1)}" style="fill:${col};fill-opacity:.35;stroke:${col};stroke-width:1"><title>${b.side === 'long' ? 'Long liquidado' : b.side === 'short' ? 'Short liquidado' : 'Liquidação'} · US$ ${Math.round(b.usd).toLocaleString('pt-BR')} · ${fmtPreco(b.px)} · ${hora(b.t)}</title></circle>`;
+    });
   }
   // preço atual
   if (preco) { const y = Y(preco);
