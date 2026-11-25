@@ -6,6 +6,7 @@
 import { fraseRsi } from '../rsi/calc.js';
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
+import { hlLink } from '../contexto/hl.js';
 const HL = 'https://api.hyperliquid.xyz/info';
 const ATIVOS = { cripto: ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'],
   acoes: ['xyz:SP500', 'xyz:XYZ100', 'xyz:NVDA', 'xyz:TSLA', 'xyz:MU', 'xyz:SKHX', 'xyz:GOOGL', 'xyz:GOLD'] };
@@ -343,7 +344,7 @@ function criarApp(mercado, painel, raiz) {
   }
   function renderBar(A) {
     const k = SEL, cur = A ? A.cur : live[k];
-    $('.lv-an').textContent = nome(k);
+    const an = $('.lv-an'); if (an.dataset.k !== k) { an.dataset.k = k; an.innerHTML = nome(k) + hlLink(k); }   // só refaz ao trocar de ativo, para o link aceitar o clique
     const px = $('.lv-px'); px.textContent = cur ? fpx(cur) : '—'; px.style.color = flash[k] && flash[k].until > Date.now() ? flash[k].col : '';
     $('.lv-tr').innerHTML = A ? `<span class="chip" style="color:${A.tr.color}">${A.tr.arrow} ${A.tr.label}</span>` : '';
     if (A) {

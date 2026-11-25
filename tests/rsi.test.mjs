@@ -76,3 +76,11 @@ test('medidor: ângulo, faixa e HTML', () => {
   assert.match(h, /Medo extremo/); assert.match(h, /1 mês atrás/); assert.match(h, />50</); assert.match(h, /<svg/);
   assert.match(medidor(medidorVix({ v: 26.4, ont: 26.6, sem: 25.5, mes: null, ano: null })), /Estresse/);
 });
+
+import { hlLink, urlHL } from '../web/contexto/hl.js';
+test('link da Hyperliquid: cripto, ações xyz e entrada inválida', () => {
+  assert.equal(urlHL('BTC'), 'https://app.hyperliquid.xyz/trade/BTC');
+  assert.equal(urlHL('xyz:NVDA'), 'https://app.hyperliquid.xyz/trade/xyz:NVDA');
+  assert.match(hlLink('xyz:MU'), /href="https:\/\/app\.hyperliquid\.xyz\/trade\/xyz:MU" target="_blank" rel="noopener noreferrer"/);
+  assert.equal(hlLink('<script>'), ''); assert.equal(hlLink(''), '');
+});
