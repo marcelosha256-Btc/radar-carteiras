@@ -87,3 +87,11 @@ test('precoParaRsi: a conta inversa devolve o preço que leva o RSI ao alvo', as
   assert.ok(precoParaRsi(closes, 70) > precoParaRsi(closes, 30));
   assert.equal(precoParaRsi(closes.slice(0, 10), 70), null);
 });
+
+import { hlLink, urlHL } from '../web/contexto/hl.js';
+test('link da Hyperliquid: cripto, ações xyz e entrada inválida', () => {
+  assert.equal(urlHL('BTC'), 'https://app.hyperliquid.xyz/trade/BTC');
+  assert.equal(urlHL('xyz:NVDA'), 'https://app.hyperliquid.xyz/trade/xyz:NVDA');
+  assert.match(hlLink('xyz:MU'), /href="https:\/\/app\.hyperliquid\.xyz\/trade\/xyz:MU" target="_blank" rel="noopener noreferrer"/);
+  assert.equal(hlLink('<script>'), ''); assert.equal(hlLink(''), '');
+});

@@ -192,11 +192,12 @@ function desenhar(modo) {
     if (!lista.length) return;
     root.dataset.pronto = '1';
     root.innerHTML = `<div class="box"><div class="box-head"><h2>Mercado agora</h2>
-      <label class="small muted">Ativo <select data-merc style="font:inherit;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:4px 6px"></select></label></div>
+      <label class="small muted">Ativo <span data-hl></span> <select data-merc style="font:inherit;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:4px 6px"></select></label></div>
       <div data-dyn></div></div>`;
-    root.querySelector('[data-merc]').addEventListener('change', ev => { gravarPref('ativo-' + modo, ev.target.value); escolher(modo, ev.target.value); });
+    root.querySelector('[data-merc]').addEventListener('change', ev => { const h = root.querySelector('[data-hl]'); if (h && window.hlLink) h.innerHTML = window.hlLink(ev.target.value); gravarPref('ativo-' + modo, ev.target.value); escolher(modo, ev.target.value); });
   }
   const sel = root.querySelector('[data-merc]');
+  const hlEl = root.querySelector('[data-hl]'); if (hlEl && window.hlLink) hlEl.innerHTML = window.hlLink(sel.value);
   if (lista.length && sel.options.length !== lista.length) {
     const salvo = lerPref('ativo-' + modo, '');
     const op = c => `<option value="${esc(c)}">${esc(c.replace('xyz:', ''))}</option>`;

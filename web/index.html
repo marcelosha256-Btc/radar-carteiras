@@ -2051,7 +2051,7 @@ function hojeMontar(root, modo) {
   const pos = (L_, S_) => L_ + S_ === 0 ? '<span class="muted">—</span>' : `${L_}↑ ${S_}↓`;
   const linhasHtml = lista.map(r => `<tr>
       <td><button class="hj-estrela" data-act="obs" data-t="${r.t}" aria-pressed="${obs.includes(r.t)}" title="Lista de observação">${obs.includes(r.t) ? '★' : '☆'}</button></td>
-      <td><b>${r.t}</b>${r.setor ? `<br><span class="small muted">${r.setor}</span>` : ''}${r.mercado === 'acoes' && r.aberta === false ? '<br><span class="chip warn">pregão fechado</span>' : ''}</td>
+      <td><b>${r.t}</b>${window.hlLink ? window.hlLink(hojeChave(r)) : ''}${r.setor ? `<br><span class="small muted">${r.setor}</span>` : ''}${r.mercado === 'acoes' && r.aberta === false ? '<br><span class="chip warn">pregão fechado</span>' : ''}</td>
       <td>${fmtPx(r.px)}<br><span class="small ${r.ch >= 0 ? 'pos' : 'neg'}">${r.ch >= 0 ? '+' : ''}${fmt(r.ch, 1)}%</span></td>
       <td><span class="chip ${r.D === 'up' ? 'up' : r.D === 'down' ? 'down' : 'flat'}">${TL[r.D]}</span> <span class="chip ${r.H === 'up' ? 'up' : r.H === 'down' ? 'down' : 'flat'}">${TL[r.H]} 4h</span></td>
       <td>${fmt(r.funding, 1)}%</td>
@@ -2374,6 +2374,7 @@ function hojePregaoKpi(kpi, ny, hora) {
   }
   return kpi('Pregão de Nova York', ny ? (ny.aberta ? 'ABERTO' : 'FECHADO') : '—', ny ? `${ny.aberta ? 'fecha' : 'abre'} às ${hora(ny.muda_em)} · fora do pregão o preço é só da Hyperliquid` : '');
 }
+window.addEventListener('hl-pronto', () => { try { if (DADOS_HOJE) hojeRender(); } catch (e) {} });   // o link da Hyperliquid chega depois do primeiro desenho
 function hojeRender() {
   const u = document.getElementById('hojeUnico');
   try { if (u) hojeMontar(u, 'tudo'); } catch (e) { console.error('Hoje:', e); }
@@ -2951,5 +2952,6 @@ conectarLiquidacoes();
 <script type="module" src="posicoes/tela.js"></script>
 <script type="module" src="mercado/tela.js"></script>
 <script type="module" src="rsi/tela.js"></script>
+<script type="module" src="contexto/hl.js"></script>
 <script type="module" src="contexto/painel.js"></script>
 <script type="module" src="manha/tela.js"></script>
