@@ -228,7 +228,8 @@ function estrutura(k, tf, cur, n) {
 }
 function avaliar(k, A, modo, lado) {
   const { cur, zn } = A, isBuy = lado === 'compra', bw = zn.bw, H = modo === 'day' ? 4 : 24;
-  const blocks = [], pros = [], cons = []; let sc = 50;
+  const blocks = [], pros = [], cons = [], faltam = []; let sc = 50;
+  const falta = (v, t) => faltam.push([v, t]);
   const add = (v, t) => { sc += v; (v >= 0 ? pros : cons).push((v >= 0 ? '+' : '') + v + ' ' + t); };
   let stop = null, alvo = null;
   if (isBuy) { if (zn.ap) stop = (zn.ap.a[0] - bw / 2) * (1 - ROTEIRO.stopBuf); if (zn.ve) alvo = zn.ve.a[0] - bw / 2; }
@@ -241,18 +242,26 @@ function avaliar(k, A, modo, lado) {
   if (alvo && stop) { const pa = pTouch(k, alvo, cur, H), ps = pTouch(k, stop, cur, H);
     if (pa != null && ps != null) { const df = (pa - ps) * 100;
       if (df >= 10) add(10, `alvo mais provável que o stop em ${H} h (${pp(pa)} × ${pp(ps)})`);
-      else if (df <= -10) add(-10, `stop mais provável que o alvo em ${H} h (${pp(ps)} × ${pp(pa)})`); } }
+      else if (df <= -10) add(-10, `stop mais provável que o alvo em ${H} h (${pp(ps)} × ${pp(pa)})`);
+      if (df < 10) falta(df <= -10 ? 20 : 10, `alvo ficar mais provável que o stop em ${H} h (hoje ${pp(pa)} × ${pp(ps)})`); } }
   const sL = isBuy ? 1 : -1;
   if (modo === 'day') {
     const e4 = estrutura(k, '4h', cur, '4H'); if (e4) add(10 * e4.s * sL, e4.t);
+    if (!e4 || e4.s !== sL) { const pv = pivots(cand[k] && cand[k]['4h']), nv = pv && (isBuy ? pv.hi : pv.lo);
+      if (nv != null) falta(e4 ? 20 : 10, `4H ${isBuy ? 'romper o último topo' : 'perder o último fundo'} (${fpx(nv)}, ${pc((nv / cur - 1) * 100)})`); }
     if (A.tr.dir) add(5 * A.tr.dir * sL, `último minuto ${A.tr.dir > 0 ? 'subindo' : 'caindo'}`);
+    if (A.tr.dir !== sL) falta(A.tr.dir ? 10 : 5, `último minuto ${isBuy ? 'subindo' : 'caindo'}`);
     if (Math.abs(A.tr.c15) >= 0.3) add((A.tr.c15 > 0 ? 5 : -5) * sL, `15 min ${pc2(A.tr.c15)}`);
+    if (!(A.tr.c15 * sL >= 0.3)) falta(A.tr.c15 * sL <= -0.3 ? 10 : 5, `15 min ${isBuy ? 'subindo' : 'caindo'} 0,3% ou mais (hoje ${pc2(A.tr.c15)})`);
     const r15 = rsiAt(k, '15m', 9e5, cur);
     if (r15 && r15.v <= 30) add(isBuy ? 5 : -5, `RSI 15 min em sobrevenda (${f1(r15.v)})`);
     if (r15 && r15.v >= 70) add(isBuy ? -5 : 5, `RSI 15 min em sobrecompra (${f1(r15.v)})`);
+    if (r15 && (isBuy ? r15.v > 30 : r15.v < 70)) falta(5, `RSI 15 min ${isBuy ? 'em sobrevenda (≤30)' : 'em sobrecompra (≥70)'} (hoje ${f1(r15.v)})`);
     const bk = book[k]; if (bk && Date.now() - bk.t < 30000) {
       const near = arr => arr.filter(o => Math.abs(o.px / cur - 1) < 0.005).reduce((t, o) => t + o.usd, 0), b = near(bk.bids), a = near(bk.asks);
-      if (b + a > 0) { const im = (b - a) / (b + a); if (Math.abs(im) > 0.3) add((im > 0 ? 5 : -5) * sL, `livro perto do preço com mais ${im > 0 ? 'compra' : 'venda'} (${Math.round(Math.abs(im) * 100)}%)`); } }
+      const im = b + a > 0 ? (b - a) / (b + a) : 0;
+      if (Math.abs(im) > 0.3) add((im > 0 ? 5 : -5) * sL, `livro perto do preço com mais ${im > 0 ? 'compra' : 'venda'} (${Math.round(Math.abs(im) * 100)}%)`);
+      if (!(im * sL > 0.3)) falta(im * sL < -0.3 ? 10 : 5, `livro perto do preço com mais ${isBuy ? 'compra' : 'venda'}`); }
   } else {
     const eD = estrutura(k, '1d', cur, 'Diário'); if (eD) add(10 * eD.s * sL, eD.t);
     const rD = rsiAt(k, '1d', 864e5, cur), rW = rsiAt(k, '1w', 7 * 864e5, cur);
@@ -262,12 +271,14 @@ function avaliar(k, A, modo, lado) {
   const q = squeeze(k, press[k]);
   if (q && q.t === 'Longs apertados') add(isBuy ? -10 : 10, 'longs apertados');
   if (q && q.t === 'Shorts apertados') add(isBuy ? 10 : -10, 'shorts apertados');
+  if (!q || q.t !== (isBuy ? 'Shorts apertados' : 'Longs apertados')) falta(q && q.t === (isBuy ? 'Longs apertados' : 'Shorts apertados') ? 20 : 10, `${isBuy ? 'shorts' : 'longs'} ficarem apertados (funding, OI e grupos)`);
   const l5 = liqSum(realLiqs(k), 300e3), lim = Math.max(500e3, 0.25 * Math.max(zn.ap ? zn.ap.a[1] : 0, zn.ve ? zn.ve.a[1] : 0));
   if (isBuy && l5.long >= lim) blocks.push(`cascata de longs em curso (${fm(l5.long)} em 5 min) — não pegue faca caindo`);
   if (!isBuy && l5.short >= lim) blocks.push(`cascata de shorts em curso (${fm(l5.short)} em 5 min)`);
   sc = Math.max(0, Math.min(100, Math.round(sc)));
   const st = blocks.length ? ['BLOQUEADO', COR.dn] : sc >= ROTEIRO.liberado ? ['LIBERADO', COR.up] : sc >= ROTEIRO.cuidado ? ['CUIDADO', COR.am] : ['FRACO', COR.mu];
-  return { sc, st, blocks, pros, cons, stop, alvo, rr };
+  faltam.sort((x, y) => y[0] - x[0]);
+  return { sc, st, blocks, pros, cons, stop, alvo, rr, faltam };
 }
 
 /* ---------- uma instância por mercado (Cripto / Ações) ---------- */
@@ -474,8 +485,12 @@ function criarApp(mercado, painel, raiz) {
     const okA = !a.blocks.length, okB = !b.blocks.length;
     const r = okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
     const est = r.st[0], acao = est === 'BLOQUEADO' ? 'Não entrar' : est === 'LIBERADO' ? 'Liberado pelo roteiro' : 'Aguardar gatilho';
-    const falta = r.blocks.length ? r.blocks[0] : est === 'LIBERADO' ? (r.stop && r.alvo ? `stop ${fpx(r.stop)} · alvo ${fpx(r.alvo)} · R:R ${r.rr != null ? f1(r.rr) : '—'}` : '')
-      : (r.cons.length ? 'falta: ' + r.cons[0].replace(/^-?\d+ /, '') : `falta nota ${ROTEIRO.liberado} (hoje ${r.sc})`);
+    const precisa = Math.max(0, ROTEIRO.liberado - r.sc);
+    let lista = [], soma = 0; for (const [v, t] of r.faltam) { if (soma >= precisa) break; lista.push(`${t} (+${v})`); soma += v; }
+    const oQueFalta = !precisa ? '' : soma >= precisa ? `faltam ${precisa} pontos: ${lista.join(' · ')}` : `faltam ${precisa} pontos e nem tudo a favor chega lá hoje: espere outro setup`;
+    const falta = r.blocks.length ? r.blocks[0] + (oQueFalta ? `. Depois disso, ${oQueFalta}` : '')
+      : est === 'LIBERADO' ? (r.stop && r.alvo ? `stop ${fpx(r.stop)} · alvo ${fpx(r.alvo)} · R:R ${r.rr != null ? f1(r.rr) : '—'}` : '')
+      : oQueFalta;
     el.innerHTML = `<div class="lv-gatb" style="border-color:${r.st[1]};color:${r.st[1]}"><b>${acao}</b> · day trade · ${r.l} · <span class="lv-gatf">${falta}</span><span style="flex:1"></span><b class="num">${r.sc}/100</b> <span class="small muted">nota do roteiro</span></div>
       <p class="small muted" style="margin:4px 0 0">A nota soma o que o roteiro confere (R:R, estrutura, fluxo, RSI). É contexto, não chance de acerto: ainda não há histórico medido dela.</p>`;
   }
