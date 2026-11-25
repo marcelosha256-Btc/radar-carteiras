@@ -243,7 +243,7 @@ function avaliar(k, A, modo, lado) {
     if (pa != null && ps != null) { const df = (pa - ps) * 100;
       if (df >= 10) add(10, `alvo mais provável que o stop em ${H} h (${pp(pa)} × ${pp(ps)})`);
       else if (df <= -10) add(-10, `stop mais provável que o alvo em ${H} h (${pp(ps)} × ${pp(pa)})`);
-      if (df < 10) falta(df <= -10 ? 20 : 10, `alvo ficar mais provável que o stop em ${H} h (hoje ${pp(pa)} × ${pp(ps)})`); } }
+      if (df < 10 && Math.max(pa, ps) >= 0.05) falta(df <= -10 ? 20 : 10, `alvo ficar mais provável que o stop em ${H} h (hoje ${pp(pa)} × ${pp(ps)})`); } }
   const sL = isBuy ? 1 : -1;
   if (modo === 'day') {
     const e4 = estrutura(k, '4h', cur, '4H'); if (e4) add(10 * e4.s * sL, e4.t);
