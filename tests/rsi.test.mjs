@@ -25,3 +25,35 @@ test('faixa e resumo', () => {
   assert.equal(r.n, 2); assert.equal(r.lado, -1); assert.ok(r.txt.includes('sobrevenda') && r.txt.includes('1 extremo'));
   assert.equal(resumo([25, 75]).lado, 0);
 });
+
+import { mediaSimples, regime, rsiSerie, fraseRsi } from '../web/rsi/calc.js';
+import { faixaMedo, frase as fraseMedo } from '../web/contexto/medo.js';
+
+test('mediaSimples: últimos n fechamentos; null sem histórico', () => {
+  assert.equal(mediaSimples([1, 2, 3, 4], 2), 3.5);
+  assert.equal(mediaSimples([1, 2], 3), null);
+});
+test('regime pelo RSI do dia', () => {
+  assert.equal(regime(20).t, 'CAPITULAÇÃO'); assert.equal(regime(30).t, 'CAPITULAÇÃO');
+  assert.equal(regime(34.3).t, 'QUEDA FORTE'); assert.equal(regime(37).t, 'QUEDA');
+  assert.equal(regime(50).t, 'NEUTRO'); assert.equal(regime(72).t, 'EUFORIA'); assert.equal(regime(null).t, '—');
+});
+test('rsiSerie termina igual ao rsiWilder', () => {
+  const c = Array.from({ length: 60 }, (_, i) => 100 + Math.sin(i / 3) * 5 + i * 0.1);
+  assert.ok(Math.abs(rsiSerie(c).at(-1) - rsiWilder(c)) < 1e-9);
+  assert.equal(rsiSerie(c)[5], null);
+});
+test('fraseRsi: foi a sobrevenda e saiu / segue', () => {
+  const cai = Array.from({ length: 30 }, (_, i) => 200 - i * 3);          // queda contínua: RSI muito baixo
+  assert.match(fraseRsi(cai), /sobrevenda/);
+  const volta = cai.concat([cai.at(-1) + 12, cai.at(-1) + 24, cai.at(-1) + 36, cai.at(-1) + 48]);
+  assert.match(fraseRsi(volta), /saiu da sobrevenda/);
+  assert.match(fraseRsi(volta), /Sozinho não prevê direção/);
+  assert.equal(fraseRsi(Array.from({ length: 30 }, (_, i) => 100 + (i % 2))), '');
+});
+test('medo e ganância: faixa e frase', () => {
+  assert.equal(faixaMedo(8).txt, 'medo extremo (≤10)'); assert.equal(faixaMedo(50).txt, 'neutro');
+  assert.match(fraseMedo({ v: 13, sem: 11 }), /subiu de 11/);
+  assert.match(fraseMedo({ v: 8, sem: 8 }), /contexto, não gatilho/);
+  assert.equal(fraseMedo(null), '');
+});

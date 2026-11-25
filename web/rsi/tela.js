@@ -1,7 +1,8 @@
 /* Aba "RSI Mestre" (Pesquisa): RSI 14 em 15 min, 1H, 4H, Dia e Semana para a cripto e as ações mais negociadas.
  * Velas direto da Hyperliquid no navegador: 3 pedidos por ativo (15m, 1h → 4H agrupado, 1d → Semana agrupada),
  * em lotes pequenos para não levar 429. Guarda 10 min no navegador. */
-import { rsiWilder, agrupar, faixa, resumo } from './calc.js';
+import { rsiWilder, agrupar, faixa, resumo, mediaSimples, regime } from './calc.js';
+import { medo, frase } from '../contexto/medo.js';
 
 const HL = 'https://api.hyperliquid.xyz/info';
 const CRIPTO = ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'];
@@ -27,11 +28,12 @@ async function medir(coin) {
   const agora = Date.now();
   const v15 = await velas(coin, '15m', agora - 300 * 9e5);
   const v1h = await velas(coin, '1h', agora - 700 * H);
-  const v1d = await velas(coin, '1d', agora - 500 * D);
+  const v1d = await velas(coin, '1d', agora - 1500 * D);
   const c = arr => arr.map(v => v.c);
   return {
     coin, px: v15.length ? v15[v15.length - 1].c : null,
     ch24: v1h.length > 24 ? (v1h[v1h.length - 1].c / v1h[v1h.length - 25].c - 1) * 100 : null,
+    m200: { d: mediaSimples(c(v1d), 200), w: mediaSimples(c(agrupar(v1d, 7 * D)), 200) },
     r: { '15m': rsiWilder(c(v15)), '1h': rsiWilder(c(v1h)), '4h': rsiWilder(c(agrupar(v1h, 4 * H))), '1d': rsiWilder(c(v1d)), '1w': rsiWilder(c(agrupar(v1d, 7 * D))) },
   };
 }
@@ -43,7 +45,14 @@ function ativosAcoes() {
   } catch (e) { return []; }
 }
 
-const S = { linhas: ler(CACHE, { t: 0, d: {} }), carregando: false, erro: '', filtro: ler('radar-rsi-filtro', 'tudo') };
+const S = { medo: null, linhas: ler(CACHE, { t: 0, d: {} }), carregando: false, erro: '', filtro: ler('radar-rsi-filtro', 'tudo') };
+
+const reg = l => { const g = regime(l.r['1d']), cor = g.lado < 0 ? 'var(--warn)' : g.lado > 0 ? 'var(--down)' : 'var(--muted)';
+  return `<span class="chip" style="color:${cor};border-color:${cor};font-weight:${g.nivel === 3 ? 800 : 600}">${g.t}</span>`; };
+// distância do preço até a média de 200 dias / 200 semanas (referência de suporte de prazo maior)
+const medias = l => { if (!l.m200 || l.px == null) return '';
+  const p = [['200 d', l.m200.d], ['200 sem', l.m200.w]].filter(x => x[1]).map(([n, m]) => `${n} ${(l.px / m - 1) * 100 >= 0 ? '+' : ''}${f1((l.px / m - 1) * 100)}%`);
+  return p.length ? `<br><span class="muted">média ${p.join(' · ')}</span>` : ''; };
 
 function desenhar() {
   const root = document.getElementById('rsiMestre'); if (!root) return;
@@ -56,21 +65,24 @@ function desenhar() {
   const filtro = [['tudo', 'Tudo'], ['acoes', 'Ações'], ['cripto', 'Cripto']].map(([v, n]) =>
     `<button class="hj-link" data-f="${v}" style="${S.filtro === v ? 'font-weight:700;text-decoration:none' : ''}">${n}</button>`).join(' · ');
   const quando = S.linhas.t ? new Date(S.linhas.t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
-  root.innerHTML = `<div class="box-head"><h2>RSI Mestre</h2><p>RSI 14 (Wilder) em cinco tempos gráficos, das velas da Hyperliquid. Laranja = sobrevenda (≤30), vermelho = sobrecompra (≥70), negrito = extremo (≤20 ou ≥80).</p></div>
+  root.innerHTML = `<div class="box-head"><h2>RSI Mestre</h2><p>RSI 14 (Wilder) em cinco tempos gráficos, das velas da Hyperliquid. Laranja = sobrevenda (≤30), vermelho = sobrecompra (≥70), negrito = extremo (≤20 ou ≥80). Regime pelo RSI do dia (≤30 capitulação, ≤35 queda forte, ≤45 queda; espelho em cima). Clique numa linha para abrir o ativo na Liquidez ao vivo.</p></div>
     <p class="small" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span class="facts">${filtro}</span><span style="flex:1"></span>
       <span class="muted">${S.carregando ? 'atualizando…' : 'atualizado às ' + quando}</span> <button class="hj-link" data-act="rsi-atualizar">atualizar</button></p>
+    ${S.medo ? `<p class="small" style="margin:6px 0">${esc(frase(S.medo))}</p>` : ''}
     ${S.erro ? `<p class="small" style="color:var(--warn)">${esc(S.erro)}</p>` : ''}
-    <div class="tbl-wrap"><table><thead><tr><th>Ativo</th><th>Preço · 24 h</th>${TFS.map(([, n]) => `<th style="text-align:center">${n}</th>`).join('')}<th>Leitura</th></tr></thead><tbody>
-    ${comRes.length ? comRes.map(l => `<tr><td><b>${esc(l.coin.replace('xyz:', ''))}</b>${l.coin.startsWith('xyz:') ? ' <span class="small muted">ação</span>' : ''}</td>
+    <div class="tbl-wrap"><table><thead><tr><th>Ativo</th><th>Preço · 24 h</th><th>Regime</th>${TFS.map(([, n]) => `<th style="text-align:center">${n}</th>`).join('')}<th>Leitura</th></tr></thead><tbody>
+    ${comRes.length ? comRes.map(l => `<tr class="rsi-lin" data-coin="${esc(l.coin)}" title="Abrir na Liquidez ao vivo" style="cursor:pointer"><td><b>${esc(l.coin.replace('xyz:', ''))}</b>${l.coin.startsWith('xyz:') ? ' <span class="small muted">ação</span>' : ''}</td>
       <td class="num">${l.px != null ? l.px.toLocaleString('pt-BR', { maximumFractionDigits: l.px < 10 ? 4 : 2 }) : '—'}${l.ch24 != null ? ` <span class="small ${l.ch24 >= 0 ? 'pos' : 'neg'}">${l.ch24 >= 0 ? '+' : ''}${f1(l.ch24)}%</span>` : ''}</td>
-      ${TFS.map(([k]) => cel(l.r[k])).join('')}<td class="small ${l.res.n ? '' : 'muted'}">${l.res.txt}</td></tr>`).join('')
-      : `<tr><td colspan="8" class="muted">${S.carregando ? 'Buscando as velas…' : 'Sem dados ainda.'}</td></tr>`}
+      <td>${reg(l)}</td>
+      ${TFS.map(([k]) => cel(l.r[k])).join('')}<td class="small ${l.res.n ? '' : 'muted'}">${l.res.txt}${medias(l)}</td></tr>`).join('')
+      : `<tr><td colspan="9" class="muted">${S.carregando ? 'Buscando as velas…' : 'Sem dados ainda.'}</td></tr>`}
     </tbody></table></div>
     <p class="small muted" style="margin-top:8px">4H vem do agrupamento das velas de 1H e Semana do agrupamento das diárias, em blocos de tempo UTC: pode diferir alguns décimos do gráfico. Fora do pregão de NY, as velas das ações são só negócios da Hyperliquid (finos). RSI esticado sozinho não prevê direção: no estudo do Connors RSI (11/2026), comprar sobrevenda não teve vantagem clara sobre entrar em qualquer dia do mesmo regime. Use como contexto e para o "RSI se chegar lá" da Liquidez ao vivo.</p>`;
 }
 
 async function carregar(forcar) {
   if (S.carregando) return;
+  medo().then(m => { if (m) { S.medo = m; desenhar(); } });
   if (!forcar && Date.now() - S.linhas.t < VALIDADE && Object.keys(S.linhas.d).length) return desenhar();
   const lista = [...CRIPTO, ...ativosAcoes()];
   S.carregando = true; S.erro = ''; desenhar();
@@ -90,6 +102,13 @@ async function carregar(forcar) {
 const painel = document.getElementById('p-rsi');
 if (painel) {
   document.getElementById('rsiMestre').addEventListener('click', ev => {
+    const lin = ev.target.closest('.rsi-lin'); if (lin && !ev.target.closest('button')) {
+      const coin = lin.dataset.coin, acao = coin.startsWith('xyz:');
+      try { localStorage.setItem('lv-' + (acao ? 'acoes' : 'cripto') + '-sel', coin); } catch (e) {}   // se a Liquidez ainda não abriu, ela já nasce neste ativo
+      window.dispatchEvent(new CustomEvent('radar-abrir-ativo', { detail: { coin, mercado: acao ? 'acoes' : 'cripto' } }));
+      if (typeof window.show === 'function') window.show(acao ? 'a-aovivo' : 'aovivo');
+      return;
+    }
     const f = ev.target.closest('[data-f]'); if (f) { S.filtro = f.dataset.f; gravar('radar-rsi-filtro', S.filtro); return desenhar(); }
     if (ev.target.closest('[data-act="rsi-atualizar"]')) carregar(true);
   });

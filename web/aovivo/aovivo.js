@@ -3,6 +3,8 @@
  * Chance de tocar = método do coletor/chance.py (excursão das próximas 4 h/24 h ÷ amplitude média das 24 velas de 1 h
  * anteriores, 5.000 velas da Hyperliquid), calculada aqui no navegador para qualquer ativo, com conferência 70/30.
  * Fora de propósito: "qual lado é capturado primeiro" e "escada/cascata" — testados no radar em 11/11/2026 e rejeitados. */
+import { fraseRsi } from '../rsi/calc.js';
+import { medo, frase as fraseMedo } from '../contexto/medo.js';
 const HL = 'https://api.hyperliquid.xyz/info';
 const ATIVOS = { cripto: ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'],
   acoes: ['xyz:SP500', 'xyz:XYZ100', 'xyz:NVDA', 'xyz:TSLA', 'xyz:MU', 'xyz:SKHX', 'xyz:GOOGL', 'xyz:GOLD'] };
@@ -374,6 +376,8 @@ function criarApp(mercado, painel, raiz) {
     const lado = (o, isL) => { if (!o) return `<span class="muted">sem ${isL ? 'apoio' : 'venda'} relevante ${isL ? 'abaixo' : 'acima'}</span>`;
       const E = isL ? o.a[0] + zn.bw / 2 : o.a[0] - zn.bw / 2;
       return `<span style="color:${isL ? COR.long : COR.short}"><b>${isL ? 'Apoio' : 'Venda'}</b> ${fpx(E)} (${pc((E / cur - 1) * 100)}) · ${fm(o.a[1])}</span> <span class="muted">→ tocar em 24 h</span> <b>${pp(pTouch(k, E, cur, 24))}</b>`; };
+    const cd = cand[k] && cand[k]['1d'], fraseD = cd && cd.length > 20 ? fraseRsi([...cd.map(x => x.c).slice(0, cd[cd.length - 1].t + 864e5 > Date.now() ? -1 : undefined), cur], 'do dia') : '';
+    const ctxMedo = mercado === 'cripto' && MEDO ? fraseMedo(MEDO) : '';
     let rs = ''; TF.forEach(([lb, tf, ms]) => { const r = rsiAt(k, tf, ms, cur);
       rs += `<div class="lv-rt"><span class="small muted">${lb}</span>` + (r ? `<b class="num" style="color:${rsiCol(r.v)}">${f1(r.v)}<small style="color:${r.v >= r.prev ? COR.up : COR.dn}"> ${r.v >= r.prev ? '▲' : '▼'}</small></b>
         <div class="lv-gauge"><i style="left:${Math.min(100, Math.max(0, r.v))}%"></i></div>` : `<b class="muted">—</b><div class="lv-gauge"></div>`) + `</div>`; });
@@ -393,7 +397,7 @@ function criarApp(mercado, painel, raiz) {
         <b class="lv-zd" style="color:${c}">${pc(dd)}</b><span class="num">${fpx(o.a[0] - zn.bw / 2)} – ${fpx(o.a[0] + zn.bw / 2)}</span>
         <span class="small muted">${fm(o.a[1])}${o.a[2] != null ? ' · ' + o.a[2] + ' posições' : ''} · tocar 4 h <b>${pp(pTouch(k, E, cur, 4))}</b> · 24 h <b>${pp(pTouch(k, E, cur, 24))}</b></span></div>`;
     };
-    $('.lv-top').innerHTML = `<div class="lv-zcs">${zc(zn.ve, false)}${zc(zn.ap, true)}<div class="lv-zc lv-zrsi"><span class="small muted">RSI 14 · ao vivo</span><div class="lv-rsi">${rs}</div></div></div><div class="lv-lados">${(vac(zn.vL, true) + vac(zn.vS, false)).replace(/^<br>/, '')}</div>
+    $('.lv-top').innerHTML = `<div class="lv-zcs">${zc(zn.ve, false)}${zc(zn.ap, true)}<div class="lv-zc lv-zrsi"><span class="small muted">RSI 14 · ao vivo</span><div class="lv-rsi">${rs}</div>${fraseD ? `<span class="small muted">${fraseD}</span>` : ''}${ctxMedo ? `<span class="small muted">${ctxMedo}</span>` : ''}</div></div><div class="lv-lados">${(vac(zn.vL, true) + vac(zn.vS, false)).replace(/^<br>/, '')}</div>
       <p class="small muted" style="margin-top:4px">1m ${pc2(tr.c1)} · 5m ${pc2(tr.c5)} · 15m ${pc2(tr.c15)}${q ? ` · quem está apertado: <b style="color:${q.c}">${q.t}</b>` : ''}</p>
       ${al.length ? `<div class="lv-alerts">${al.slice(0, 3).map(([c, t]) => `<div class="chip ${c}">${t}</div>`).join('')}</div>` : ''}`;
   }
@@ -583,6 +587,11 @@ function criarApp(mercado, painel, raiz) {
     if (live[k]) carregarLivro(k, live[k]).then(render);
   }
   setSom(SOM);
+  let MEDO = null; medo().then(m => { MEDO = m; }); setInterval(() => medo().then(m => { MEDO = m; }), 3600e3);
+  // a tela RSI Mestre abre o ativo clicado aqui
+  window.addEventListener('radar-abrir-ativo', ev => { const d = ev.detail || {}; if (d.mercado !== mercado || !d.coin) return;
+    if (!lista.includes(d.coin)) lista = [d.coin, ...lista].slice(0, 12);
+    SEL = d.coin; ls('sel', SEL); hov = null; trocar(); });
   function vigiar() { const A = analyze(); if (!A) return; renderBar(A); calcAlertas(A); }   // sem desenhar nada: só confere os avisos
   // laços: com a aba aberta e a janela visível desenham tudo; com o aviso ligado continuam em segundo plano só vigiando
   let n = 0;
