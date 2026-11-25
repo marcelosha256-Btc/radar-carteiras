@@ -3,7 +3,7 @@
  * Chance de tocar = método do coletor/chance.py (excursão das próximas 4 h/24 h ÷ amplitude média das 24 velas de 1 h
  * anteriores, 5.000 velas da Hyperliquid), calculada aqui no navegador para qualquer ativo, com conferência 70/30.
  * Fora de propósito: "qual lado é capturado primeiro" e "escada/cascata" — testados no radar em 11/11/2026 e rejeitados. */
-import { fraseRsi, rsiSerie, regime as regimeRsi } from '../rsi/calc.js';
+import { fraseRsi, rsiSerie, regime as regimeRsi, rsiWilder, agrupar, faixa as faixaRsi, resumo as resumoRsi } from '../rsi/calc.js';
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
 import { niveisDia, niveisPeriodo, estrutura as estruturaVelas, leitura as leituraGrafico } from '../grafico/calc.js';
@@ -316,7 +316,7 @@ function criarApp(mercado, painel, raiz) {
         <div class="lv-gat"></div>
         <div class="lv-chart"><div class="lv-svg"></div><div class="lv-tip"></div></div><p class="small muted lv-foot"></p></div>
       <div class="box lv-graf"><div class="box-head"><h2>Gráfico · níveis do dia e estrutura</h2><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div><button class="lv-grsi small" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">ver no RSI Mestre ↗</button></div>
-        <p class="small lv-gleit"></p><div class="lv-gsvg"></div><p class="small muted lv-gnota"></p></div>
+        <p class="small lv-gleit"></p><div class="lv-grsil"></div><div class="lv-gsvg"></div><p class="small muted lv-gnota"></p></div>
       <div class="lv-cards"></div>
       <div class="box lv-full lv-liqr"></div>
     </div><div class="lv-side">
@@ -601,6 +601,14 @@ function criarApp(mercado, painel, raiz) {
     const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0].join('|'); if (sig === gSig) return; gSig = sig;
     const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
     if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
+    // linha do RSI Mestre: os cinco tempos, com as mesmas cores e o mesmo regime da aba RSI Mestre
+    const fc = a => (a || []).map(x => x.c), rv = { '15m': rsiWilder(fc(G.c15)), '1h': rsiWilder(fc(G.c1h)), '4h': rsiWilder(fc(G.c4h)), '1d': rsiWilder(fc(G.c1d)), '1w': rsiWilder(fc(agrupar(G.c1d || [], 7 * 864e5))) };
+    const rg = regimeRsi(rv['1d']), rr = resumoRsi(Object.values(rv));
+    const chip = (k, nome) => { const v = rv[k], f = faixaRsi(v), bg = f.lado < 0 ? 'var(--warn-soft)' : f.lado > 0 ? 'var(--down-soft)' : 'transparent', cor = f.lado < 0 ? 'var(--warn)' : f.lado > 0 ? 'var(--down)' : 'var(--fg)';
+      return `<button type="button" ${k !== '1w' ? `data-g="${k}"` : 'disabled'} title="${f.txt}" style="font:inherit;font-size:12.5px;padding:3px 9px;border-radius:6px;cursor:${k !== '1w' ? 'pointer' : 'default'};background:${bg};color:${cor};border:1px solid ${k === GTF ? 'var(--fg)' : 'var(--line)'};${f.nivel === 2 ? 'font-weight:800' : ''}"><span class="muted" style="font-weight:400">${nome}</span> <b class="num">${v == null ? '—' : v.toFixed(1).replace('.', ',')}</b></button>`; };
+    const corReg = rg.lado > 0 ? 'var(--up)' : rg.lado < 0 ? 'var(--warn)' : 'var(--muted)';
+    $('.lv-grsil').innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 4px"><span class="small muted">RSI 14</span>${[['15m', '15 min'], ['1h', '1H'], ['4h', '4H'], ['1d', 'Dia'], ['1w', 'Semana']].map(([k, n]) => chip(k, n)).join('')}` +
+      `<span style="font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid ${corReg};color:${corReg}">${rg.t}</span><span class="small muted">${rr.txt}</span></div>`;
     const rs = rsiSerie(todas.map(x => x.c)).slice(-c.length), rd = G.c1d && G.c1d.length > 20 ? rsiSerie(G.c1d.map(x => x.c)).pop() : null;
     const { svg, fora } = graficoSvg({ candles: c, niv, est, preco: cur, ms, perfil: perf, bolhas: bol, rsi: rs, regimeDia: rd != null ? { ...regimeRsi(rd), v: rd } : null });
     $('.lv-gsvg').innerHTML = svg;
@@ -629,7 +637,7 @@ function criarApp(mercado, painel, raiz) {
     const m = e.target.closest('.lv-mode button'); if (m) { setModo(m.dataset.m); return; }
     const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); return; }
     if (e.target.closest('.lv-grsi')) { if (typeof window.show === 'function') window.show('rsi'); window.scrollTo(0, 0); return; }
-    const g = e.target.closest('.lv-gtf button'); if (g) { GTF = g.dataset.g; ls('gtf', GTF); gSig = ''; renderGrafico(); }
+    const g = e.target.closest('.lv-gtf button, .lv-grsil button[data-g]'); if (g) { GTF = g.dataset.g; ls('gtf', GTF); gSig = ''; renderGrafico(); }
   });
   const svg = $('.lv-svg');
   svg.addEventListener('mousemove', e => { mx0 = e.clientX; my0 = e.clientY; const t = e.target.closest('[data-k]');
