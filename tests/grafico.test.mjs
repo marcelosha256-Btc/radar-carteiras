@@ -129,3 +129,14 @@ test('gráfico: bolhas de liquidação e perfil da liquidez em risco', () => {
   assert.equal((svg.match(/stroke-dasharray:2 2/g) || []).length, 1);  // contorno só onde a faixa mudou (99,5: 4 mi → 2 mi)
   assert.ok(!graficoSvg({ candles: c, ms: M15 }).svg.includes('liquidez em risco'));
 });
+
+test('gráfico: painel do RSI alinhado e regime do diário', () => {
+  const c = Array.from({ length: 30 }, (_, i) => vela(i * M15, 100, 102, 98, 101));
+  const rsi = c.map((_, i) => i < 14 ? null : 40 + i);
+  const { svg } = graficoSvg({ candles: c, ms: M15, rsi, regimeDia: { t: 'QUEDA', lado: -1, v: 41.2 } });
+  assert.match(svg, /viewBox="0 0 960 564"/);           // 440 + 124 do painel
+  assert.match(svg, /RSI 14 · 69,0/);
+  assert.match(svg, /Diário: QUEDA \(RSI 41\)/);
+  assert.equal((svg.match(/<polyline/g) || []).length, 1);
+  assert.match(graficoSvg({ candles: c, ms: M15 }).svg, /viewBox="0 0 960 440"/);
+});

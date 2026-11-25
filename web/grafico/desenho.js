@@ -15,7 +15,7 @@ const diaHora = t => new Date(t).toLocaleString('pt-BR', { day: '2-digit', month
 /** opts: { candles, niv (niveisDia), est (estrutura), preco, ms, W, H, perfil, bolhas } → { svg, fora }
  *  perfil = { bw, L: [[preço, US$, US$ da foto anterior]], S: [...], hora } (liquidez em risco por faixa de preço, Coinversa)
  *  bolhas = [{ t, px, usd, side }] (liquidações reais) */
-export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null }) {
+export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null, rsi = null, regimeDia = null }) {
   const c = candles; if (!c || c.length < 5) return { svg: '', fora: [] };
   const L = 8, R = 74, T = 14, B = 26, x1 = W - R, y1 = H - B;
   let lo = Math.min(...c.map(x => x.l)), hi = Math.max(...c.map(x => x.h)); const r0 = hi - lo || 1;
@@ -25,7 +25,8 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   dentro.forEach(n => { lo = Math.min(lo, n.preco); hi = Math.max(hi, n.preco); });
   const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
   const Y = p => T + (hi - p) / (hi - lo) * (y1 - T), xc = perfil && perfil.bw ? x1 - 128 : x1, step = (xc - L) / c.length, X = i => L + (i + 0.5) * step, bw = Math.max(1.5, Math.min(12, step * 0.64));
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Gráfico de velas com níveis do dia e estrutura">`;
+  const HR = rsi ? 124 : 0;
+  let s = `<svg viewBox="0 0 ${W} ${H + HR}" width="100%" role="img" aria-label="Gráfico de velas com níveis do dia e estrutura${rsi ? ' e RSI' : ''}">`;
   // grade e escala de preço
   for (let g = 0; g <= 5; g++) { const p = lo + (hi - lo) * g / 5, y = Y(p);
     s += `<line x1="${L}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:var(--line)"/><text x="${x1 + 6}" y="${(y + 4).toFixed(1)}" style="fill:var(--muted);font-size:11px">${fmtPreco(p)}</text>`; }
@@ -108,5 +109,17 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   if (preco) { const y = Y(preco);
     s += `<line x1="${L}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:var(--fg);stroke-opacity:.55;stroke-dasharray:3 3"/>`
       + `<rect x="${x1 + 1}" y="${(y - 9).toFixed(1)}" width="${R - 3}" height="18" rx="3" style="fill:var(--fg)"/><text x="${x1 + 5}" y="${(y + 4).toFixed(1)}" style="fill:var(--surface);font-size:11px;font-weight:700">${fmtPreco(preco)}</text>`; }
+  // painel do RSI(14), alinhado vela a vela com o gráfico de cima
+  if (rsi) {
+    const r0 = H + 8, r1 = H + HR - 6, YR = v => r1 - v / 100 * (r1 - r0), xe = xc;
+    s += `<rect x="${L}" y="${YR(100).toFixed(1)}" width="${(xe - L).toFixed(1)}" height="${(YR(70) - YR(100)).toFixed(1)}" style="fill:var(--down);opacity:.07"/>`
+      + `<rect x="${L}" y="${YR(30).toFixed(1)}" width="${(xe - L).toFixed(1)}" height="${(YR(0) - YR(30)).toFixed(1)}" style="fill:var(--up);opacity:.07"/>`;
+    for (const v of [30, 50, 70]) s += `<line x1="${L}" x2="${xe}" y1="${YR(v).toFixed(1)}" y2="${YR(v).toFixed(1)}" style="stroke:var(--line);${v === 50 ? '' : 'stroke-dasharray:4 4'}"/><text x="${xe + 6}" y="${(YR(v) + 4).toFixed(1)}" style="fill:var(--muted);font-size:10.5px">${v}</text>`;
+    const pts = rsi.map((v, i) => v == null ? null : X(i).toFixed(1) + ',' + YR(v).toFixed(1)).filter(Boolean);
+    if (pts.length > 1) s += `<polyline points="${pts.join(' ')}" fill="none" style="stroke:var(--accent, #7f77dd);stroke-width:1.6"/>`;
+    const ult = [...rsi].reverse().find(v => v != null);
+    s += `<text x="${L + 4}" y="${r0 + 11}" style="${HALO}fill:var(--fg);font-size:11px;font-weight:700">RSI 14${ult != null ? ' · ' + ult.toFixed(1).replace('.', ',') : ''}</text>`;
+    if (regimeDia) s += `<text x="${xe - 4}" y="${r0 + 11}" text-anchor="end" style="${HALO}fill:${regimeDia.lado > 0 ? 'var(--up)' : regimeDia.lado < 0 ? 'var(--down)' : 'var(--muted)'};font-size:11px;font-weight:700">Diário: ${esc(regimeDia.t)}${regimeDia.v != null ? ' (RSI ' + regimeDia.v.toFixed(0) + ')' : ''}</text>`;
+  }
   return { svg: s + rot.join('') + '</svg>', fora };
 }

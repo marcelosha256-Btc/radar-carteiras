@@ -3,7 +3,7 @@
  * Chance de tocar = método do coletor/chance.py (excursão das próximas 4 h/24 h ÷ amplitude média das 24 velas de 1 h
  * anteriores, 5.000 velas da Hyperliquid), calculada aqui no navegador para qualquer ativo, com conferência 70/30.
  * Fora de propósito: "qual lado é capturado primeiro" e "escada/cascata" — testados no radar em 11/11/2026 e rejeitados. */
-import { fraseRsi } from '../rsi/calc.js';
+import { fraseRsi, rsiSerie, regime as regimeRsi } from '../rsi/calc.js';
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
 import { niveisDia, niveisPeriodo, estrutura as estruturaVelas, leitura as leituraGrafico } from '../grafico/calc.js';
@@ -315,7 +315,7 @@ function criarApp(mercado, painel, raiz) {
       <div class="box"><div class="box-head"><h2>Mapa de liquidações</h2><div class="seg lv-zoom"><button data-z="1">±15%</button><button data-z="0.5">±7,5%</button><button data-z="0.2">±3%</button></div></div>
         <div class="lv-gat"></div>
         <div class="lv-chart"><div class="lv-svg"></div><div class="lv-tip"></div></div><p class="small muted lv-foot"></p></div>
-      <div class="box lv-graf"><div class="box-head"><h2>Gráfico · níveis do dia e estrutura</h2><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div></div>
+      <div class="box lv-graf"><div class="box-head"><h2>Gráfico · níveis do dia e estrutura</h2><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div><button class="lv-grsi small" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">ver no RSI Mestre ↗</button></div>
         <p class="small lv-gleit"></p><div class="lv-gsvg"></div><p class="small muted lv-gnota"></p></div>
       <div class="lv-cards"></div>
       <div class="box lv-full lv-liqr"></div>
@@ -601,7 +601,8 @@ function criarApp(mercado, painel, raiz) {
     const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0].join('|'); if (sig === gSig) return; gSig = sig;
     const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
     if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
-    const { svg, fora } = graficoSvg({ candles: c, niv, est, preco: cur, ms, perfil: perf, bolhas: bol });
+    const rs = rsiSerie(todas.map(x => x.c)).slice(-c.length), rd = G.c1d && G.c1d.length > 20 ? rsiSerie(G.c1d.map(x => x.c)).pop() : null;
+    const { svg, fora } = graficoSvg({ candles: c, niv, est, preco: cur, ms, perfil: perf, bolhas: bol, rsi: rs, regimeDia: rd != null ? { ...regimeRsi(rd), v: rd } : null });
     $('.lv-gsvg').innerHTML = svg;
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
     $('.lv-gnota').textContent = (curto ? `Bolhas = liquidações reais (laranja = long liquidado, azul = short liquidado; tamanho = valor; passe o mouse para ver), guardadas neste navegador desde que a página abre (${bol ? bol.length : 0} até agora; a fonte entrega só os últimos ~200 registros, então numa rajada cobre poucos segundos). Contorno cheio = preço e lado exatos; tracejado = estimados pelo movimento do minuto. Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ` + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') : '') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
@@ -627,6 +628,7 @@ function criarApp(mercado, painel, raiz) {
     if (sm) { const on = !SOM; setSom(on); if (on) { bip(); try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (er) {} } return; }
     const m = e.target.closest('.lv-mode button'); if (m) { setModo(m.dataset.m); return; }
     const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); return; }
+    if (e.target.closest('.lv-grsi')) { if (typeof window.show === 'function') window.show('rsi'); window.scrollTo(0, 0); return; }
     const g = e.target.closest('.lv-gtf button'); if (g) { GTF = g.dataset.g; ls('gtf', GTF); gSig = ''; renderGrafico(); }
   });
   const svg = $('.lv-svg');
