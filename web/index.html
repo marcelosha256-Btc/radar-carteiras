@@ -407,6 +407,11 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
   <!-- AÇÕES: BALANÇOS E EVENTOS -->
   <section class="panel" id="p-a-eventos" role="tabpanel" hidden>
     <div class="kpis" id="aEvKpis"></div>
+    <div class="box" id="aEvHoje" hidden></div>
+    <div class="box">
+      <div class="box-head"><h2>Agenda macro dos EUA · próximos 10 dias</h2><p>Vale para ações <b>e cripto</b>: inflação, emprego, juros e PIB mexem em tudo ao mesmo tempo. Horários no seu fuso.</p></div>
+      <div class="tbl-wrap"><table id="aMacro"></table></div>
+    </div>
     <div class="box" id="aAgoraBox">
       <div class="box-head"><h2>Contrato × último fechamento da bolsa</h2><span class="chip" id="aAgoraChip"></span></div>
       <p class="small muted" id="aAgoraNota"></p>
@@ -416,10 +421,6 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
       <div class="box-head"><h2>Próximos balanços e reação histórica</h2><p>Reação = do fechamento do pregão anterior ao anúncio até o fechamento do pregão seguinte (2 pregões), nos últimos 10 anos. "Vezes o normal" compara com o movimento comum de 2 pregões da mesma ação.</p></div>
       <div class="tbl-wrap"><table id="aBalancos"></table></div>
       <p class="small muted" id="aBalNota"></p>
-    </div>
-    <div class="box">
-      <div class="box-head"><h2>Agenda macro dos EUA · próximos 10 dias</h2><p>Os dados que mexem em tudo ao mesmo tempo: inflação, emprego, juros e PIB. Horários no seu fuso.</p></div>
-      <div class="tbl-wrap"><table id="aMacro"></table></div>
     </div>
     <div class="box">
       <div class="box-head"><h2>Teste: o contrato no fim de semana antecipa a abertura de segunda?</h2><span class="chip warn">em teste</span></div>
@@ -1320,6 +1321,21 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
       const futuros = linhas.filter(l => l.p && diasAte(l.p.data) >= 0);
       const prox = futuros[0];
       const altos = (E.macro || []).filter(e => e.impacto === 'alto' && (e.t || 0) >= Date.now() - 36e5);
+      // resumo do passo 2 do roteiro: o que pode mexer no mercado nas próximas 36 h (macro vale para cripto também) + balanços da semana
+      {
+        const agora = Date.now(), M = (E.macro || []).filter(e => e.t && e.t >= agora - 30 * 60000 && e.t <= agora + 36 * 36e5 && (e.impacto === 'alto' || e.impacto === 'médio'));
+        const fortes = M.filter(e => e.impacto === 'alto'), semana = futuros.filter(l => diasAte(l.p.data) <= 7);
+        const quandoRel = ms => ms <= 0 ? 'andamento' : ms < 36e5 ? Math.round(ms / 60000) + ' min' : Math.round(ms / 36e5) + ' h';
+        const hm = t => new Date(t).toLocaleDateString('pt-BR', { weekday: 'short' }) + ' ' + new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const ver = fortes.length ? `<span class="chip down" style="white-space:normal;border-radius:8px">Notícia forte em ${quandoRel(fortes[0].t - agora)} (${fortes[0].nome}, ${hm(fortes[0].t)}): não entre de 15 min antes até 30 min depois — em ações <b>e em cripto</b>.</span>`
+          : `<span class="chip up">Nenhum dado de alto impacto nas próximas 36 h</span>`;
+        $('#aEvHoje').hidden = false;
+        $('#aEvHoje').innerHTML = `<div class="box-head"><h2>Antes de operar · ações e cripto</h2></div><p style="margin:0 0 8px">${ver}</p>
+          <div class="small" style="display:flex;flex-wrap:wrap;gap:4px 18px">
+            <span><b>Macro (36 h):</b> ${M.length ? M.map(e => `${e.impacto === 'alto' ? '<b>' : ''}${hm(e.t)} ${e.nome}${e.impacto === 'alto' ? '</b>' : ''}`).join(' · ') : '<span class="muted">nada de impacto médio ou alto</span>'}</span>
+            <span><b>Balanços em 7 dias:</b> ${semana.length ? semana.map(l => `<b>${l.a.tk}</b> ${dataBR(l.p.data)}${l.p.estimado ? ' (estimada)' : ''}`).join(' · ') + ' <span class="muted">— fique fora desses papéis até sair</span>' : '<span class="muted">nenhum dos mercados acompanhados</span>'}</span>
+          </div>`;
+      }
       $('#aEvKpis').innerHTML =
         kpi('Próximo balanço', prox ? prox.a.tk : '—', prox ? `${dataBR(prox.p.data)} · ${emDias(diasAte(prox.p.data))}${prox.p.estimado ? ' · data estimada' : ''}` : 'nenhum nos próximos 60 dias') +
         kpi('Balanços em 14 dias', futuros.filter(l => diasAte(l.p.data) <= 14 && !l.p.estimado).length, `entre as ${linhas.length} empresas dos 20 mercados`) +
@@ -2948,6 +2964,7 @@ conectarLiquidacoes();
 <script type="module" src="backtest/tela.js"></script>
 <script type="module" src="aovivo/aovivo.js"></script>
 <script type="module" src="contexto/leiamais.js"></script>
+<script type="module" src="contexto/roteiro.js"></script>
 <script type="module" src="diario/tela.js"></script>
 <script type="module" src="risco/tela.js"></script>
 <script type="module" src="posicoes/tela.js"></script>

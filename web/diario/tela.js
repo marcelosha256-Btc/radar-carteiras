@@ -234,6 +234,20 @@ function ligar(root, modo) {
 let iniciou = false;
 function abrir() { if (!iniciou) { iniciou = true; desenhar(); carregar(); } else if (S.lista) desenhar(); }
 document.querySelectorAll('.tab[data-tab="trades"]').forEach(b => b.addEventListener('click', abrir));
+/* "levar este plano ao diário" (aba Gráfico): preenche o formulário; você revisa, completa risco/quantidade e registra depois de entrar */
+window.addEventListener('radar-levar-diario', e => {
+  abrir();
+  const p = e.detail, root = document.getElementById(MODOS.tudo); if (!p || !root) return;
+  const set = (k, v) => { const i = root.querySelector(`[data-form] [data-k="${k}"]`); if (i && v != null && v !== '') i.value = v; };
+  const n = v => v == null ? null : parseFloat((+v).toPrecision(6));
+  const sel = root.querySelector('[data-form] [data-k="ativo"]'), tem = sel && [...sel.options].some(o => o.value === p.ativo);
+  if (tem) set('ativo', p.ativo);
+  set('lado', p.lado); if (TFS.some(([v]) => v === p.tf)) set('tf', p.tf);
+  set('entrada', n(p.entrada)); set('stop', n(p.stop)); set('alvo1', n(p.alvo1)); set('setup', p.setup);
+  const msg = root.querySelector('[data-msg]');
+  if (msg) msg.textContent = (tem ? '' : `Escolha o ativo (${p.ativo} não está na lista). `) + 'Plano do Gráfico preenchido. Ajuste a entrada ao preço real, complete risco e quantidade (ou "preencher com a calculadora") e registre só depois de entrar.';
+  const f = root.querySelector('[data-form]'); if (f) f.scrollIntoView({ block: 'center' });
+});
 window.addEventListener('hashchange', () => { if (/^#(a-)?trades$/.test(location.hash)) abrir(); });
 setTimeout(() => { const p = document.querySelector('.panel:not([hidden])'); if (p && /^p-(a-)?trades$/.test(p.id)) abrir(); }, 600);
 setInterval(() => {   // atualiza o R ao vivo das abertas, sem atrapalhar quem está digitando
