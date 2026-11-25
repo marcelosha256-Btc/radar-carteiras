@@ -25,3 +25,54 @@ test('faixa e resumo', () => {
   assert.equal(r.n, 2); assert.equal(r.lado, -1); assert.ok(r.txt.includes('sobrevenda') && r.txt.includes('1 extremo'));
   assert.equal(resumo([25, 75]).lado, 0);
 });
+
+import { mediaSimples, regime, rsiSerie, fraseRsi } from '../web/rsi/calc.js';
+import { faixaMedo, frase as fraseMedo } from '../web/contexto/medo.js';
+
+test('mediaSimples: últimos n fechamentos; null sem histórico', () => {
+  assert.equal(mediaSimples([1, 2, 3, 4], 2), 3.5);
+  assert.equal(mediaSimples([1, 2], 3), null);
+});
+test('regime pelo RSI do dia', () => {
+  assert.equal(regime(20).t, 'CAPITULAÇÃO'); assert.equal(regime(30).t, 'CAPITULAÇÃO');
+  assert.equal(regime(34.3).t, 'QUEDA FORTE'); assert.equal(regime(37).t, 'QUEDA');
+  assert.equal(regime(50).t, 'NEUTRO'); assert.equal(regime(72).t, 'EUFORIA'); assert.equal(regime(null).t, '—');
+});
+test('rsiSerie termina igual ao rsiWilder', () => {
+  const c = Array.from({ length: 60 }, (_, i) => 100 + Math.sin(i / 3) * 5 + i * 0.1);
+  assert.ok(Math.abs(rsiSerie(c).at(-1) - rsiWilder(c)) < 1e-9);
+  assert.equal(rsiSerie(c)[5], null);
+});
+test('fraseRsi: foi a sobrevenda e saiu / segue', () => {
+  const cai = Array.from({ length: 30 }, (_, i) => 200 - i * 3);          // queda contínua: RSI muito baixo
+  assert.match(fraseRsi(cai), /sobrevenda/);
+  const volta = cai.concat([cai.at(-1) + 12, cai.at(-1) + 24, cai.at(-1) + 36, cai.at(-1) + 48]);
+  assert.match(fraseRsi(volta), /saiu da sobrevenda/);
+  assert.match(fraseRsi(volta), /Sozinho não prevê direção/);
+  assert.equal(fraseRsi(Array.from({ length: 30 }, (_, i) => 100 + (i % 2))), '');
+});
+test('medo e ganância: faixa e frase', () => {
+  assert.equal(faixaMedo(8).txt, 'medo extremo (≤10)'); assert.equal(faixaMedo(50).txt, 'neutro');
+  assert.match(fraseMedo({ v: 13, sem: 11 }), /subiu de 11/);
+  assert.match(fraseMedo({ v: 8, sem: 8 }), /contexto, não gatilho/);
+  assert.equal(fraseMedo(null), '');
+});
+
+import { faixaVix, fraseVix } from '../web/contexto/vix.js';
+test('VIX: faixas e frase', () => {
+  assert.equal(faixaVix(12).txt, 'calmo (<15)'); assert.equal(faixaVix(26.4).txt, 'estresse (25 a 35)'); assert.equal(faixaVix(40).txt, 'pânico (≥35)');
+  assert.match(fraseVix({ v: 26.4, ont: 26.6, sem: 20 }), /26,4 · estresse.*-0,2 no dia.*era 20,0 há 5 pregões.*não gatilho/);
+  assert.equal(fraseVix(null), '');
+});
+
+import { angulo, faixaDe, medidor } from '../web/contexto/medidor.js';
+import { FAIXAS_MEDO, medidorMedo } from '../web/contexto/medo.js';
+import { FAIXAS_VIX, medidorVix } from '../web/contexto/vix.js';
+test('medidor: ângulo, faixa e HTML', () => {
+  assert.ok(Math.abs(angulo(0, 0, 100) - Math.PI) < 1e-9); assert.ok(Math.abs(angulo(100, 0, 100)) < 1e-9); assert.ok(Math.abs(angulo(50, 0, 100) - Math.PI / 2) < 1e-9);
+  assert.equal(faixaDe(24, FAIXAS_MEDO).rot, 'Medo extremo'); assert.equal(faixaDe(25, FAIXAS_MEDO).rot, 'Medo'); assert.equal(faixaDe(100, FAIXAS_MEDO).rot, 'Ganância extrema');
+  assert.equal(faixaDe(26.4, FAIXAS_VIX).rot, 'Estresse'); assert.equal(faixaDe(60, FAIXAS_VIX).rot, 'Pânico'); assert.equal(faixaDe(null, FAIXAS_VIX), null);
+  const h = medidor(medidorMedo({ v: 13, ont: 11, sem: 11, mes: 50, ano: 59 }));
+  assert.match(h, /Medo extremo/); assert.match(h, /1 mês atrás/); assert.match(h, />50</); assert.match(h, /<svg/);
+  assert.match(medidor(medidorVix({ v: 26.4, ont: 26.6, sem: 25.5, mes: null, ano: null })), /Estresse/);
+});

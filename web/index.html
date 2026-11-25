@@ -347,7 +347,7 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
   </div>
 
   <!-- HOJE: uma tela só para ações e cripto (ações primeiro) -->
-  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="riscoCripto" style="margin-bottom:16px"></div><div class="hoje" id="posCripto" style="margin-bottom:16px"></div><div class="hoje" id="manhaAcoes" style="margin-bottom:16px"></div><div class="hoje" id="manhaCripto" style="margin-bottom:16px"></div><div class="hoje" id="mercUnico" style="margin-bottom:16px"></div><div class="hoje" id="hojeUnico"><p class="muted">Aguardando os dados do painel…</p></div></section>
+  <section class="panel" id="p-hoje" role="tabpanel" hidden><div class="hoje" id="medosHoje" style="margin-bottom:16px"></div><div class="hoje" id="riscoCripto" style="margin-bottom:16px"></div><div class="hoje" id="posCripto" style="margin-bottom:16px"></div><div class="hoje" id="manhaAcoes" style="margin-bottom:16px"></div><div class="hoje" id="manhaCripto" style="margin-bottom:16px"></div><div class="hoje" id="mercUnico" style="margin-bottom:16px"></div><div class="hoje" id="hojeUnico"><p class="muted">Aguardando os dados do painel…</p></div></section>
 
   <!-- MEU DIÁRIO DE OPERAÇÕES (em R), ações e cripto juntos -->
   <section class="panel" id="p-trades" role="tabpanel" hidden><div class="hoje" id="diarioUnico"></div></section>
@@ -2936,4 +2936,5 @@ conectarLiquidacoes();
 <script type="module" src="posicoes/tela.js"></script>
 <script type="module" src="mercado/tela.js"></script>
 <script type="module" src="rsi/tela.js"></script>
+<script type="module" src="contexto/painel.js"></script>
 <script type="module" src="manha/tela.js"></script>
