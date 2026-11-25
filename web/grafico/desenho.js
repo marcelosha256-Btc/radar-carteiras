@@ -15,7 +15,7 @@ const diaHora = t => new Date(t).toLocaleString('pt-BR', { day: '2-digit', month
 /** opts: { candles, niv (niveisDia), est (estrutura), preco, ms, W, H, perfil, bolhas } → { svg, fora }
  *  perfil = { bw, L: [[preço, US$, US$ da foto anterior]], S: [...], hora } (liquidez em risco por faixa de preço, Coinversa)
  *  bolhas = [{ t, px, usd, side }] (liquidações reais) */
-export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null, rsi = null, regimeDia = null, plano = null }) {
+export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null, rsi = null, regimeDia = null, plano = null, trades = null }) {
   const c = candles; if (!c || c.length < 5) return { svg: '', fora: [] };
   const L = 8, R = 74, T = 14, B = 26, x1 = W - R, y1 = H - B;
   let lo = Math.min(...c.map(x => x.l)), hi = Math.max(...c.map(x => x.h)); const r0 = hi - lo || 1;
@@ -117,6 +117,23 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
       rot.push(`<text x="${xc - 4}" y="${(y + (yr > ye ? (fora ? -4 : 13) : (fora ? 12 : -4))).toFixed(1)}" text-anchor="end" style="${HALO}fill:${col};font-size:11px;font-weight:800">${nome} ${fmtPreco(p)} (${pct(p)})${seta}${fora ? ' fora da vista' : ''}</text>`);
     }
     rot.push(`<text x="${xi + 4}" y="${(ye - 4).toFixed(1)}" style="${HALO}fill:var(--fg);font-size:11px;font-weight:700">plano ${esc(plano.lado || '')}${plano.rr != null ? ' · R:R ' + plano.rr.toFixed(1).replace('.', ',') : ''}</text>`);
+  }
+  // meus trades do diário: ▲ compra / ▼ venda na entrada, ✕ na saída, ligados por uma linha (verde = ganhou, vermelho = perdeu); aberto vai até a borda
+  if (trades && trades.length) {
+    const t0 = c[0].t, tf = c[c.length - 1].t + ms, idx = t => Math.max(0, Math.min(c.length - 1, Math.floor((t - t0) / ms)));
+    for (const t of trades) {
+      const fim = t.fechamento || null; if (t.abertura >= tf || (fim && fim < t0)) continue;
+      const compra = t.lado === 'compra', res = t.r != null ? t.r : t.resultado_usd, col = fim && t.saida ? (res > 0 ? 'var(--up)' : res < 0 ? 'var(--down)' : 'var(--muted)') : 'var(--accent, #7f77dd)';
+      const xa = X(idx(t.abertura)), ya = Y(t.entrada), xb = fim && t.saida ? X(idx(fim)) : xc, yb = fim && t.saida ? Y(t.saida) : ya, papel = t.tipo === 'papel';
+      const r = t.r != null ? ` · ${t.r >= 0 ? '+' : ''}${t.r.toFixed(2).replace('.', ',')}R` : '', usd = t.resultado_usd != null ? ` · US$ ${t.resultado_usd.toFixed(2).replace('.', ',')}` : '';
+      const tip = `${compra ? 'Compra' : 'Venda'} · ${papel ? 'papel' : 'real'} · entrada ${fmtPreco(t.entrada)}${t.saida ? ' → saída ' + fmtPreco(t.saida) : ' (aberto)'}${t.stop ? ' · stop ' + fmtPreco(t.stop) : ''}${r}${usd}`;
+      s += `<line x1="${xa.toFixed(1)}" y1="${ya.toFixed(1)}" x2="${xb.toFixed(1)}" y2="${yb.toFixed(1)}" style="stroke:${col};stroke-width:2;${papel ? 'stroke-dasharray:5 3;' : ''}opacity:.9"/>`;
+      if (!fim && t.stop) { const ys = Y(t.stop); if (ys >= T && ys <= y1) s += `<line x1="${xa.toFixed(1)}" x2="${xc}" y1="${ys.toFixed(1)}" y2="${ys.toFixed(1)}" style="stroke:var(--down);stroke-width:1.2;stroke-dasharray:3 3"/>`; }
+      const tri = compra ? `${xa - 6},${ya + 9} ${xa + 6},${ya + 9} ${xa},${ya + 1}` : `${xa - 6},${ya - 9} ${xa + 6},${ya - 9} ${xa},${ya - 1}`;
+      s += `<polygon points="${tri}" style="fill:${compra ? 'var(--up)' : 'var(--down)'};stroke:var(--surface);stroke-width:1"><title>${esc(tip)}</title></polygon>`;
+      if (fim && t.saida) s += `<path d="M${xb - 4},${yb - 4}L${xb + 4},${yb + 4}M${xb - 4},${yb + 4}L${xb + 4},${yb - 4}" style="stroke:${col};stroke-width:2.2"><title>${esc(tip)}</title></path>`;
+      rot.push(`<text x="${(xa + 8).toFixed(1)}" y="${(compra ? ya + 18 : ya - 12).toFixed(1)}" style="${HALO}fill:${col};font-size:10.5px;font-weight:700">${papel ? 'papel' : 'real'}${r}</text>`);
+    }
   }
   // preço atual
   if (preco) { const y = Y(preco);

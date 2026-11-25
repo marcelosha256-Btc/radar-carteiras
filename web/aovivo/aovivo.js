@@ -301,13 +301,20 @@ function avaliar(k, A, modo, lado) {
 
 /* histórico local para o gráfico (compartilhado entre as abas): liquidações reais vistas e a foto anterior do mapa */
 const liqHist = {}, mapaPrev = {};
+/* trades do Meu diário (mesma senha), para marcar no gráfico; relidos no máximo a cada 60 s */
+const diario = { t: 0, trades: [] };
+async function carregarDiario() {
+  if (!senha() || Date.now() - diario.t < 60e3) return; diario.t = Date.now();
+  try { const r = await fetch('api/trades', { headers: { 'x-senha': senha() } }); if (r.ok) diario.trades = (await r.json()).trades || []; } catch (e) {}
+}
+const mesmoAtivo = (k, a) => !!a && (a === k || 'xyz:' + a === k || k.replace(/^xyz:/, '') === String(a).replace(/^xyz:/, ''));
 const GRAF_HTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span><span class="small muted lv-st"></span></div>
     <div class="lv-tabs"></div>
     <div class="lv-erro" hidden></div>
     <div class="box lv-graf"><div class="box-head" style="flex-wrap:wrap;gap:8px"><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div>
       <div class="lv-gcam" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div><span style="flex:1"></span><button class="lv-grsi" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">ver no RSI Mestre ↗</button></div>
       <p class="small lv-gleit"></p><div class="lv-grsil"></div><div class="lv-gplano small"></div><div class="lv-gsvg"></div><p class="small muted lv-gnota"></p></div>`;
-const CAMADAS = [['niv', 'Níveis'], ['est', 'Estrutura'], ['liq', 'Liquidez'], ['bol', 'Liquidações'], ['rsi', 'RSI'], ['plano', 'Meu plano']];
+const CAMADAS = [['niv', 'Níveis'], ['est', 'Estrutura'], ['liq', 'Liquidez'], ['bol', 'Liquidações'], ['rsi', 'RSI'], ['plano', 'Meu plano'], ['trades', 'Meus trades']];
 
 /* ---------- uma instância por mercado (Cripto / Ações) e por vista (Liquidez ao vivo / Gráfico) ---------- */
 function criarApp(mercado, painel, raiz, vista = 'liq') {
@@ -615,8 +622,8 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     if (!G || !cur) { if (gSig !== 'x') { $('.lv-gsvg').innerHTML = '<p class="muted small">Buscando as velas…</p>'; $('.lv-gleit').textContent = ''; gSig = 'x'; } return; }
     const ms = { '15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5 }[GTF] || 9e5, todas = { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] || G.c15, c = todas.slice(-({ '15m': 120, '1h': 96, '4h': 120, '1d': 120 }[GTF] || 120));
     const curto = ms < 144e5, bol = curto ? guardarLiqs(k) : null, perf = curto ? perfilDe(k) : null;
-    const pl = vista === 'graf' && CAM.plano ? planoDe() : null;
-    const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0, JSON.stringify(CAM), pl ? pl.stop + '/' + pl.alvo + '/' + pl.st : ''].join('|'); if (sig === gSig) return; gSig = sig;
+    const pl = vista === 'graf' && CAM.plano ? planoDe() : null, tds = vista === 'graf' && CAM.trades ? diario.trades.filter(t => mesmoAtivo(k, t.ativo) && t.abertura && t.entrada) : null;
+    const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0, JSON.stringify(CAM), pl ? pl.stop + '/' + pl.alvo + '/' + pl.st : '', diario.t, tds ? tds.length : 0].join('|'); if (sig === gSig) return; gSig = sig;
     const cam = $('.lv-gcam');
     if (cam) cam.innerHTML = '<span class="small muted">Mostrar:</span>' + CAMADAS.map(([c, n]) => `<button type="button" class="chip" data-c="${c}" aria-pressed="${!!CAM[c]}" style="cursor:pointer;font:inherit;font-size:12px;border:1px solid ${CAM[c] ? 'var(--accent)' : 'var(--line)'};background:${CAM[c] ? 'var(--accent-soft)' : 'none'};color:var(--fg)">${CAM[c] ? '✓ ' : ''}${n}</button>`).join('');
     const pe = $('.lv-gplano');
@@ -634,7 +641,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
       `<span style="font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid ${corReg};color:${corReg}">${rg.t}</span><span class="small muted">${rr.txt}</span></div>`;
     const rs = rsiSerie(todas.map(x => x.c)).slice(-c.length), rd = G.c1d && G.c1d.length > 20 ? rsiSerie(G.c1d.map(x => x.c)).pop() : null;
     const { svg, fora } = graficoSvg({ candles: c, niv: CAM.niv ? niv : null, est: CAM.est ? est : null, preco: cur, ms, perfil: CAM.liq ? perf : null, bolhas: CAM.bol ? bol : null,
-      rsi: CAM.rsi ? rs : null, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl });
+      rsi: CAM.rsi ? rs : null, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl, trades: tds });
     $('.lv-gsvg').innerHTML = svg;
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
     $('.lv-gnota').textContent = (curto ? `Bolhas = liquidações reais (laranja = long liquidado, azul = short liquidado; tamanho = valor; passe o mouse para ver), guardadas neste navegador desde que a página abre (${bol ? bol.length : 0} até agora; a fonte entrega só os últimos ~200 registros, então numa rajada cobre poucos segundos). Contorno cheio = preço e lado exatos; tracejado = estimados pelo movimento do minuto. Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ` + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') : '') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
@@ -678,6 +685,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     render();
     buscar('liqs', k, liqs).then(render); buscar('press', k, press).then(render);
     carregarGrafico(k).then(render);
+    if (vista === 'graf') carregarDiario().then(render);
     carregarCandles(k, ['15m', '4h']).then(() => { render(); carregarCandles(k, ['1d', '1w']).then(render); });
     if (live[k]) carregarLivro(k, live[k]).then(render);
   }
@@ -700,6 +708,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     if (n % 120 === 0) buscar('press', k, press);
     if (n % 180 === 0) carregarCandles(k, ['15m']);
     if (n % 60 === 0) carregarGrafico(k);
+    if (vista === 'graf' && n % 60 === 0) carregarDiario();
     if (n % 3 === 0 && live[k]) carregarLivro(k, live[k]);
     if (vis) render(); else vigiar();
   }, 1000);

@@ -149,3 +149,16 @@ test('gráfico: plano (entrada, stop e alvo) desenhado e sempre à vista', () =>
   const perto = graficoSvg({ candles: c, ms: M15, preco: 100, plano: { lado: 'venda', entrada: 100, stop: 103, alvo: 96.5 } }).svg;
   assert.ok(!perto.includes('fora da vista')); assert.match(perto, />96,[0-9]{2}</);   // perto: a escala inclui o alvo
 });
+
+test('gráfico: trades do diário (entrada, saída, aberto e fora da janela)', () => {
+  const c = Array.from({ length: 30 }, (_, i) => vela(i * M15, 100, 102, 98, 101));
+  const trades = [
+    { lado: 'compra', tipo: 'papel', entrada: 99, saida: 101.5, stop: 98, abertura: 3 * M15, fechamento: 10 * M15, r: 2.5 },
+    { lado: 'venda', tipo: 'real', entrada: 101, stop: 102, abertura: 20 * M15 },
+    { lado: 'compra', tipo: 'real', entrada: 99, saida: 98, abertura: -9 * M15, fechamento: -5 * M15, r: -1 } ];
+  const { svg } = graficoSvg({ candles: c, ms: M15, trades });
+  assert.equal((svg.match(/<polygon/g) || []).length, 2);              // o trade antes das velas fica de fora
+  assert.match(svg, /Compra · papel · entrada 99,00 → saída 101,50 · stop 98,00 · \+2,50R/);
+  assert.match(svg, /Venda · real · entrada 101,00 \(aberto\) · stop 102,00/);
+  assert.equal((svg.match(/<path d="M/g) || []).length, 1);            // só o fechado tem ✕ de saída
+});
