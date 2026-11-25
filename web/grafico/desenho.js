@@ -13,11 +13,11 @@ const soDia = t => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', mon
 const diaHora = t => new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 /** opts: { candles, niv (niveisDia), est (estrutura), preco, ms, W, H } → { svg, fora } */
-export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 380 }) {
+export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440 }) {
   const c = candles; if (!c || c.length < 5) return { svg: '', fora: [] };
   const L = 8, R = 74, T = 14, B = 26, x1 = W - R, y1 = H - B;
   let lo = Math.min(...c.map(x => x.l)), hi = Math.max(...c.map(x => x.h)); const r0 = hi - lo || 1;
-  const niveis = (niv && niv.niveis) || [], fora = [];
+  const niveis = ((niv && niv.niveis) || []).filter(n => ms < 144e5 || !['PDC', 'AB', 'ABNY', 'VWAP', 'MXD', 'MND'].includes(n.id)), fora = [];
   const dentro = niveis.filter(n => n.preco >= lo - 0.3 * r0 && n.preco <= hi + 0.3 * r0), outros = niveis.filter(n => !dentro.includes(n));
   outros.forEach(n => fora.push(n));
   dentro.forEach(n => { lo = Math.min(lo, n.preco); hi = Math.max(hi, n.preco); });
@@ -35,20 +35,26 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 380 }) {
     s += `<line x1="${X(i).toFixed(1)}" x2="${X(i).toFixed(1)}" y1="${Y(v.h).toFixed(1)}" y2="${Y(v.l).toFixed(1)}" style="stroke:${col}"/>`
       + `<rect x="${(X(i) - bw / 2).toFixed(1)}" y="${Math.min(yo, yc).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, Math.abs(yc - yo)).toFixed(1)}" style="fill:${col}"/>`; });
   // VWAP (linha, começa na abertura do dia/sessão)
-  const vw = (niv && niv.vwap) || [];
+  const vw = ms < 144e5 ? ((niv && niv.vwap) || []) : [];
   if (vw.length) {
     const pts = [];
     for (const [t, v] of vw) { const i = c.findIndex(x => t >= x.t && t < x.t + ms); if (i >= 0) pts.push([X(i), Y(v)]); }
     if (pts.length > 1) s += `<polyline points="${pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}" fill="none" style="stroke:${COR_NIVEL.VWAP};stroke-width:1.8;opacity:.9"/>`;
   }
-  // níveis horizontais (a VWAP já foi desenhada como linha; aqui só o rótulo)
-  const rot = []; let ys = [];
+  // níveis horizontais (a VWAP já foi desenhada como linha). Rótulos: níveis a menos de 14 px viram um só rótulo, e os grupos nunca se sobrepõem.
+  const rot = [];
   dentro.sort((a, b) => b.preco - a.preco).forEach(n => {
     const y = Y(n.preco), col = COR_NIVEL[n.id] || '#9a9a9a';
     if (n.id !== 'VWAP') s += `<line x1="${L}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:${col};stroke-dasharray:${n.id === 'MXD' || n.id === 'MND' || n.id === 'PDC' ? '2 4' : '6 4'};stroke-width:1.2;opacity:.85"/>`;
-    let yl = y - 3; if (ys.length && yl - ys[ys.length - 1] < 12) yl = ys[ys.length - 1] + 12; ys.push(yl);   // não deixa rótulos se sobreporem (de cima para baixo)
-    rot.push(`<text x="${L + 4}" y="${yl.toFixed(1)}" style="${HALO}fill:${col};font-size:11px;font-weight:600">${esc(n.rot)} ${fmtPreco(n.preco)}</text>`);
   });
+  const grp = [];
+  dentro.forEach(n => { const y = Y(n.preco), g = grp[grp.length - 1]; if (g && y - g.fim < 14) { g.itens.push(n); g.fim = y; } else grp.push({ itens: [n], ini: y, fim: y }); });
+  let yMin = T + 10;
+  for (const g of grp) {
+    let yl = Math.max((g.ini + g.fim) / 2 - 3, yMin); yMin = yl + 14;
+    const tsp = g.itens.map((n, i) => `<tspan style="fill:${COR_NIVEL[n.id] || '#9a9a9a'}">${i ? ' · ' : ''}${esc(n.rot)} ${fmtPreco(n.preco)}</tspan>`).join('');
+    rot.push(`<text x="${L + 4}" y="${yl.toFixed(1)}" style="${HALO}font-size:11px;font-weight:600">${tsp}</text>`);
+  }
   // estrutura: pivôs rotulados, linha do nível rompido e marcas
   if (est) {
     const nTotal = c.length, t0 = c[0].t;
