@@ -353,7 +353,7 @@ const GRAF_HTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"
     <div class="lv-erro" hidden></div>
     <div class="box lv-graf"><div class="box-head" style="flex-wrap:wrap;gap:8px"><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div>
       <div class="lv-gcam" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div><span style="flex:1"></span><button class="lv-grsi" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">ver no RSI Mestre ↗</button></div>
-      <p class="small lv-gleit"></p><div class="lv-gplano small"></div><div class="lv-gsvg"></div><div class="lv-grsil"></div><p class="small muted lv-gnota"></p></div>`;
+      <p class="small lv-gleit"></p><div class="lv-gplano small"></div><div class="lv-gsvg"></div><div class="lv-grsil"></div><p class="small muted lv-gresumo" style="margin:6px 0 2px"></p><details class="small muted lv-gmais"><summary style="cursor:pointer;color:var(--fg)">Como ler este gráfico</summary><p class="lv-gnota" style="margin:6px 0 0"></p></details></div>`;
 const CAMADAS = [['sr', 'Suporte/resistência'], ['niv', 'Níveis'], ['est', 'Estrutura'], ['liq', 'Liquidez'], ['bol', 'Liquidações'], ['rsi', 'RSI'], ['plano', 'Meu plano'], ['trades', 'Meus trades'], ['rsima', 'Média do RSI']];
 
 /* ---------- uma instância por mercado (Cripto / Ações) e por vista (Liquidez ao vivo / Gráfico) ---------- */
@@ -708,6 +708,8 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const gb = $('.lv-gsvg'), noFim = gb.scrollLeft + gb.clientWidth >= gb.scrollWidth - 4; gb.innerHTML = svg; if (noFim) gb.scrollLeft = gb.scrollWidth;   // fica nas velas mais recentes
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
     const nF = f => bol ? bol.filter(e => (e.fonte || 'Hyperliquid') === f).length : 0;
+    const res = $('.lv-gresumo');
+    if (res) res.textContent = 'Mapa de contexto, não gatilho: nos testes, nenhum sinal de nível ou de estrutura deu ganho depois dos custos.' + (curto && bol ? ` Liquidações guardadas: ${mercado === 'cripto' ? `Binance ${nF('Binance')} · OKX ${nF('OKX')} · ` : ''}Hyperliquid ${nF('Hyperliquid')}.` : '') + (mapas[k] ? '' : ' Sem liquidez: falta a senha do radar.');
     $('.lv-gnota').textContent = (curto ? `Liquidações por vela (faixa entre as velas e o RSI): para cima = shorts liquidados (empurraram o preço para cima), para baixo = longs liquidados; altura pela raiz do valor; ▲/▼ no pavio = rajada bem acima do normal da tela. Guardadas neste navegador por 3 dias, desde que a página abriu: ${mercado === 'cripto' ? `Binance ao vivo ${nF('Binance')}, OKX ${nF('OKX')}, ` : ''}Hyperliquid ${nF('Hyperliquid')} (Hyperliquid via Coinversa: só os ~200 registros mais recentes e, em geral, preço/lado estimados${mercado === 'cripto' ? '; Binance manda no máximo 1 por segundo por moeda' : ''}). ` : 'No Diário não há liquidações por vela (o histórico guardado é de só 3 dias). ') + 'Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ' + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
       (fora.length ? `Fora da vista: ${fora.map(n => n.rot + ' ' + fpx(n.preco)).join(', ')}. ` : '') +
       'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Medido em BTC, ETH e SOL (15 min, 1 h, 4 h e diário) e em ações (diário): nenhum desses sinais deu ganho firme depois dos custos, e vários foram piores que entrar sem sinal. Uma pista no diário de cripto (fechar abaixo da mínima do mês passado) não se repetiu em 30 ações dos EUA (15 anos). É mapa de contexto, não gatilho (estudo em estudos/niveis_estrutura).';
@@ -733,6 +735,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); return; }
     if (e.target.closest('.lv-grsi')) { if (typeof window.show === 'function') window.show('rsi'); window.scrollTo(0, 0); return; }
     if (e.target.closest('.lv-irgraf')) { if (typeof window.show === 'function') window.show(mercado === 'acoes' ? 'a-grafico' : 'grafico'); window.scrollTo(0, 0); return; }
+    if (e.target.closest('.lv-gmais summary')) setTimeout(() => ls('gmais', $('.lv-gmais').open ? '1' : '0'), 0);
     const cm = e.target.closest('.lv-gcam button'); if (cm) { CAM[cm.dataset.c] = !CAM[cm.dataset.c]; ls('gcam', JSON.stringify(CAM)); gSig = ''; renderGrafico(); return; }
     const g = e.target.closest('.lv-gtf button, .lv-grsil button[data-g]'); if (g) { GTF = g.dataset.g; ls('gtf', GTF); gSig = ''; renderGrafico(); }
   });
@@ -778,6 +781,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
   }, 1000);
   window.addEventListener('radar-acoes', ev => { if (mercado === 'acoes' && ev.detail && ev.detail.length) { lista = ev.detail.slice(0, 12); if (!lista.includes(SEL)) SEL = lista[0]; render(); } });
   if (vista === 'graf' && mercado === 'cripto') ligarBinanceLiq();
+  { const dm = $('.lv-gmais'); if (dm && ls('gmais') === '1') dm.open = true; }
   function sincronizar() { const s = ls('sel'); if (s && s !== SEL) { if (!lista.includes(s)) lista = [s, ...lista].slice(0, 12); SEL = s; hov = null; trocar(); } else render(); }
   return { iniciar: trocar, sincronizar, ativo: () => visivel() || SOM };
 }
