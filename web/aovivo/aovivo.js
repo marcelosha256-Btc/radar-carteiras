@@ -12,6 +12,7 @@ import { niveisDia, niveisPeriodo, estrutura as estruturaVelas, leitura as leitu
 import { graficoSvg } from '../grafico/desenho.js';
 import { checklist as checklistRegras, REGRAS_PADRAO } from '../risco/regras.js';
 import { hlLink } from '../contexto/hl.js';
+import { TEMPOS_DIRECAO, direcaoTempo, resumoDirecao, contraMaioria } from './direcao.js';
 const HL = 'https://api.hyperliquid.xyz/info';
 const ATIVOS = { cripto: ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'],
   acoes: ['xyz:SP500', 'xyz:XYZ100', 'xyz:NVDA', 'xyz:TSLA', 'xyz:MU', 'xyz:SKHX', 'xyz:GOOGL', 'xyz:GOLD'] };
@@ -105,6 +106,25 @@ async function carregarGrafico(k) {
       hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '1d', startTime: now - 400 * 864e5, endTime: now } })]);
     graf[k] = { t: now, c15: conv(a), c1h: conv(b), c4h: conv(d4), c1d: conv(d1) };
   } catch (e) {}
+}
+/* faixa de direção (15m · 1H · 4H · D): usa as velas que a tela já tem; a Liquidez ao vivo não tinha 1 h, então busca 120 velas (grátis, Hyperliquid) */
+const c1hDir = {};
+async function carregar1hDir(k) {
+  if (c1hDir[k] && Date.now() - c1hDir[k].t < 300e3) return;
+  const now = Date.now();
+  try { const c = await hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '1h', startTime: now - 120 * 36e5, endTime: now } });
+    c1hDir[k] = { t: now, v: c.map(x => ({ t: x.t, o: +x.o, c: +x.c, h: +x.h, l: +x.l })) }; } catch (e) {}
+}
+function velasDir(k, tf) {
+  const G = graf[k], C = cand[k] || {};
+  return tf === '15m' ? (G && G.c15) || C['15m'] : tf === '1h' ? (G && G.c1h) || (c1hDir[k] && c1hDir[k].v) : tf === '4h' ? (G && G.c4h) || C['4h'] : (G && G.c1d) || C['1d'];
+}
+const dirCache = {};   // recalcula a cada 15 s (a estrutura de 4 tempos não precisa rodar a cada segundo)
+function direcaoDe(k, cur) {
+  const c = dirCache[k]; if (c && Date.now() - c.t < 15e3 && c.ok) return c.R;
+  const lista = TEMPOS_DIRECAO.map(([lb, tf]) => [lb, direcaoTempo(velasDir(k, tf), cur)]), R = { ...resumoDirecao(lista), lista };
+  dirCache[k] = { t: Date.now(), R, ok: lista.every(([, d]) => d) };
+  return R;
 }
 async function carregarMinuto(k) {
   const now = Date.now();
@@ -317,11 +337,23 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     $('.lv-tabs').innerHTML = lista.map(k => { const cur = live[k], tr = cur ? trend(k, cur) : null;
       return `<button class="lv-tab" data-k="${k}" aria-pressed="${k === SEL}"><i class="lv-dot" style="background:${corAtivo(k)}"></i><b>${nome(k)}</b><span style="color:${tr ? tr.color : COR.mu}">${tr ? tr.arrow : ''}</span><span class="small muted num">${cur ? fpx(cur) : '—'}</span></button>`; }).join('');
   }
+  function melhorLado(k, A, m) {
+    const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda'), okA = !a.blocks.length, okB = !b.blocks.length;
+    return okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
+  }
+  function faixaDirecao(k, A) {
+    const R = direcaoDe(k, A.cur), seta = d => d === 'alta' ? ['▲', COR.up] : d === 'baixa' ? ['▼', COR.dn] : d === 'lateral' ? ['▬', COR.mu] : ['…', COR.mu];
+    const pills = R.lista.map(([lb, d]) => { const [s, c] = seta(d); return `<span class="lv-dir" title="${lb}: ${d || 'carregando'}"><span class="muted">${lb}</span> <b style="color:${c}">${s}</b></span>`; }).join('');
+    const r = melhorLado(k, A, 'day'), contra = !r.carregando && contraMaioria(r.l, R);
+    const corTxt = contra ? COR.am : R.lado === 'alta' ? COR.up : R.lado === 'baixa' ? COR.dn : COR.mu;
+    const txt = contra ? `plano de day é ${r.l} contra ${R.lado === 'alta' ? R.alta : R.baixa} de ${R.n} tempos` : R.txt;
+    return `<span class="chip lv-dirs" title="Para que lado o preço ESTÁ andando em cada tempo: topos e fundos subindo e preço acima da média de 20 = ▲; os dois descendo = ▼; mistura = ▬. É o que já aconteceu, não previsão.">${pills}<span style="color:${corTxt}">→ ${txt}</span></span>`;
+  }
   function renderBar(A) {
     const k = SEL, cur = A ? A.cur : live[k];
     const an = $('.lv-an'); if (an.dataset.k !== k) { an.dataset.k = k; an.innerHTML = nome(k) + hlLink(k); }   // só refaz ao trocar de ativo, para o link aceitar o clique
     const px = $('.lv-px'); px.textContent = cur ? fpx(cur) : '—'; px.style.color = flash[k] && flash[k].until > Date.now() ? flash[k].col : '';
-    $('.lv-tr').innerHTML = A ? `<span class="chip" style="color:${A.tr.color}" title="Variação do preço nos últimos 1 a 5 minutos. Não é a tendência do dia nem o lado do plano.">${A.tr.arrow} impulso curto: ${A.tr.label.toLowerCase()}</span>` : '';
+    $('.lv-tr').innerHTML = A ? faixaDirecao(k, A) : '';
     if (A) {
       const est = ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda'); if (a.carregando || b.carregando) return null; return (m === 'day' ? 'Day' : 'Swing') + ' ' + [!a.blocks.length ? 'compra livre' : '', !b.blocks.length ? 'venda livre' : ''].filter(Boolean).join(' e ') || 'bloqueado'; }), pronto = est.every(x => x != null);
       if (pronto) {
@@ -330,8 +362,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
         ultTrava[k] = txt;
       }
     }
-    $('.lv-vd').innerHTML = A ? ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda');
-      const okA = !a.blocks.length, okB = !b.blocks.length, r = okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
+    $('.lv-vd').innerHTML = A ? ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda'), r = melhorLado(k, A, m);
       if (r.carregando) return `<span class="chip" style="color:${COR.mu}" title="Esperando o mapa de liquidações, quem está apertado e as velas para dar a nota">${m === 'day' ? 'Day' : 'Swing'}: carregando…</span>`;
       return `<span class="chip" style="color:${r.st[1]}">${m === 'day' ? 'Day' : 'Swing'}: ${r.st[0] === 'BLOQUEADO' ? '■ bloq' : r.st[0].toLowerCase()} ${r.sc} · ${r.l}</span>`; }).join(' ') : '';
     const age = (Date.now() - lastMsg) / 1000, M = mapas[k];
@@ -680,6 +711,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     if (vista === 'graf') carregarGrafico(k).then(render);   // as velas do gráfico só na aba Gráfico
     if (vista === 'graf') carregarDiario().then(render);
     carregarCandles(k, ['15m', '4h']).then(() => { render(); carregarCandles(k, ['1d', '1w']).then(render); });
+    if (vista !== 'graf') carregar1hDir(k).then(render);
     if (live[k]) carregarLivro(k, live[k]).then(render);
   }
   setSom(SOM);
@@ -700,6 +732,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     if (n % 30 === 0) buscar('liqs', k, liqs);
     if (n % 120 === 0) buscarPress(k);
     if (n % 180 === 0) carregarCandles(k, ['15m']);
+    if (n % 300 === 0 && vista !== 'graf') carregar1hDir(k);
     if (n % 60 === 0 && vista === 'graf') carregarGrafico(k);
     if (vista === 'graf' && n % 60 === 0) carregarDiario();
     if (n % 3 === 0 && live[k]) carregarLivro(k, live[k]);
@@ -719,6 +752,7 @@ css.textContent = `
 .lv-bar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 12px;margin-bottom:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 .lv-an{font:800 18px var(--f-display)}.lv-px{font-size:19px;font-weight:700;transition:color .2s}
 .lv-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.lv-dirs{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px 10px;white-space:normal}.lv-dir{white-space:nowrap}
 .lv-tab{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:13px;padding:4px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
 .lv-dot{width:8px;height:8px;border-radius:50%;flex:none}
 .lv-tab[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
