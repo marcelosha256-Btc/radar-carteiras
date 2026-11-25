@@ -1,5 +1,5 @@
 /* VIX (medo das ações dos EUA) via /api/vix. Cache de 15 min no navegador. Contexto, não gatilho. */
-const CH = 'radar-vix-cache', VALIDADE = 15 * 60e3;
+const CH = 'radar-vix-cache2', VALIDADE = 15 * 60e3;
 
 export function faixaVix(v) {
   if (v == null) return { txt: '—', cor: 'var(--muted)' };
@@ -8,6 +8,14 @@ export function faixaVix(v) {
   if (v >= 20) return { txt: 'atenção (20 a 25)', cor: 'var(--warn)' };
   if (v >= 15) return { txt: 'normal (15 a 20)', cor: 'var(--fg)' };
   return { txt: 'calmo (<15)', cor: 'var(--up)' };
+}
+/** Faixas do medidor (VIX de 10 a 45; valor alto = medo, então as cores vão de verde a vermelho). */
+export const FAIXAS_VIX = [{ ate: 15, cor: '#3fa34d', rot: 'Calmo' }, { ate: 20, cor: '#8cc152', rot: 'Normal' }, { ate: 25, cor: '#ef8a3a', rot: 'Atenção' },
+  { ate: 35, cor: '#d6453d', rot: 'Estresse' }, { ate: 999, cor: '#9e2b25', rot: 'Pânico' }];
+export function medidorVix(m) {
+  return { titulo: 'VIX · medo das ações dos EUA', sub: 'Quanto o mercado paga por proteção contra queda', v: m.v, min: 10, max: 45, faixas: FAIXAS_VIX, marcas: [15, 20, 25, 35],
+    hist: [['Fechamento anterior', m.ont], ['1 semana atrás', m.sem], ['1 mês atrás', m.mes], ['1 ano atrás', m.ano]],
+    nota: 'VIX é a volatilidade esperada do S&P 500 (Cboe). Alto = medo, baixo = calma. Contexto, não gatilho.' };
 }
 const f1 = v => v.toFixed(1).replace('.', ',');
 export function fraseVix(m) {

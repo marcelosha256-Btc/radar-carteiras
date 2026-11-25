@@ -64,3 +64,15 @@ test('VIX: faixas e frase', () => {
   assert.match(fraseVix({ v: 26.4, ont: 26.6, sem: 20 }), /26,4 · estresse.*-0,2 no dia.*era 20,0 há 5 pregões.*não gatilho/);
   assert.equal(fraseVix(null), '');
 });
+
+import { angulo, faixaDe, medidor } from '../web/contexto/medidor.js';
+import { FAIXAS_MEDO, medidorMedo } from '../web/contexto/medo.js';
+import { FAIXAS_VIX, medidorVix } from '../web/contexto/vix.js';
+test('medidor: ângulo, faixa e HTML', () => {
+  assert.ok(Math.abs(angulo(0, 0, 100) - Math.PI) < 1e-9); assert.ok(Math.abs(angulo(100, 0, 100)) < 1e-9); assert.ok(Math.abs(angulo(50, 0, 100) - Math.PI / 2) < 1e-9);
+  assert.equal(faixaDe(24, FAIXAS_MEDO).rot, 'Medo extremo'); assert.equal(faixaDe(25, FAIXAS_MEDO).rot, 'Medo'); assert.equal(faixaDe(100, FAIXAS_MEDO).rot, 'Ganância extrema');
+  assert.equal(faixaDe(26.4, FAIXAS_VIX).rot, 'Estresse'); assert.equal(faixaDe(60, FAIXAS_VIX).rot, 'Pânico'); assert.equal(faixaDe(null, FAIXAS_VIX), null);
+  const h = medidor(medidorMedo({ v: 13, ont: 11, sem: 11, mes: 50, ano: 59 }));
+  assert.match(h, /Medo extremo/); assert.match(h, /1 mês atrás/); assert.match(h, />50</); assert.match(h, /<svg/);
+  assert.match(medidor(medidorVix({ v: 26.4, ont: 26.6, sem: 25.5, mes: null, ano: null })), /Estresse/);
+});
