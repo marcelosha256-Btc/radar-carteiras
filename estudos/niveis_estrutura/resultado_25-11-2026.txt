@@ -1,0 +1,62 @@
+velas: {
+  BTCUSDT: '101717 (2024-01-01 a 2026-11-25)',
+  ETHUSDT: '101717 (2024-01-01 a 2026-11-25)',
+  SOLUSDT: '101717 (2024-01-01 a 2026-11-25)'
+}
+
+=== A) curto prazo: stop 1 ATR, alvo 1.5 ATR, até 32 velas, custo 0.1% ida e volta ===
+base sem sinal: compra n=29024 líquida -0.315R (bruta -0.007R) · venda n=29364 líquida -0.305R (bruta +0.003R) · custo médio 0.308R
+SINAL                                                    n   líq.R   bruta  vs base     t | 1ªmet   2ªmet     | ativos (vs base)
+Rompeu mín. de ontem (fechou abaixo)                  1242  -0.162  +0.083   +0.143   4.0 | +0.113   +0.175   | BTC -0.304 ETH -0.138 SOL -0.052
+Rompeu máx. de ontem (fechou acima)                   1319  -0.278  +0.012   +0.037   1.1 | +0.038   +0.033   | BTC -0.419 ETH -0.201 SOL -0.212
+Reteste confirmado depois de BOS p/ baixo             3787  -0.292  +0.015   +0.013   0.6 | +0.064   -0.043   | BTC -0.425 ETH -0.252 SOL -0.192
+BOS p/ baixo                                          8972  -0.311  +0.007   -0.006  -0.4 | +0.012   -0.023   | BTC -0.470 ETH -0.272 SOL -0.189
+VWAP: fechou acima (cruzou p/ cima)                   9544  -0.324  +0.010   -0.009  -0.6 | +0.013   -0.030   | BTC -0.469 ETH -0.292 SOL -0.208
+VWAP: fechou abaixo (cruzou p/ baixo)                 9647  -0.316  +0.019   -0.012  -0.8 | +0.008   -0.031   | BTC -0.509 ETH -0.271 SOL -0.166
+Reteste confirmado + lado certo da VWAP               8984  -0.327  -0.009   -0.012  -0.8 | +0.004   -0.033   | BTC -0.439 ETH -0.289 SOL -0.250
+Reteste confirmado depois de CHoCH p/ baixo           1533  -0.322  -0.005   -0.017  -0.5 | +0.046   -0.082   | BTC -0.441 ETH -0.216 SOL -0.294
+Reteste confirmado depois de CHoCH p/ cima            1573  -0.345  -0.028   -0.030  -0.9 | -0.016   -0.046   | BTC -0.406 ETH -0.371 SOL -0.260
+CHoCH p/ cima                                         4192  -0.352  -0.025   -0.038  -1.8 | -0.043   -0.031   | BTC -0.477 ETH -0.332 SOL -0.244
+BOS p/ cima                                           8985  -0.353  -0.020   -0.039  -2.6 | -0.029   -0.051   | BTC -0.500 ETH -0.301 SOL -0.253
+CHoCH p/ baixo                                        4267  -0.356  -0.023   -0.051  -2.5 | -0.012   -0.090   | BTC -0.526 ETH -0.282 SOL -0.255
+Varreu mín. de ontem e voltou (compra)                 706  -0.384  -0.102   -0.069  -1.5 | -0.148   +0.006   | BTC -0.474 ETH -0.325 SOL -0.342
+Reteste confirmado depois de BOS p/ cima              3890  -0.390  -0.064   -0.075  -3.6 | -0.089   -0.065   | BTC -0.512 ETH -0.367 SOL -0.292
+Varreu máx. de ontem e voltou (vende)                  671  -0.412  -0.108   -0.108  -2.3 | -0.122   -0.093   | BTC -0.547 ETH -0.258 SOL -0.450
+
+=== B) stop largo (3 ATR de 15 min ≈ 1,5 de 1 h): stop 3 ATR, alvo 4.5 ATR, até 96 velas, custo 0.1% ida e volta ===
+base sem sinal: compra n=4978 líquida -0.230R (bruta -0.142R) · venda n=5052 líquida -0.260R (bruta -0.170R) · custo médio 0.088R
+SINAL                                                    n   líq.R   bruta  vs base     t | 1ªmet   2ªmet     | ativos (vs base)
+Rompeu mín. de ontem (fechou abaixo)                  1082  -0.221  -0.139   +0.039   1.0 | +0.015   +0.061   | BTC -0.275 ETH -0.230 SOL -0.163
+Varreu máx. de ontem e voltou (vende)                  544  -0.292  -0.192   -0.032  -0.6 | +0.010   -0.081   | BTC -0.503 ETH -0.271 SOL -0.097
+BOS p/ baixo                                          3577  -0.297  -0.191   -0.037  -1.4 | -0.029   -0.047   | BTC -0.400 ETH -0.278 SOL -0.211
+VWAP: fechou abaixo (cruzou p/ baixo)                 3665  -0.305  -0.201   -0.044  -1.7 | -0.040   -0.050   | BTC -0.380 ETH -0.327 SOL -0.204
+Rompeu máx. de ontem (fechou acima)                   1149  -0.289  -0.191   -0.059  -1.4 | -0.010   -0.113   | BTC -0.354 ETH -0.303 SOL -0.208
+Reteste confirmado depois de BOS p/ baixo             2306  -0.320  -0.215   -0.060  -2.0 | -0.079   -0.040   | BTC -0.434 ETH -0.305 SOL -0.212
+VWAP: fechou acima (cruzou p/ cima)                   3672  -0.291  -0.188   -0.060  -2.3 | -0.054   -0.067   | BTC -0.328 ETH -0.263 SOL -0.280
+Reteste confirmado depois de CHoCH p/ baixo           1259  -0.334  -0.230   -0.074  -2.0 | -0.079   -0.071   | BTC -0.472 ETH -0.279 SOL -0.241
+CHoCH p/ cima                                         2743  -0.317  -0.214   -0.087  -3.0 | -0.084   -0.089   | BTC -0.373 ETH -0.329 SOL -0.248
+CHoCH p/ baixo                                        2798  -0.348  -0.240   -0.088  -3.2 | -0.080   -0.097   | BTC -0.435 ETH -0.353 SOL -0.251
+BOS p/ cima                                           3632  -0.320  -0.216   -0.090  -3.4 | -0.064   -0.116   | BTC -0.337 ETH -0.337 SOL -0.285
+Varreu mín. de ontem e voltou (compra)                 563  -0.324  -0.230   -0.093  -1.7 | -0.099   -0.082   | BTC -0.312 ETH -0.325 SOL -0.333
+Reteste confirmado + lado certo da VWAP               3912  -0.344  -0.242   -0.114  -4.5 | -0.167   -0.057   | BTC -0.421 ETH -0.327 SOL -0.281
+Reteste confirmado depois de CHoCH p/ cima            1286  -0.351  -0.246   -0.120  -3.2 | -0.115   -0.127   | BTC -0.451 ETH -0.352 SOL -0.247
+Reteste confirmado depois de BOS p/ cima              2391  -0.366  -0.258   -0.136  -4.6 | -0.137   -0.136   | BTC -0.405 ETH -0.413 SOL -0.276
+
+=== C) stop bem largo (6 ATR ≈ 3 de 1 h, até 2 dias): stop 6 ATR, alvo 9 ATR, até 192 velas, custo 0.1% ida e volta ===
+base sem sinal: compra n=2163 líquida -0.064R (bruta -0.019R) · venda n=2124 líquida -0.040R (bruta +0.004R) · custo médio 0.045R
+SINAL                                                    n   líq.R   bruta  vs base     t | 1ªmet   2ªmet     | ativos (vs base)
+Rompeu mín. de ontem (fechou abaixo)                   830  +0.018  +0.060   +0.058   1.0 | +0.053   +0.062   | BTC -0.013 ETH +0.055 SOL +0.012
+Reteste confirmado + lado certo da VWAP               1925  -0.013  +0.038   +0.051   1.2 | +0.064   +0.038   | BTC -0.012 ETH -0.055 SOL +0.030
+VWAP: fechou acima (cruzou p/ cima)                   1873  -0.036  +0.014   +0.028   0.6 | +0.027   +0.029   | BTC -0.084 ETH +0.010 SOL -0.033
+Rompeu máx. de ontem (fechou acima)                    867  -0.036  +0.014   +0.027   0.5 | +0.071   -0.020   | BTC -0.076 ETH -0.039 SOL +0.008
+Reteste confirmado depois de CHoCH p/ baixo            960  -0.017  +0.035   +0.023   0.4 | +0.057   -0.013   | BTC -0.092 ETH +0.087 SOL -0.039
+Reteste confirmado depois de CHoCH p/ cima             972  -0.076  -0.025   -0.012  -0.2 | -0.035   +0.013   | BTC -0.141 ETH -0.090 SOL +0.006
+CHoCH p/ cima                                         1643  -0.085  -0.035   -0.021  -0.5 | -0.057   +0.017   | BTC -0.116 ETH -0.109 SOL -0.029
+Varreu mín. de ontem e voltou (compra)                 499  -0.091  -0.044   -0.027  -0.4 | -0.049   -0.002   | BTC -0.019 ETH -0.130 SOL -0.123
+VWAP: fechou abaixo (cruzou p/ baixo)                 1904  -0.072  -0.021   -0.032  -0.7 | -0.057   -0.007   | BTC -0.095 ETH -0.086 SOL -0.035
+Reteste confirmado depois de BOS p/ cima              1519  -0.097  -0.044   -0.033  -0.7 | -0.021   -0.046   | BTC -0.130 ETH -0.130 SOL -0.028
+CHoCH p/ baixo                                        1664  -0.074  -0.020   -0.034  -0.7 | -0.033   -0.035   | BTC -0.154 ETH -0.055 SOL -0.008
+BOS p/ baixo                                          1916  -0.079  -0.026   -0.038  -0.9 | -0.057   -0.019   | BTC -0.108 ETH -0.074 SOL -0.053
+BOS p/ cima                                           1959  -0.105  -0.055   -0.041  -1.0 | -0.013   -0.068   | BTC -0.136 ETH -0.083 SOL -0.095
+Varreu máx. de ontem e voltou (vende)                  479  -0.104  -0.054   -0.064  -0.9 | -0.071   -0.055   | BTC -0.181 ETH -0.032 SOL -0.101
+Reteste confirmado depois de BOS p/ baixo             1485  -0.122  -0.069   -0.082  -1.7 | -0.094   -0.068   | BTC -0.149 ETH -0.134 SOL -0.080

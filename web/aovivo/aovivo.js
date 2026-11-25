@@ -581,7 +581,7 @@ function criarApp(mercado, painel, raiz) {
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
     $('.lv-gnota').textContent = `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
       (fora.length ? `Fora da vista: ${fora.map(n => n.rot + ' ' + fpx(n.preco)).join(', ')}. ` : '') +
-      'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Regras objetivas, ainda sem medição de acerto: contexto, não sinal.';
+      'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Medido em 15 min de BTC, ETH e SOL (2024 a 2026, 300 mil velas): nenhum desses sinais deu ganho depois dos custos, e vários foram piores que entrar sem sinal. É mapa de contexto, não gatilho (estudo em estudos/niveis_estrutura).';
   }
   function render() {
     renderTabs();
