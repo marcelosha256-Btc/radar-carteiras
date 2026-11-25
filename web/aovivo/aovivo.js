@@ -7,6 +7,7 @@ import { fraseRsi, rsiSerie, regime as regimeRsi, rsiWilder, agrupar, faixa as f
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
 import { gatilho as gatilhoDe, velaDe, proximoFechamento } from './gatilho.js';
+import { ROTEIRO, fm, fB, sgn, fpx, pc, pc2, pp, f1, montarMapa as build, zones, squeeze as squeezeDe, estruturaDe, rsiAtArr, chanceDe, pTouchC, setupNota } from './trava.js';
 import { niveisDia, niveisPeriodo, estrutura as estruturaVelas, leitura as leituraGrafico, zonasSR } from '../grafico/calc.js';
 import { graficoSvg } from '../grafico/desenho.js';
 import { checklist as checklistRegras, REGRAS_PADRAO } from '../risco/regras.js';
@@ -14,27 +15,12 @@ import { hlLink } from '../contexto/hl.js';
 const HL = 'https://api.hyperliquid.xyz/info';
 const ATIVOS = { cripto: ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'],
   acoes: ['xyz:SP500', 'xyz:XYZ100', 'xyz:NVDA', 'xyz:TSLA', 'xyz:MU', 'xyz:SKHX', 'xyz:GOOGL', 'xyz:GOLD'] };
-const ROTEIRO = {               // regras do roteiro do Marcelo (ajuste aqui)
-  rrMin: 2,                     // R:R mínimo: abaixo disso, BLOQUEADO
-  stopBuf: 0.0015,              // stop 0,15% além da zona de liquidação mais próxima
-  // as regras do Connors RSI (veto de venda no swing, ETH sem edge, bônus de RSI diário em sobrevenda) saíram em 25/11/2026:
-  // o estudo do CRSI não achou vantagem clara contra entrar em qualquer dia do mesmo regime
-  liberado: 70, cuidado: 50,
-};
 const TF = [['Semana', '1w', 7 * 864e5], ['Dia', '1d', 864e5], ['4H', '4h', 144e5], ['15 min', '15m', 9e5]];
 const TIER = [['money_printer', 'Top lucro (Apex)'], ['smart_money', 'Lucrativos (Sharps)'], ['grinder', 'Consistentes'], ['humble_earner', 'Pequeno lucro'],
   ['exit_liquidity', 'Multidão'], ['semi_rekt', 'Perdendo'], ['full_rekt', 'Muito no prejuízo'], ['giga_rekt', 'Quebrados']];
 
 /* ---------- formatação ---------- */
 const nome = k => k.replace('xyz:', '');
-const fm = n => n >= 995000 ? 'US$ ' + (n / 1e6).toFixed(1).replace('.', ',') + ' mi' : 'US$ ' + Math.round(n / 1e3) + ' mil';
-const fB = n => Math.abs(n) >= 1e9 ? 'US$ ' + (Math.abs(n) / 1e9).toFixed(2).replace('.', ',') + ' bi' : fm(Math.abs(n));
-const sgn = n => (n < 0 ? '-' : '+') + fB(n);
-const fpx = n => n >= 1000 ? n.toLocaleString('pt-BR', { maximumFractionDigits: n >= 10000 ? 0 : 1 }) : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: n < 10 ? 4 : 2 });
-const pc = v => (v > 0 ? '+' : '') + v.toFixed(1).replace('.', ',') + '%';
-const pc2 = v => (v > 0 ? '+' : '') + v.toFixed(2).replace('.', ',') + '%';
-const pp = v => v == null ? '…' : (v < 0.01 ? '<1%' : v > 0.99 ? '>99%' : Math.round(v * 100) + '%');
-const f1 = v => v.toFixed(1).replace('.', ',');
 const ago = t => { const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 60 ? 'há ' + s + 's' : 'há ' + Math.round(s / 60) + ' min'; };
 const V = n => `var(--${n})`;
 const COR = { up: V('up'), dn: V('down'), long: V('lv-long'), short: V('lv-short'), am: V('warn'), mu: V('muted'), fg: V('fg') };
@@ -88,55 +74,16 @@ function trend(k, cur) {
 
 /* ---------- chance de tocar (mesmo método do coletor/chance.py) ---------- */
 const chance = {};   // k -> {vol, q: {'4':{up,dn}, '24':{up,dn}}, conf, n}
-function quantis(arr) { const s = [...arr].sort((a, b) => a - b), q = []; for (let i = 0; i <= 100; i++) q.push(s[Math.min(s.length - 1, Math.round(i / 100 * (s.length - 1)))]); return q; }
-function probToque(qs, x) { if (x <= 0) return 1; let lo = 0, hi = qs.length; while (lo < hi) { const m = (lo + hi) >> 1; if (qs[m] < x) lo = m + 1; else hi = m; } return Math.max(0, Math.min(1, 1 - lo / (qs.length - 1))); }
 async function carregarChance(k) {
   if (chance[k] && Date.now() - chance[k].t < 6 * 3600e3) return;
   const now = Date.now();
   const c = (await hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '1h', startTime: now - 5000 * 3600e3, endTime: now } }))
     .map(x => ({ h: +x.h, l: +x.l, c: +x.c }));
-  if (c.length < 400) { chance[k] = { t: now, erro: 'pouco histórico' }; return; }
-  const amp = c.map(x => (x.h - x.l) / x.c), pts = [];
-  for (let i = 24; i < c.length; i++) {
-    let s = 0; for (let j = i - 24; j < i; j++) s += amp[j];
-    const vol = s / 24; if (!(vol > 0)) continue;
-    const ex = H => { if (i + H >= c.length) return null; let mx = -Infinity, mn = Infinity; for (let j = i + 1; j <= i + H; j++) { mx = Math.max(mx, c[j].h); mn = Math.min(mn, c[j].l); } return { up: (mx / c[i].c - 1) / vol, dn: (1 - mn / c[i].c) / vol }; };
-    pts.push({ e4: ex(4), e24: ex(24) });
-  }
-  const build = P => ({ '4': { up: quantis(P.filter(p => p.e4).map(p => p.e4.up)), dn: quantis(P.filter(p => p.e4).map(p => p.e4.dn)) },
-    '24': { up: quantis(P.filter(p => p.e24).map(p => p.e24.up)), dn: quantis(P.filter(p => p.e24).map(p => p.e24.dn)) } });
-  // conferência fora da amostra: quantis com os 70% iniciais, medido nos 30% finais (24 h, os dois lados)
-  const cut = Math.floor(pts.length * 0.7), qa = build(pts.slice(0, cut)), teste = pts.slice(cut).filter(p => p.e24);
-  const conf = [0.25, 0.5, 0.75].map(alvo => {
-    let x = 0, n = 0, hit = 0;
-    const qs = qa['24'].up; x = qs[Math.round((1 - alvo) * 100)];
-    for (const p of teste) { n += 2; if (p.e24.up >= x) hit++; if (p.e24.dn >= qa['24'].dn[Math.round((1 - alvo) * 100)]) hit++; }
-    return { prevista: alvo, tocou: n ? hit / n : null };
-  });
-  let s = 0; for (let j = amp.length - 24; j < amp.length; j++) s += amp[j];
-  chance[k] = { t: now, vol: s / 24, q: build(pts), conf, n: pts.length };
+  chance[k] = chanceDe(c, now);
 }
-function pTouch(k, level, cur, h) {
-  const C = chance[k]; if (!C || !C.q) return null;
-  const up = level > cur, d = Math.abs(level / cur - 1);
-  return probToque(C.q[String(h)][up ? 'up' : 'dn'], d / C.vol);
-}
-
+const pTouch = (k, level, cur, h) => pTouchC(chance[k], level, cur, h);
 /* ---------- RSI 14 (Wilder) ao vivo ---------- */
 const cand = {};
-function rsiCalc(cl) {
-  if (cl.length < 16) return null;
-  let g = 0, l = 0; for (let q = 1; q <= 14; q++) { const ch = cl[q] - cl[q - 1]; if (ch > 0) g += ch; else l -= ch; }
-  g /= 14; l /= 14; const out = [], r = () => l === 0 ? 100 : 100 - 100 / (1 + g / l); out.push(r());
-  for (let q = 15; q < cl.length; q++) { const ch = cl[q] - cl[q - 1]; g = (g * 13 + Math.max(ch, 0)) / 14; l = (l * 13 + Math.max(-ch, 0)) / 14; out.push(r()); }
-  return out;
-}
-function rsiAt(k, tf, ms, price) {
-  const a = cand[k] && cand[k][tf]; if (!a || a.length < 16) return null;
-  const cl = a.map(x => x.c), last = a[a.length - 1];
-  if (last.t + ms > Date.now()) cl[cl.length - 1] = price; else cl.push(price);
-  const r = rsiCalc(cl); return r ? { v: r[r.length - 1], prev: r[r.length - 2] } : null;
-}
 const rsiCol = v => v <= 30 ? COR.am : v >= 70 ? COR.dn : COR.fg;
 async function carregarCandles(k, tfs) {
   const now = Date.now();
@@ -177,24 +124,11 @@ async function carregarLivro(k, cur) {
 
 /* ---------- dados da Coinversa (via /api/liquidez) ---------- */
 const mapas = {}, liqs = {}, press = {}, erros = {};
-const build = d => { const lo = d.p * (1 - d.R / 100), w = d.p * 2 * d.R / 100 / d.nb, h = d.nb / 2;
-  return { ...d, bw: w, L: d.L.map((v, i) => [lo + (i + 0.5) * w, v * 1e6, d.LP ? d.LP[i] : null]), S: d.S.map((v, i) => [lo + (h + i + 0.5) * w, v * 1e6, d.SP ? d.SP[i] : null]) }; };
 async function buscar(q, k, alvo, transf = x => x) {
   try { alvo[k] = transf(await meuApi(q, k)); delete erros[q + k]; } catch (e) { erros[q + k] = e.message; if (e.message === 'senha') erros.senha = true; }
 }
 
 /* ---------- análise ---------- */
-function zones(d, cur) {
-  const bw = d.bw, mL = Math.max(1, ...d.L.map(a => a[1])), mS = Math.max(1, ...d.S.map(a => a[1]));
-  const Lo = d.L.map((a, j) => ({ a, j })).filter(o => o.a[0] + bw / 2 < cur).sort((x, y) => y.a[0] - x.a[0]);
-  const So = d.S.map((a, j) => ({ a, j })).filter(o => o.a[0] - bw / 2 > cur).sort((x, y) => x.a[0] - y.a[0]);
-  const ap = Lo.find(o => o.a[1] >= 0.35 * mL), ve = So.find(o => o.a[1] >= 0.35 * mS);
-  const vac = (arr, m) => { const runs = []; let r = null; arr.forEach((o, idx) => {
-    if (o.a[1] < 0.08 * m) { if (!r) r = { i0: idx, lo: o.a[0] - bw / 2, hi: o.a[0] + bw / 2, n: 0, js: [] }; r.n++; r.lo = Math.min(r.lo, o.a[0] - bw / 2); r.hi = Math.max(r.hi, o.a[0] + bw / 2); r.js.push(o.j); }
-    else { if (r) runs.push(r); r = null; } });
-    if (r) runs.push(r); return runs.filter(x => x.n >= 2 && x.i0 > 0); };
-  return { bw, mL, mS, Lo, So, ap, ve, vL: vac(Lo, mL), vS: vac(So, mS) };
-}
 function realLiqs(k) {
   return ((liqs[k] && liqs[k].events) || []).map(e => {
     let side = e.side, px = e.px;
@@ -205,96 +139,14 @@ function realLiqs(k) {
 }
 function liqSum(ev, ms) { const now = Date.now(), o = { long: 0, short: 0, nl: 0, ns: 0 };
   for (const e of ev) { if (now - e.t > ms) continue; if (e.side === 'long') { o.long += e.usd; o.nl++; } else if (e.side === 'short') { o.short += e.usd; o.ns++; } } return o; }
-function squeeze(k, P) {
-  if (!P) return null;
-  let L = 0, S = 0; const why = [];
-  const ann = P.funding != null ? P.funding * 24 * 365 * 100 : null, base = k.startsWith('xyz:') ? 5.475 : 10.95;
-  // funding-piso da Hyperliquid (10,95% a.a. no cripto, 5,475% no xyz) é neutro: só conta o que passar bem dele
-  if (ann != null && ann > base + 10) { L++; why.push(['L', `longs pagando funding de ${f1(ann)}% a.a.`]); }
-  if (ann != null && ann < -10) { S++; why.push(['S', `shorts pagando funding de ${f1(-ann)}% a.a.`]); }
-  const ls = P.ls;
-  if (ls && ls.longPnl != null) {
-    if (ls.longPnl < 0 && ls.shortPnl > 0) { L++; why.push(['L', `longs no prejuízo (${sgn(ls.longPnl)})`]); }
-    else if (ls.shortPnl < 0 && ls.longPnl > 0) { S++; why.push(['S', `shorts no prejuízo (${sgn(ls.shortPnl)})`]); } }
-  if (ls) { const r = ls.longAcc / Math.max(1, ls.shortAcc), pL = Math.round(100 * ls.longAcc / (ls.longAcc + ls.shortAcc));
-    if (r > 1.5) { L++; why.push(['L', `multidão comprada (${pL}% das contas)`]); } else if (r < 0.67) { S++; why.push(['S', `multidão vendida (${100 - pL}% das contas)`]); } }
-  const grp = ks => { let l = 0, s = 0; for (const c of P.cohorts) if (ks.includes(c.tier)) { l += c.L; s += c.S; } return l + s ? (l - s) / (l + s) : 0; };
-  const smart = grp(['money_printer', 'smart_money']), crowd = grp(['exit_liquidity', 'humble_earner']);
-  if (smart < -0.2 && crowd > 0.1) { L++; why.push(['L', 'lucrativos vendidos × multidão comprada']); }
-  else if (smart > 0.2 && crowd < -0.1) { S++; why.push(['S', 'lucrativos comprados × multidão vendida']); }
-  const c4 = P.oiChg && P.oiChg.h4;
-  if (c4 && Math.abs(c4.oi) > 0.005) {
-    if (c4.oi > 0 && c4.px < 0) { L++; why.push(['L', `OI ${pc(c4.oi * 100)} com preço caindo (4 h): shorts abrindo`]); }
-    else if (c4.oi < 0 && c4.px < 0) { L++; why.push(['L', `OI ${pc(c4.oi * 100)} com preço caindo (4 h): longs saindo`]); }
-    else if (c4.oi > 0 && c4.px > 0) { S++; why.push(['S', `OI ${pc(c4.oi * 100)} com preço subindo (4 h): longs abrindo`]); }
-    else if (c4.oi < 0 && c4.px > 0) { S++; why.push(['S', `OI ${pc(c4.oi * 100)} com preço subindo (4 h): shorts fechando`]); } }
-  const h = liqs[k] && liqs[k].sum1h;
-  if (h && h.long > 2 * h.short && h.long > 250e3) { L++; why.push(['L', `${fm(h.long)} de longs liquidados em 1 h`]); }
-  if (h && h.short > 2 * h.long && h.short > 250e3) { S++; why.push(['S', `${fm(h.short)} de shorts liquidados em 1 h`]); }
-  const v = L - S >= 2 ? { t: 'Longs apertados', c: COR.dn } : S - L >= 2 ? { t: 'Shorts apertados', c: COR.up } : { t: 'Sem lado claramente apertado', c: COR.mu };
-  return { ...v, L, S, why, ann };
-}
-function pivots(arr) {
-  if (!arr || arr.length < 8) return null; let hi = null, lo = null;
-  for (let i = arr.length - 3; i >= 2 && (hi == null || lo == null); i--) { const x = arr[i];
-    if (hi == null && x.h > arr[i - 1].h && x.h > arr[i - 2].h && x.h >= arr[i + 1].h && x.h >= arr[i + 2].h) hi = x.h;
-    if (lo == null && x.l < arr[i - 1].l && x.l < arr[i - 2].l && x.l <= arr[i + 1].l && x.l <= arr[i + 2].l) lo = x.l; }
-  return { hi, lo };
-}
-function estrutura(k, tf, cur, n) {
-  const p = pivots(cand[k] && cand[k][tf]); if (!p) return null;
-  if (p.hi != null && cur > p.hi) return { s: 1, t: `${n} rompeu o último topo (${fpx(p.hi)})` };
-  if (p.lo != null && cur < p.lo) return { s: -1, t: `${n} perdeu o último fundo (${fpx(p.lo)})` };
-  return null;
-}
+/* nota de setup: cálculo em trava.js (o mesmo do servidor); aqui só junta os dados que a página já tem */
+const squeeze = (k, P) => squeezeDe(k, P, liqs[k] && liqs[k].sum1h, COR);
+const estrutura = (k, tf, cur, n) => estruturaDe(cand[k] && cand[k][tf], cur, n);
+const rsiAt = (k, tf, ms, price) => rsiAtArr(cand[k] && cand[k][tf], ms, price);
+const setupDe = (k, A, modo, lado) => setupNota({ k, cur: A.cur, zn: A.zn, c15: A.tr.c15, cand: cand[k] || {}, chance: chance[k], press: press[k], sum1h: liqs[k] && liqs[k].sum1h, modo, lado });
 /* ---------- Trava em três camadas (ver aovivo/gatilho.js) ---------- */
 // 1) SETUP: só o que muda devagar (R:R, chance de tocar, estrutura, 15 min, RSI 15 min, quem está apertado). Calculado com o preço do
 //    fechamento da vela de 15 min e guardado até o próximo fechamento: a nota não pisca a cada minuto e cada nota fica registrada.
-function setupDe(k, A, modo, lado) {
-  const { cur, zn } = A, isBuy = lado === 'compra', bw = zn.bw, H = modo === 'day' ? 4 : 24;
-  const blocks = [], pros = [], cons = [], faltam = []; let sc = 50;
-  const falta = (v, t) => faltam.push([v, t]);
-  const add = (v, t) => { sc += v; (v >= 0 ? pros : cons).push((v >= 0 ? '+' : '') + v + ' ' + t); };
-  let stop = null, alvo = null;
-  if (isBuy) { if (zn.ap) stop = (zn.ap.a[0] - bw / 2) * (1 - ROTEIRO.stopBuf); if (zn.ve) alvo = zn.ve.a[0] - bw / 2; }
-  else { if (zn.ve) stop = (zn.ve.a[0] + bw / 2) * (1 + ROTEIRO.stopBuf); if (zn.ap) alvo = zn.ap.a[0] + bw / 2; }
-  const rr = stop && alvo ? Math.abs(alvo - cur) / Math.abs(cur - stop) : null;
-  if (rr == null) cons.push('sem alvo/stop claros no mapa — R:R não calculável');
-  else if (rr < ROTEIRO.rrMin) { const e = (alvo + ROTEIRO.rrMin * stop) / (1 + ROTEIRO.rrMin);
-    // não bloqueia o setup: vira preço-limite de entrada, que o gatilho confere ao vivo (como uma ordem limitada no nível)
-    cons.push(`R:R ${f1(rr)} no preço do fechamento: entrada só ${isBuy ? 'em' : 'em'} ${fpx(e)} ou ${isBuy ? 'abaixo' : 'acima'} (${pc((e / cur - 1) * 100)})`); }
-  else if (rr >= 3) add(15, `R:R ${f1(rr)}:1`); else add(8, `R:R ${f1(rr)}:1`);
-  if (alvo && stop) { const pa = pTouch(k, alvo, cur, H), ps = pTouch(k, stop, cur, H);
-    if (pa != null && ps != null) { const df = (pa - ps) * 100;
-      if (df >= 10) add(10, `alvo mais provável que o stop em ${H} h (${pp(pa)} × ${pp(ps)})`);
-      else if (df <= -10) add(-10, `stop mais provável que o alvo em ${H} h (${pp(ps)} × ${pp(pa)})`);
-      if (df < 10 && Math.max(pa, ps) >= 0.05) falta(df <= -10 ? 20 : 10, `alvo ficar mais provável que o stop em ${H} h (hoje ${pp(pa)} × ${pp(ps)})`); } }
-  const sL = isBuy ? 1 : -1;
-  if (modo === 'day') {
-    const e4 = estrutura(k, '4h', cur, '4H'); if (e4) add(10 * e4.s * sL, e4.t);
-    if (!e4 || e4.s !== sL) { const pv = pivots(cand[k] && cand[k]['4h']), nv = pv && (isBuy ? pv.hi : pv.lo);
-      if (nv != null) falta(e4 ? 20 : 10, `4H ${isBuy ? 'romper o último topo' : 'perder o último fundo'} (${fpx(nv)}, ${pc((nv / cur - 1) * 100)})`); }
-    if (Math.abs(A.tr.c15) >= 0.3) add((A.tr.c15 > 0 ? 5 : -5) * sL, `15 min ${pc2(A.tr.c15)}`);
-    if (!(A.tr.c15 * sL >= 0.3)) falta(A.tr.c15 * sL <= -0.3 ? 10 : 5, `15 min ${isBuy ? 'subindo' : 'caindo'} 0,3% ou mais (hoje ${pc2(A.tr.c15)})`);
-    const r15 = rsiAt(k, '15m', 9e5, cur);
-    if (r15 && r15.v <= 30) add(isBuy ? 5 : -5, `RSI 15 min em sobrevenda (${f1(r15.v)})`);
-    if (r15 && r15.v >= 70) add(isBuy ? -5 : 5, `RSI 15 min em sobrecompra (${f1(r15.v)})`);
-    if (r15 && (isBuy ? r15.v > 30 : r15.v < 70)) falta(5, `RSI 15 min ${isBuy ? 'em sobrevenda (≤30)' : 'em sobrecompra (≥70)'} (hoje ${f1(r15.v)})`);
-  } else {
-    const eD = estrutura(k, '1d', cur, 'Diário'); if (eD) add(10 * eD.s * sL, eD.t);
-    const rD = rsiAt(k, '1d', 864e5, cur), rW = rsiAt(k, '1w', 7 * 864e5, cur);
-    if (!isBuy && rD && rD.v >= 70) add(5, `RSI diário em sobrecompra (${f1(rD.v)})`);
-    if (rW && rW.v >= 70) add(isBuy ? -5 : 5, `RSI semanal esticado (${f1(rW.v)})`);
-  }
-  const q = squeeze(k, press[k]);
-  if (q && q.t === 'Longs apertados') add(isBuy ? -10 : 10, 'longs apertados');
-  if (q && q.t === 'Shorts apertados') add(isBuy ? 10 : -10, 'shorts apertados');
-  if (!q || q.t !== (isBuy ? 'Shorts apertados' : 'Longs apertados')) falta(q && q.t === (isBuy ? 'Longs apertados' : 'Shorts apertados') ? 20 : 10, `${isBuy ? 'shorts' : 'longs'} ficarem apertados (funding, OI e grupos)`);
-  sc = Math.max(0, Math.min(100, Math.round(sc)));
-  faltam.sort((x, y) => y[0] - x[0]);
-  return { sc, blocks, pros, cons, stop, alvo, rr, faltam };
-}
-
 const SETUP = {};   // k|modo|lado → { vela, t, cur, completo, r }: comum a todas as telas
 const horaTxt = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 function registrarNota(k, modo, lado, S) {   // histórico das notas de fechamento (neste navegador), para medir a Trava depois

@@ -5,11 +5,16 @@ Avisa só quando algo exige ação:
   2. posição real chegou perto da liquidação (menos de 8% do preço; só reavisa depois de afastar para 12%).
 Preços e posições vêm direto da Hyperliquid a cada minuto (sem banco). O banco (Neon grátis, cota limitada) só é lido
 a cada 20 min, para as operações abertas e o endereço da carteira, e só é escrito quando um alerta dispara.
+Também grava a nota de setup da Trava (6 cripto) a cada 15 min: pede a nota ao site (api/notas, o mesmo cálculo da página),
+guarda em memória e grava no banco junto com a leitura de 20 em 20 min, sem acordar o banco a mais.
 Variáveis: DATABASE_URL, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID.
 """
+import hashlib
+import hmac
 import os
 import sys
 import time
+from urllib.parse import urlsplit
 
 import requests
 
@@ -21,6 +26,63 @@ DURACAO_S = 5.5 * 3600
 PASSO_S = 60
 RELER_BANCO_S = 20 * 60
 LIQ_AVISA, LIQ_REARMA = 0.08, 0.12
+NOTAS_URL = os.environ.get("NOTAS_URL", "https://radar-carteiras.vercel.app/api/notas")
+NOTAS_ATIVOS = ["BTC", "ETH", "SOL", "XRP", "HYPE", "NEAR"]
+VELA_S = 900
+NOTAS_MAX = 3000   # com o banco fora (cota), guarda no máximo isto em memória
+
+
+def chave_notas(url):
+    """Senha do usuário do banco: igual no site e aqui mesmo se um usar o endereço com pooler e o outro não."""
+    if not url:
+        return ""
+    url = url.split()[0].strip().strip('"').strip("'")
+    if url.startswith("DATABASE_URL="):
+        url = url.split("=", 1)[1].strip('"').strip("'")
+    return urlsplit(url).password or ""
+
+
+def token_notas(chave, agora=None):
+    minuto = int((agora if agora is not None else time.time()) // 60)
+    return hmac.new(chave.encode(), f"notas:{minuto}".encode(), hashlib.sha256).hexdigest()
+
+
+def buscar_notas():
+    """Nota de cada ativo na vela que acabou de fechar. Um ativo por vez (as velas de 1 h pesam no limite da Hyperliquid)."""
+    chave, notas, erros = chave_notas(os.environ.get("DATABASE_URL", "")), [], []
+    if not chave:
+        return notas, ["sem DATABASE_URL"]
+    for i, coin in enumerate(NOTAS_ATIVOS):
+        if i:
+            time.sleep(5)
+        try:
+            r = requests.get(NOTAS_URL, params={"coin": coin}, headers={"x-token": token_notas(chave)}, timeout=45)
+            if r.status_code == 200:
+                notas += r.json().get("notas", [])
+            else:
+                erros.append(f"{coin}: {r.status_code} {r.text[:80]}")
+        except Exception as e:
+            erros.append(f"{coin}: {str(e)[:80]}")
+    return notas, erros
+
+
+def gravar_notas(notas):
+    """True se gravou (ou não havia nada). Linha repetida (mesma vela) é ignorada."""
+    if not notas:
+        return True
+    try:
+        from db import conectar
+        c = conectar()
+        c.executemany("INSERT INTO notas_trava (t, moeda, modo, lado, nota, bloqueado, preco, stop, alvo, rr, itens) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT (t, moeda, modo, lado) DO NOTHING",
+                      [(n["t"], n["moeda"], n["modo"], n["lado"], n["nota"], n["bloqueado"], n["preco"], n.get("stop"),
+                        n.get("alvo"), n.get("rr"), n.get("itens")) for n in notas])
+        c.commit()
+        print(f"notas da Trava gravadas: {len(notas)}", flush=True)
+        return True
+    except Exception as e:
+        print("não consegui gravar as notas da Trava (fica para a próxima):", str(e)[:120], flush=True)
+        return False
 
 
 def preco_de(mids, ativo):
@@ -141,13 +203,22 @@ def disparar_proxima():
 def main():
     fim = time.time() + DURACAO_S
     trades, carteira, feitos, ultimo_banco = [], "", set(), 0
+    notas, vela_notas = [], int(time.time() // VELA_S)   # a primeira nota sai no próximo fechamento
     while time.time() < fim:
+        agora = time.time()
+        if int(agora // VELA_S) != vela_notas and agora % VELA_S >= 20:   # 20 s depois do fechamento da vela de 15 min
+            vela_notas = int(agora // VELA_S)
+            novas, erros = buscar_notas()
+            notas = (notas + novas)[-NOTAS_MAX:]
+            print(f"notas da Trava: {len(novas)} novas, {len(notas)} esperando o banco" + (f" · erros: {'; '.join(erros)}" if erros else ""), flush=True)
         if time.time() - ultimo_banco > RELER_BANCO_S:
             r = ler_banco()
             ultimo_banco = time.time()
             if r:
                 trades, carteira, lidos = r
                 feitos |= lidos
+                if gravar_notas(notas):   # o banco acabou de responder: grava junto, sem acordá-lo outra vez
+                    notas = []
         try:
             mids = hl({"type": "allMids"})
             try:
@@ -164,6 +235,7 @@ def main():
         except Exception as e:
             print("passo falhou:", str(e)[:150], flush=True)
         time.sleep(PASSO_S)
+    gravar_notas(notas)   # o que sobrou desta execução
     disparar_proxima()
 
 

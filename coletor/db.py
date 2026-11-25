@@ -206,6 +206,14 @@ CREATE TABLE IF NOT EXISTS balancos (
   trimestre TEXT, eps_previsto TEXT, atualizado BIGINT,
   PRIMARY KEY (simbolo, data)
 );
+-- nota de setup da Trava do roteiro, uma por vela de 15 min (web/aovivo/trava.js via api/notas.js; gravada pelo alertas.py)
+CREATE TABLE IF NOT EXISTS notas_trava (
+  t BIGINT NOT NULL,                -- fechamento da vela de 15 min (ms): momento em que a nota vale
+  moeda TEXT NOT NULL, modo TEXT NOT NULL, lado TEXT NOT NULL,   -- day | swing ; compra | venda
+  nota INTEGER, bloqueado INTEGER, preco DOUBLE PRECISION, stop DOUBLE PRECISION, alvo DOUBLE PRECISION, rr DOUBLE PRECISION,
+  itens TEXT,                       -- JSON: pontos a favor e contra
+  PRIMARY KEY (t, moeda, modo, lado)
+);
 CREATE INDEX IF NOT EXISTS ix_acoes_ops_t1 ON acoes_operacoes (t1);
 CREATE INDEX IF NOT EXISTS ix_acoes_alertas ON acoes_alertas (tempo);
 CREATE INDEX IF NOT EXISTS ix_acoes_pos ON acoes_posicoes (moeda, coletado);

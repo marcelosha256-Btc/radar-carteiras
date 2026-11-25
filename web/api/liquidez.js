@@ -7,19 +7,19 @@ const TAKER = 0.00045;                         // taxa usada para estimar o tama
 const ok = c => /^(xyz:)?[A-Z0-9]{2,12}$/.test(c);
 const faixa = c => (c === 'xyz:SP500' || c === 'xyz:XYZ100') ? { R: 10, nb: 20 } : c.startsWith('xyz:') ? { R: 15, nb: 20 } : { R: 15, nb: 30 };
 
-async function cv(p) {
+export async function cv(p) {
   const r = await fetch(CV + p, { headers: { 'X-API-Key': (process.env.COINVERSA_API_KEY || '').trim() } });
   if (!r.ok) throw new Error('Coinversa ' + r.status);
   return r.json();
 }
-async function hl(body) {
+export async function hl(body) {
   const r = await fetch(HL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error('Hyperliquid ' + r.status);
   return r.json();
 }
 
 // mapa de liquidações: L = faixas abaixo do preço (longs), S = acima (shorts), em US$ milhões
-async function mapa(coin) {
+export async function mapa(coin) {
   const { R, nb } = faixa(coin);
   const j = await cv(`/live/liquidation-heatmap/${encodeURIComponent(coin)}?buckets=${nb}&range=${R}`);
   const b = j.buckets, h = nb / 2, m = v => +(v / 1e6).toFixed(4);
@@ -58,7 +58,7 @@ async function liqs(coin) {
 }
 
 // quem está apertado: funding/OI oficiais (Hyperliquid) + histórico de OI, PnL aberto e grupos (Coinversa)
-async function press(coin) {
+export async function press(coin) {
   const dex = coin.startsWith('xyz:') ? 'xyz' : null;
   const [ctx, fh, oih, ls, cb] = await Promise.all([
     hl(dex ? { type: 'metaAndAssetCtxs', dex } : { type: 'metaAndAssetCtxs' }).then(([m, a]) => a[m.universe.findIndex(u => u.name === coin)] || null).catch(() => null),
