@@ -273,9 +273,9 @@ const mesmoAtivo = (k, a) => !!a && (a === k || 'xyz:' + a === k || k.replace(/^
 const GRAF_HTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span><span class="small muted lv-st"></span></div>
     <div class="lv-tabs"></div>
     <div class="lv-erro" hidden></div>
-    <div class="box lv-graf"><div class="box-head" style="flex-wrap:wrap;gap:8px"><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div>
+    <div class="lv-gwrap"><div class="box lv-graf"><div class="box-head" style="flex-wrap:wrap;gap:8px"><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div>
       <div class="lv-gcam" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div><span style="flex:1"></span><button class="lv-grsi" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">ver no RSI Mestre ↗</button></div>
-      <p class="small lv-gleit lm-nao"></p><div class="lv-gplano small"></div><div class="lv-gsvg"></div><div class="lv-grsil"></div><p class="small muted lv-gresumo" style="margin:6px 0 2px"></p><details class="small muted lv-gmais"><summary style="cursor:pointer;color:var(--fg)">Como ler este gráfico</summary><p class="lv-gnota" style="margin:6px 0 0"></p></details></div>`;
+      <p class="small lv-gleit lm-nao"></p><div class="lv-gplano small"></div><div class="lv-gsvg"></div><div class="lv-grsil"></div><p class="small muted lv-gresumo" style="margin:6px 0 2px"></p><details class="small muted lv-gmais"><summary style="cursor:pointer;color:var(--fg)">Como ler este gráfico</summary><p class="lv-gnota" style="margin:6px 0 0"></p></details></div><aside class="box lv-liqp"></aside></div>`;
 const CAMADAS = [['sr', 'Suporte/resistência'], ['niv', 'Níveis'], ['est', 'Estrutura'], ['liq', 'Liquidez'], ['bol', 'Liquidações'], ['rsi', 'RSI'], ['rsip', 'RSI no preço'], ['plano', 'Meu plano'], ['trades', 'Meus trades'], ['rsima', 'Média do RSI']];
 
 /* ---------- uma instância por mercado (Cripto / Ações) e por vista (Liquidez ao vivo / Gráfico) ---------- */
@@ -376,11 +376,66 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
       + `<span class="lv-abc" style="color:${COR.long}"><span class="lv-abt">▼ Abaixo · longs</span><b>${usd(Lg)}</b><span class="lv-abp">${pL}%</span></span>`
       + `<span class="lv-abbar"><i style="width:${pS}%;background:${COR.short}"></i><i style="width:${pL}%;background:${COR.long}"></i></span><span class="lv-abr">em aberto · faixa ±${m.R}%</span>${imas(k, A)}</span>`;
   }
+  /* Painel lateral de liquidações (Gráfico · cripto): em aberto, ímãs, próximo ímã, liquidações por faixa e chance de tocar.
+   * Mapa ±50% da Coinversa (posições reais da Hyperliquid); ímãs pelo mapa fino de ±15% (o mesmo das zonas da Liquidez ao vivo). */
+  const usdBi = v => v >= 995e6 ? 'US$ ' + (v / 1e9).toFixed(1).replace('.', ',') + ' bi' : v >= 995e3 ? 'US$ ' + (v / 1e6).toFixed(1).replace('.', ',') + ' mi' : 'US$ ' + Math.round(v / 1e3) + ' mil';
+  const mi = v => v >= 995e6 ? (v / 1e9).toFixed(1).replace('.', ',') + ' bi' : (v / 1e6).toFixed(1).replace('.', ',') + ' mi';
+  const pc1 = v => v.toFixed(1).replace('.', ',') + '%';
+  function renderPainelLiq(A) {
+    const el = $('.lv-liqp'), wrap = $('.lv-gwrap'); if (!el || !wrap) return;
+    if (mercado !== 'cripto') { el.hidden = true; wrap.classList.add('sem'); return; }
+    el.hidden = false;
+    let h;
+    if (!painelAberto()) { h = `<button type="button" class="lv-lp-abrir" title="Abrir o painel de liquidações">Liquidações ▸</button>`; wrap.classList.add('sem'); }
+    else {
+      wrap.classList.remove('sem');
+      const k = SEL, m = mapasL[k] || mapas[k], cur = A ? A.cur : live[k];
+      const cab = `<div class="lv-lp-top"><b>Liquidações</b><button type="button" class="lv-lp-fechar" title="Recolher o painel">✕</button></div>`;
+      if (!m || !cur) h = cab + `<p class="muted small">${erros.senha ? 'Digite a senha do radar no topo da página.' : 'carregando o mapa…'}</p>`;
+      else {
+        const M = build(m), S = M.S.reduce((t, a) => t + a[1], 0), L = M.L.reduce((t, a) => t + a[1], 0), tot = S + L || 1, pS = Math.round(S / tot * 100);
+        const hora = new Date(m.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        h = cab + `<div class="lv-lp-ref"><div><span class="lv-lp-k">${nome(k)} · preço de referência</span><b>US$ ${fpx(cur)}</b></div><div style="text-align:right"><span class="lv-lp-k">atualizado</span><b>${hora}</b></div></div>`;
+        // em aberto
+        h += `<div class="lv-lp-sec"><div class="lv-lp-h"><span>Em aberto</span><span class="lv-lp-n">faixa ±${m.R}% do preço</span></div>`
+          + `<div class="lv-lp-2"><div class="lv-lp-c" style="color:${COR.short}"><span>▲ <b>Acima</b> shorts</span><strong>${usdBi(S)}</strong><span class="lv-lp-n">${pS}%</span></div>`
+          + `<div class="lv-lp-c" style="color:${COR.long}"><span>▼ <b>Abaixo</b> longs</span><strong>${usdBi(L)}</strong><span class="lv-lp-n">${100 - pS}%</span></div></div>`
+          + `<div class="lv-abbar"><i style="width:${pS}%;background:${COR.short}"></i><i style="width:${100 - pS}%;background:${COR.long}"></i></div></div>`;
+        // ímãs
+        const zn = A && A.zn, bw = zn ? zn.bw : 0, ed = (o, up) => up ? o.a[0] - bw / 2 : o.a[0] + bw / 2;
+        if (zn && (zn.ap || zn.ve)) {
+          const lin = (o, up) => { if (!o) return ''; const e = ed(o, up), d = (e / cur - 1) * 100, c = up ? COR.short : COR.long;
+            return `<tr title="${up ? 'Shorts' : 'Longs'} a liquidar ${fm(o.a[1])}${o.a[2] != null ? ' · ' + o.a[2] + ' posições' : ''}"><td style="color:${c}">${up ? '▲' : '▼'} ${fpx(o.a[0] - bw / 2)} – ${fpx(o.a[0] + bw / 2)}</td><td class="n" style="color:${c}">${pc(d)}</td><td class="n">${pp(pTouch(k, e, cur, 720))}</td></tr>`; };
+          h += `<div class="lv-lp-sec"><div class="lv-lp-h"><span>Ímãs</span><span class="lv-lp-n">maior liquidez perto do preço</span></div>`
+            + `<table class="lv-lp-t"><thead><tr><th>Faixa</th><th class="n">Dist.</th><th class="n">Toca em 30 dias</th></tr></thead><tbody>${lin(zn.ve, true)}${lin(zn.ap, false)}</tbody></table>`;
+          if (zn.ap && zn.ve) {
+            const dA = Math.abs(ed(zn.ve, true) / cur - 1) * 100, dB = Math.abs(ed(zn.ap, false) / cur - 1) * 100, up = dA <= dB, o = up ? zn.ve : zn.ap, pr = Math.round((up ? dB : dA) / (dA + dB) * 100), c = up ? COR.short : COR.long;
+            h += `<div class="lv-lp-prox" style="border-color:${c}"><div class="lv-lp-h" style="margin:0"><span>Próximo ímã</span><b style="color:${c}">${up ? '▲' : '▼'} ${fpx(o.a[0] - bw / 2)} – ${fpx(o.a[0] + bw / 2)}</b></div>`
+              + `<p><b>${pr}%</b> de chance de vir antes do ${up ? 'de baixo' : 'de cima'}: está a ${pc1(up ? dA : dB)}, o outro a ${pc1(up ? dB : dA)}. <span class="muted">É só a conta da distância, não previsão de alta ou queda.</span></p></div>`;
+          }
+          h += `</div>`;
+        }
+        // liquidações por faixa
+        const fx = [5, 10, 20, 50].filter(x => x <= m.R);
+        h += `<div class="lv-lp-sec"><div class="lv-lp-h"><span>Liquidações por faixa</span><span class="lv-lp-n">US$</span></div><table class="lv-lp-t"><thead><tr><th>Até</th><th class="n">▲ Acima</th><th class="n">▼ Abaixo</th><th class="n">Predomina</th></tr></thead><tbody>`
+          + fx.map(x => { const a = M.S.filter(b => b[0] <= cur * (1 + x / 100)).reduce((t, b) => t + b[1], 0), b = M.L.filter(c => c[0] >= cur * (1 - x / 100)).reduce((t, c) => t + c[1], 0), sa = a + b ? Math.round(Math.max(a, b) / (a + b) * 100) : 0, ac = a >= b;
+            return `<tr><td><b>${x}%</b></td><td class="n">${mi(a)}</td><td class="n">${mi(b)}</td><td class="n" style="color:${ac ? COR.short : COR.long}">${sa}% ${ac ? '▲' : '▼'}</td></tr>`; }).join('') + `</tbody></table></div>`;
+        // chance de tocar
+        const nmH = { '24': '1d', '168': '7d', '720': '30d' };
+        h += `<div class="lv-lp-sec"><div class="lv-lp-h"><span>Chance de tocar</span><span class="seg lv-lp-hz">${Object.entries(nmH).map(([hh, n]) => `<button type="button" data-h="${hh}" aria-pressed="${HZ === hh}">${n}</button>`).join('')}</span></div>`
+          + `<table class="lv-lp-t"><thead><tr><th>Até</th><th class="n">▲ Alta</th><th class="n">Chance</th><th class="n">▼ Queda</th><th class="n">Chance</th></tr></thead><tbody>`
+          + [5, 10, 20, 50].map(x => { const up = cur * (1 + x / 100), dn = cur * (1 - x / 100);
+            return `<tr><td><b>${x}%</b></td><td class="n">${fpx(up)}</td><td class="n"><b>${pp(pTouch(k, up, cur, +HZ))}</b></td><td class="n">${fpx(dn)}</td><td class="n"><b>${pp(pTouch(k, dn, cur, +HZ))}</b></td></tr>`; }).join('')
+          + `</tbody></table></div><p class="lv-lp-n" style="margin:8px 0 0">Liquidez: posições reais da Hyperliquid (Coinversa). Chances: ~200 dias de velas de 1 h da Hyperliquid; 7 e 30 dias têm poucas janelas e são aproximadas. Estimativas, não previsão.</p>`;
+      }
+    }
+    if (h !== lpSig) { lpSig = h; el.innerHTML = h; }
+  }
   function renderBar(A) {
     const k = SEL, cur = A ? A.cur : live[k];
     const an = $('.lv-an'); if (an.dataset.k !== k) { an.dataset.k = k; an.innerHTML = nome(k) + hlLink(k); }   // só refaz ao trocar de ativo, para o link aceitar o clique
     const px = $('.lv-px'); px.textContent = cur ? fpx(cur) : '—'; px.style.color = flash[k] && flash[k].until > Date.now() ? flash[k].col : '';
-    $('.lv-tr').innerHTML = A ? faixaDirecao(k, A) + cartaoAberto(k, A) : '';
+    $('.lv-tr').innerHTML = A ? faixaDirecao(k, A) + (painelAberto() ? '' : cartaoAberto(k, A)) : '';
     if (A) {
       const est = ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda'); if (a.carregando || b.carregando) return null; return (m === 'day' ? 'Day' : 'Swing') + ' ' + [!a.blocks.length ? 'compra livre' : '', !b.blocks.length ? 'venda livre' : ''].filter(Boolean).join(' e ') || 'bloqueado'; }), pronto = est.every(x => x != null);
       if (pronto) {
@@ -603,8 +658,10 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     return histLiq(k);
   }
   const largoGTF = () => GTF === '4h' || GTF === '1d';
+  const painelAberto = () => vista === 'graf' && mercado === 'cripto' && ls('liqp') !== '0';
+  let HZ = ls('hz') || '720', lpSig = '';   // prazo da "chance de tocar" do painel (horas)
   function carregarMapaL(k) {
-    if (!largoGTF() || Date.now() - (mapaLT[k] || 0) < 300e3) return;
+    if (!(largoGTF() || painelAberto()) || Date.now() - (mapaLT[k] || 0) < 300e3) return;
     mapaLT[k] = Date.now();
     buscar('mapal', k, mapasL).then(() => { gSig = ''; renderGrafico(); });
   }
@@ -701,7 +758,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
   }
   function render() {
     renderTabs();
-    if (vista === 'graf') { renderBar(analyze()); renderGrafico(); return; }
+    if (vista === 'graf') { const A = analyze(); renderBar(A); renderGrafico(); renderPainelLiq(A); if (painelAberto()) carregarMapaL(SEL); return; }
     const A = analyze();
     renderBar(A);
     const err = erros.senha ? 'Digite a senha do radar no topo da página para ver o mapa da Coinversa.' : erros['mapa' + SEL] ? `Sem mapa agora: ${erros['mapa' + SEL]}` : '';
@@ -712,6 +769,9 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
 
   // eventos
   raiz.addEventListener('click', e => {
+    const hz = e.target.closest('.lv-lp-hz button'); if (hz) { HZ = hz.dataset.h; ls('hz', HZ); render(); return; }
+    if (e.target.closest('.lv-lp-fechar')) { ls('liqp', '0'); render(); return; }
+    if (e.target.closest('.lv-lp-abrir')) { ls('liqp', '1'); render(); return; }
     const t = e.target.closest('.lv-tab'); if (t) { SEL = t.dataset.k; ls('sel', SEL); hov = null; trocar(); return; }
     const r = e.target.closest('[data-r]'); if (r) { const k = r.dataset.r; rOpen.has(k) ? rOpen.delete(k) : rOpen.add(k); render(); return; }
     const sm = e.target.closest('.lv-som');
@@ -788,6 +848,23 @@ css.textContent = `
 .lv-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .lv-imas{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:3px 10px;font-size:12px;padding-top:3px;border-top:1px dashed var(--line)}
 .lv-imt{font-weight:700;color:var(--fg)}.lv-ima,.lv-imp{white-space:nowrap}.lv-ima b{color:var(--fg)}
+.lv-gwrap{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
+@media (min-width:1180px){.lv-gwrap{grid-template-columns:minmax(0,1fr) 300px}.lv-gwrap.sem{grid-template-columns:minmax(0,1fr) auto}}
+.lv-liqp{font-size:13px;padding:12px 14px}.lv-gwrap.sem .lv-liqp{padding:6px}
+.lv-lp-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.lv-lp-top b{font-size:14px}
+.lv-lp-fechar,.lv-lp-abrir{font:inherit;font-size:12px;background:none;border:1px solid var(--line);border-radius:6px;color:var(--fg);cursor:pointer;padding:2px 8px}
+.lv-lp-ref{display:flex;justify-content:space-between;gap:8px;padding-bottom:10px;border-bottom:1px solid var(--line)}.lv-lp-ref b{display:block;font-size:15px}
+.lv-lp-k{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.lv-lp-sec{padding:12px 0;border-bottom:1px solid var(--line)}
+.lv-lp-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}.lv-lp-h>span:first-child{font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.lv-lp-n{font-size:11px;color:var(--muted)}
+.lv-lp-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.lv-lp-c{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:8px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);background:color-mix(in srgb,currentColor 9%,transparent)}
+.lv-lp-c span{font-size:12px}.lv-lp-c strong{font-size:17px;color:var(--fg)}
+.lv-lp-t{width:100%;border-collapse:collapse;font-size:12.5px}.lv-lp-t th{font-size:10.5px;font-weight:600;text-transform:uppercase;color:var(--muted);text-align:left;padding:3px 0}
+.lv-lp-t td{padding:4px 0;border-top:1px solid var(--line);white-space:nowrap}.lv-lp-t .n{text-align:right;padding-left:6px}
+.lv-lp-prox{margin-top:10px;padding:8px 10px;border:1px solid;border-radius:8px}.lv-lp-prox p{margin:4px 0 0;font-size:12px}
+.lv-lp-hz button{font-size:11px;padding:2px 7px}
 .lv-ab{display:inline-grid;grid-template-columns:auto auto;gap:3px 6px;align-items:center}
 .lv-abc{display:inline-flex;align-items:baseline;gap:6px;padding:3px 10px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);background:color-mix(in srgb,currentColor 9%,transparent);border-radius:8px;white-space:nowrap}
 .lv-abt{font-size:11.5px;font-weight:600}.lv-abc b{font-size:14px;color:var(--fg)}.lv-abp{font-size:11.5px;opacity:.85}

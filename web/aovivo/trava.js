@@ -98,19 +98,33 @@ export function rsiAtArr(a, ms, price, agora = Date.now()) {
 export function quantis(arr) { const s = [...arr].sort((a, b) => a - b), q = []; for (let i = 0; i <= 100; i++) q.push(s[Math.min(s.length - 1, Math.round(i / 100 * (s.length - 1)))]); return q; }
 export function probToque(qs, x) { if (x <= 0) return 1; let lo = 0, hi = qs.length; while (lo < hi) { const m = (lo + hi) >> 1; if (qs[m] < x) lo = m + 1; else hi = m; } return Math.max(0, Math.min(1, 1 - lo / (qs.length - 1))); }
 
-/** Chance de tocar (método do coletor/chance.py): excursão das próximas 4 h/24 h ÷ amplitude média das 24 velas de 1 h anteriores.
+/** Chance de tocar (método do coletor/chance.py): excursão das próximas 4 h/24 h (e 7/30 dias, para o painel de liquidações)
+ *  ÷ amplitude média das 24 velas de 1 h anteriores. Em 7 e 30 dias divide pela amplitude média dos 30 dias anteriores (a das últimas 24 h
+ *  exagera os prazos longos logo depois de um dia agitado). 7 e 30 dias saem dos mesmos ~200 dias de velas: poucas janelas independentes, aproximadas.
  *  c = velas de 1 h {h,l,c} (até 5.000). Devolve { vol, q, conf, n } ou { erro }. */
+export const HORIZ = [4, 24, 168, 720];   // horas: 4 h, 1 dia, 7 dias, 30 dias
+const LONGO = 168, JAN_L = 720;            // a partir de 7 dias, volatilidade de referência = média dos 30 dias anteriores
 export function chanceDe(c, agora = Date.now()) {
   if (!c || c.length < 400) return { t: agora, erro: 'pouco histórico' };
-  const amp = c.map(x => (x.h - x.l) / x.c), pts = [];
+  const amp = c.map(x => (x.h - x.l) / x.c), pts = [], acc = [0];
+  for (const a of amp) acc.push(acc[acc.length - 1] + a);
+  const media = (i, n) => i >= n ? (acc[i] - acc[i - n]) / n : null;   // média de amp[i-n .. i-1]
   for (let i = 24; i < c.length; i++) {
     let s = 0; for (let j = i - 24; j < i; j++) s += amp[j];
     const vol = s / 24; if (!(vol > 0)) continue;
-    const ex = H => { if (i + H >= c.length) return null; let mx = -Infinity, mn = Infinity; for (let j = i + 1; j <= i + H; j++) { mx = Math.max(mx, c[j].h); mn = Math.min(mn, c[j].l); } return { up: (mx / c[i].c - 1) / vol, dn: (1 - mn / c[i].c) / vol }; };
-    pts.push({ e4: ex(4), e24: ex(24) });
+    const volL = media(i, JAN_L);
+    // uma passada só: máxima/mínima acumuladas, anotadas em 4 h, 24 h, 7 dias e 30 dias
+    const pt = {}; let mx = -Infinity, mn = Infinity;
+    for (let H = 1; H <= HORIZ[HORIZ.length - 1] && i + H < c.length; H++) {
+      mx = Math.max(mx, c[i + H].h); mn = Math.min(mn, c[i + H].l);
+      if (!HORIZ.includes(H)) continue;
+      const v = H >= LONGO ? volL : vol; if (!(v > 0)) continue;
+      pt['e' + H] = { up: (mx / c[i].c - 1) / v, dn: (1 - mn / c[i].c) / v };
+    }
+    pts.push(pt);
   }
-  const build = P => ({ '4': { up: quantis(P.filter(p => p.e4).map(p => p.e4.up)), dn: quantis(P.filter(p => p.e4).map(p => p.e4.dn)) },
-    '24': { up: quantis(P.filter(p => p.e24).map(p => p.e24.up)), dn: quantis(P.filter(p => p.e24).map(p => p.e24.dn)) } });
+  const build = P => Object.fromEntries(HORIZ.map(H => { const k = 'e' + H, A = P.filter(p => p[k]);
+    return [String(H), A.length >= 100 ? { up: quantis(A.map(p => p[k].up)), dn: quantis(A.map(p => p[k].dn)) } : null]; }).filter(x => x[1]));
   // conferência fora da amostra: quantis com os 70% iniciais, medido nos 30% finais (24 h, os dois lados)
   const cut = Math.floor(pts.length * 0.7), qa = build(pts.slice(0, cut)), teste = pts.slice(cut).filter(p => p.e24);
   const conf = [0.25, 0.5, 0.75].map(alvo => {
@@ -120,13 +134,14 @@ export function chanceDe(c, agora = Date.now()) {
     return { prevista: alvo, tocou: n ? hit / n : null };
   });
   let s = 0; for (let j = amp.length - 24; j < amp.length; j++) s += amp[j];
-  return { t: agora, vol: s / 24, q: build(pts), conf, n: pts.length };
+  return { t: agora, vol: s / 24, volL: media(amp.length, Math.min(JAN_L, amp.length)), q: build(pts), conf, n: pts.length };
 }
 
 export function pTouchC(C, level, cur, h) {
-  if (!C || !C.q) return null;
-  const up = level > cur, d = Math.abs(level / cur - 1);
-  return probToque(C.q[String(h)][up ? 'up' : 'dn'], d / C.vol);
+  if (!C || !C.q || !C.q[String(h)]) return null;
+  const up = level > cur, d = Math.abs(level / cur - 1), v = h >= LONGO ? C.volL : C.vol;
+  if (!(v > 0)) return null;
+  return probToque(C.q[String(h)][up ? 'up' : 'dn'], d / v);
 }
 
 /** Nota de SETUP da Trava (a camada lenta; ver gatilho.js). Entradas puras, para a página e o servidor darem a mesma nota:
