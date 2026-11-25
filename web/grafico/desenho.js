@@ -198,7 +198,7 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
     const pm = (rsiMedia || []).map((v, i) => v == null ? null : X(i).toFixed(1) + ',' + YR(v).toFixed(1)).filter(Boolean);
     if (pm.length > 1) s += `<polyline points="${pm.join(' ')}" fill="none" style="stroke:#d4a72c;stroke-width:1.4;opacity:.9"/>`;
     const ult = [...rsi].reverse().find(v => v != null);
-    s += `<text x="${L + 4}" y="${r0 + 11}" style="${HALO}fill:var(--fg);font-size:11px;font-weight:700">RSI 14${ult != null ? ' · ' + ult.toFixed(1).replace('.', ',') : ''}${pm.length > 1 ? ' <tspan style="fill:#d4a72c">· média 14</tspan>' : ''}</text>`;
+    s += `<text x="${L + 4}" y="${r0 + 11}" style="${HALO}fill:var(--fg);font-size:11px;font-weight:700">RSI 14${ult != null ? ' · ' + ult.toFixed(1).replace('.', ',') : ''}${pm.length > 1 ? ` <tspan style="fill:#d4a72c">· média 14 ${(() => { const um = [...rsiMedia].reverse().find(v => v != null); return um != null ? um.toFixed(1).replace('.', ',') : ''; })()}</tspan>` : ''}</text>`;
     if (regimeDia) s += `<text x="${xe - 4}" y="${r0 + 11}" text-anchor="end" style="${HALO}fill:${regimeDia.lado > 0 ? 'var(--up)' : regimeDia.lado < 0 ? 'var(--down)' : 'var(--muted)'};font-size:11px;font-weight:700">Diário: ${esc(regimeDia.t)}${regimeDia.v != null ? ' (RSI ' + regimeDia.v.toFixed(0) + ')' : ''}</text>`;
   }
   return { svg: s + rsiRot.join('') + rot.join('') + srRot.join('') + liqRot.join('') + '</svg>', fora };

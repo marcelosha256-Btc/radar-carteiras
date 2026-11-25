@@ -283,8 +283,9 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
   let lista = mercado === 'acoes' && Array.isArray(window.radarAcoes) && window.radarAcoes.length ? window.radarAcoes.slice(0, 12) : ATIVOS[mercado];
   const ls = (n, v) => { try { if (v === undefined) return localStorage.getItem('lv-' + mercado + '-' + n); localStorage.setItem('lv-' + mercado + '-' + n, v); } catch (e) { return null; } };
   let SEL = ls('sel') || lista[0], Z = +(ls('zoom') || 0.5), MODO = ls('modo') || 'full', GTF = ls('gtf') || '15m', hov = null, mx0 = 0, my0 = 0, gSig = '';
-  let CAM = Object.fromEntries(CAMADAS.map(([k]) => [k, k !== 'rsima']));   // a média do RSI começa desligada
+  let CAM = Object.fromEntries(CAMADAS.map(([k]) => [k, true]));
   try { Object.assign(CAM, JSON.parse(ls('gcam') || '{}')); } catch (e) {}
+  if (ls('gcam-v') !== '2') { CAM.rsima = true; ls('gcam', JSON.stringify(CAM)); ls('gcam-v', '2'); }   // 26/11/2026: a média do RSI passa a vir ligada (liga uma vez para quem já tinha salvo)
   const rOpen = new Set();
 
   raiz.innerHTML = vista === 'graf' ? GRAF_HTML : `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span>
