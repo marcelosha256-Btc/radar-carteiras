@@ -8,6 +8,7 @@ export function fmtPreco(n) {
   if (n >= 1000) return n.toLocaleString('pt-BR', { maximumFractionDigits: n >= 10000 ? 0 : 1 });
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: n < 10 ? 4 : 2 });
 }
+const usdCurto = v => v >= 1e6 ? (v / 1e6).toFixed(1).replace('.', ',') + ' mi' : Math.round(v / 1e3) + ' mil';
 const usdTxt = v => v >= 1e6 ? 'US$ ' + (v / 1e6).toFixed(2).replace('.', ',') + ' mi' : 'US$ ' + Math.round(v / 1e3).toLocaleString('pt-BR') + ' mil';
 const hora = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 const soDia = t => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
@@ -38,16 +39,29 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   for (let i = 0; i < c.length; i += cada) s += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" style="fill:var(--muted);font-size:10.5px">${ms >= 864e5 ? soDia(c[i].t) : ms >= 36e5 ? diaHora(c[i].t) : hora(c[i].t)}</text>`;
   // perfil da liquidez em risco: barras deitadas a partir da borda direita, no mesmo eixo de preço.
   // Preenchido = foto atual; contorno = foto anterior (mostra se a faixa cresceu ou foi consumida).
+  const liqRot = [];
   if (perfil && perfil.bw) {
     s += `<line x1="${xc + 4}" x2="${xc + 4}" y1="${T}" y2="${y1}" style="stroke:var(--line)"/>`;
     const PW = 122, faixas = [...perfil.L.map(a => [...a, 'L']), ...perfil.S.map(a => [...a, 'S'])].filter(a => a[0] + perfil.bw / 2 > lo && a[0] - perfil.bw / 2 < hi);
     const mx = Math.max(1, ...faixas.map(a => Math.max(a[1], a[2] || 0)));
-    faixas.forEach(([p, v, ant, lado]) => {
+    // as 2 maiores de cada lado ganham rótulo com o valor (e a mudança desde a foto anterior)
+    const top = new Set(['L', 'S'].flatMap(l => faixas.filter(a => a[4] === l && a[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 2)));
+    const dif = (v, ant) => ant == null ? '' : (Math.abs(v - ant) < 0.05 * Math.max(v, ant, 1) ? '' : ` (${v >= ant ? '+' : '−'}${usdCurto(Math.abs(v - ant))})`);
+    const ocup = [];
+    faixas.forEach(a => {
+      const [p, v, ant, n, lado] = a;
       const ya = Y(Math.min(hi, p + perfil.bw / 2)), yb = Y(Math.max(lo, p - perfil.bw / 2)), h = Math.max(1, yb - ya - 1), col = lado === 'L' ? 'var(--lv-long)' : 'var(--lv-short)';
-      const w = v / mx * PW; if (w >= 0.5) s += `<rect x="${(x1 - w).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" style="fill:${col};opacity:.22"/>`;
+      const tip = `${fmtPreco(p - perfil.bw / 2)}–${fmtPreco(p + perfil.bw / 2)} · ${lado === 'L' ? 'longs' : 'shorts'} a liquidar ${usdTxt(v)}${n != null ? ' · ' + n + ' posições' : ''}${ant != null ? ' · na foto anterior ' + usdTxt(ant) : ''}`;
+      // faixa clicável/dica em toda a largura da coluna, para achar até as barras pequenas
+      s += `<rect x="${xc + 4}" y="${(ya + 0.5).toFixed(1)}" width="${(x1 - xc - 4).toFixed(1)}" height="${h.toFixed(1)}" style="fill:transparent"><title>${esc(tip)}</title></rect>`;
+      const w = v / mx * PW; if (w >= 0.5) s += `<rect x="${(x1 - w).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" style="fill:${col};opacity:.22"><title>${esc(tip)}</title></rect>`;
+      if (top.has(a)) { const yt = (ya + yb) / 2 + 3.5; if (yt > T + 40 && yt < y1 && !ocup.some(y => Math.abs(y - yt) < 12)) { ocup.push(yt);
+        liqRot.push(`<text x="${x1 - 3}" y="${yt.toFixed(1)}" text-anchor="end" style="${HALO}fill:${col};font-size:10.5px;font-weight:800">US$ ${usdCurto(v)}${dif(v, ant)}<title>${esc(tip)}</title></text>`); } }
       if (ant != null && Math.abs(ant - v) > 0.05 * mx) { const wa = ant / mx * PW; s += `<rect x="${(x1 - wa).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${wa.toFixed(1)}" height="${h.toFixed(1)}" style="fill:none;stroke:${col};stroke-width:1;stroke-dasharray:2 2;opacity:.8"/>`; }
     });
-    s += `<text x="${x1 - 4}" y="${T + 10}" text-anchor="end" style="${HALO}fill:var(--muted);font-size:10.5px">liquidez em risco${perfil.hora ? ' · foto ' + perfil.hora : ''}</text>`;
+    const tot = l => faixas.filter(a => a[4] === l).reduce((t, a) => t + a[1], 0);
+    s += `<text x="${x1 - 4}" y="${T + 10}" text-anchor="end" style="${HALO}fill:var(--muted);font-size:10.5px">liquidez em risco${perfil.hora ? ' · foto ' + perfil.hora : ''}</text>`
+      + `<text x="${x1 - 4}" y="${T + 22}" text-anchor="end" style="${HALO}font-size:10.5px;font-weight:700"><tspan x="${x1 - 4}" style="fill:var(--lv-short)">↑ acima US$ ${usdCurto(tot('S'))}</tspan><tspan x="${x1 - 4}" dy="12" style="fill:var(--lv-long)">↓ abaixo US$ ${usdCurto(tot('L'))}</tspan><title>Na faixa de preço visível: shorts a liquidar acima do preço e longs a liquidar abaixo (estimativa do mapa da Coinversa)</title></text>`;
   }
   // suporte e resistência mais próximos: faixa sombreada atrás das velas, com o que a compõe no rótulo e na dica
   const srRot = [];
@@ -177,5 +191,5 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
     s += `<text x="${L + 4}" y="${r0 + 11}" style="${HALO}fill:var(--fg);font-size:11px;font-weight:700">RSI 14${ult != null ? ' · ' + ult.toFixed(1).replace('.', ',') : ''}${pm.length > 1 ? ' <tspan style="fill:#d4a72c">· média 14</tspan>' : ''}</text>`;
     if (regimeDia) s += `<text x="${xe - 4}" y="${r0 + 11}" text-anchor="end" style="${HALO}fill:${regimeDia.lado > 0 ? 'var(--up)' : regimeDia.lado < 0 ? 'var(--down)' : 'var(--muted)'};font-size:11px;font-weight:700">Diário: ${esc(regimeDia.t)}${regimeDia.v != null ? ' (RSI ' + regimeDia.v.toFixed(0) + ')' : ''}</text>`;
   }
-  return { svg: s + rot.join('') + srRot.join('') + '</svg>', fora };
+  return { svg: s + rot.join('') + srRot.join('') + liqRot.join('') + '</svg>', fora };
 }

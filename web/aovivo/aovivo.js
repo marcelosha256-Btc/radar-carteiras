@@ -639,7 +639,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const d = build(m), da = p.ant ? build(p.ant) : null;
     // valor da foto anterior no mesmo preço (as faixas andam com o preço de cada foto, então casa pelo preço, não pela posição)
     const antEm = px => { if (!da) return null; const x = da.L.concat(da.S).find(f => Math.abs(f[0] - px) <= da.bw / 2); return x ? x[1] : 0; };
-    const casa = arr => arr.map(x => [x[0], x[1], antEm(x[0])]);
+    const casa = arr => arr.map(x => [x[0], x[1], antEm(x[0]), x[2]]);   // preço, US$, US$ na foto anterior, posições
     return { bw: d.bw, L: casa(d.L), S: casa(d.S),
       hora: new Date(m.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
   }
