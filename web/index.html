@@ -324,6 +324,7 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
       <button class="tab" role="tab" data-tab="aovivo" data-alias="a-aovivo">Liquidez ao vivo</button>
       <button class="tab" role="tab" data-tab="a-eventos">Balanços e eventos</button>
       <button class="tab-mais" id="tabMais" aria-expanded="false" title="Abas de pesquisa e contexto, por mercado (swing, baleias, on-chain, backtest)">Pesquisa ▾</button>
+      <button class="tab" role="tab" data-tab="rsi" data-sec>RSI Mestre</button>
       <span class="tab-grupo" data-sec>Ações:</span>
       <button class="tab" role="tab" data-tab="a-resumo" data-sec>Resumo</button>
       <button class="tab" role="tab" data-tab="a-carteiras" data-sec>Carteiras</button>
@@ -464,6 +465,9 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
     <div class="box-head"><h2>Liquidez ao vivo · ações</h2><p>O mesmo painel para os contratos de ações, índices e commodities (grupo xyz). Fora do pregão, o preço é só da Hyperliquid.</p></div>
     <div id="lvAcoes"><p class="muted">Carregando…</p></div>
   </section>
+
+  <!-- RSI MESTRE: RSI 14 em 5 tempos gráficos, ações e cripto (montado por rsi/tela.js) -->
+  <section class="panel" id="p-rsi" role="tabpanel" hidden><div class="hoje" id="rsiMestre"><p class="muted">Abrindo…</p></div></section>
 
   <!-- CRIPTO: BACKTEST (montado por backtest/tela.js; funciona mesmo sem o banco) -->
   <section class="panel" id="p-backtest" role="tabpanel" hidden>
@@ -2435,7 +2439,7 @@ const tabs = [...document.querySelectorAll('.tab')];
 const SUB = { cripto: '', acoes: '' };
 let modoAtual = 'cripto';
 let abaAtual = 'hoje';
-const UNICAS = new Set(['hoje', 'trades']);   // telas que juntam ações e cripto
+const UNICAS = new Set(['hoje', 'trades', 'rsi']);   // telas que juntam ações e cripto
 function atualizarSub() {
   const el = document.getElementById('sub'); if (!el) return;
   if (UNICAS.has(abaAtual)) {
@@ -2931,4 +2935,5 @@ conectarLiquidacoes();
 <script type="module" src="risco/tela.js"></script>
 <script type="module" src="posicoes/tela.js"></script>
 <script type="module" src="mercado/tela.js"></script>
+<script type="module" src="rsi/tela.js"></script>
 <script type="module" src="manha/tela.js"></script>

@@ -284,6 +284,7 @@ function criarApp(mercado, painel, raiz) {
     <div class="lv-grid"><div class="lv-main">
       <div class="box lv-top"></div>
       <div class="box"><div class="box-head"><h2>Mapa de liquidações</h2><div class="seg lv-zoom"><button data-z="1">±15%</button><button data-z="0.5">±7,5%</button><button data-z="0.2">±3%</button></div></div>
+        <div class="lv-gat"></div>
         <div class="lv-chart"><div class="lv-svg"></div><div class="lv-tip"></div></div><p class="small muted lv-foot"></p></div>
       <div class="lv-cards"></div>
       <div class="box lv-full lv-liqr"></div>
@@ -368,9 +369,18 @@ function criarApp(mercado, painel, raiz) {
     const vac = (runs, abaixo) => {
       const r = runs[0]; if (!r) return '';
       const d1 = (r.hi / cur - 1) * 100, d2 = (r.lo / cur - 1) * 100;
-      return `<br><span class="small" style="color:var(--warn)">Vácuo ${abaixo ? 'abaixo' : 'acima'}: ${fpx(r.lo)}–${fpx(r.hi)} (${pc(abaixo ? d1 : d2)} a ${pc(abaixo ? d2 : d1)}): ${abaixo ? 'perdendo o apoio' : 'rompendo a venda'}, o preço pode passar reto.</span>`;
+      const z = abaixo ? zn.ap : zn.ve, antes = z ? (abaixo ? r.lo >= z.a[0] : r.hi <= z.a[0]) : false;   // o vácuo fica antes da zona (no caminho) ou depois dela
+      return `<br><span class="small" style="color:var(--warn)">Vácuo ${abaixo ? 'abaixo' : 'acima'}: ${fpx(r.lo)}–${fpx(r.hi)} (${pc(abaixo ? d1 : d2)} a ${pc(abaixo ? d2 : d1)}): ${antes ? `entre o preço e ${abaixo ? 'o apoio' : 'a venda'}: pouca liquidez no caminho, o preço pode chegar rápido` : `${abaixo ? 'perdendo o apoio' : 'rompendo a venda'}, o preço pode passar reto`}.</span>`;
     };
-    $('.lv-top').innerHTML = `<div class="lv-lados">${lado(zn.ap, true)}<br>${lado(zn.ve, false)}${vac(zn.vL, true)}${vac(zn.vS, false)}</div>
+    const zc = (o, isL) => {
+      const c = isL ? COR.long : COR.short, nomeZ = isL ? 'Zona abaixo · apoio' : 'Zona acima · venda';
+      if (!o) return `<div class="lv-zc"><span class="small muted">${nomeZ}</span><b class="lv-zd muted">—</b><span class="small muted">sem zona relevante na faixa lida</span></div>`;
+      const E = isL ? o.a[0] + zn.bw / 2 : o.a[0] - zn.bw / 2, dd = (E / cur - 1) * 100;
+      return `<div class="lv-zc" style="border-color:${c}"><span class="small muted">${nomeZ}${Math.abs(dd) < 0.6 ? ' <span class="chip warn">preço encostado</span>' : ''}</span>
+        <b class="lv-zd" style="color:${c}">${pc(dd)}</b><span class="num">${fpx(o.a[0] - zn.bw / 2)} – ${fpx(o.a[0] + zn.bw / 2)}</span>
+        <span class="small muted">${fm(o.a[1])}${o.a[2] != null ? ' · ' + o.a[2] + ' posições' : ''} · tocar 4 h <b>${pp(pTouch(k, E, cur, 4))}</b> · 24 h <b>${pp(pTouch(k, E, cur, 24))}</b></span></div>`;
+    };
+    $('.lv-top').innerHTML = `<div class="lv-zcs">${zc(zn.ve, false)}${zc(zn.ap, true)}</div><div class="lv-lados">${(vac(zn.vL, true) + vac(zn.vS, false)).replace(/^<br>/, '')}</div>
       <p class="small muted" style="margin-top:4px">1m ${pc2(tr.c1)} · 5m ${pc2(tr.c5)} · 15m ${pc2(tr.c15)}${q ? ` · quem está apertado: <b style="color:${q.c}">${q.t}</b>` : ''}</p>
       <div class="lv-rsi">${rs}</div>
       ${al.length ? `<div class="lv-alerts">${al.slice(0, 3).map(([c, t]) => `<div class="chip ${c}">${t}</div>`).join('')}</div>` : ''}`;
@@ -432,7 +442,8 @@ function criarApp(mercado, painel, raiz) {
     s += `<circle cx="${cx.toFixed(1)}" cy="${yT}" r="5" style="fill:${tr.color};stroke:var(--surface);stroke-width:2"/>`;
     $('.lv-svg').innerHTML = s + rot + hits + '</svg>';
     const sumL = d.L.reduce((t, a) => t + a[1], 0), sumS = d.S.reduce((t, a) => t + a[1], 0), C = chance[k];
-    $('.lv-foot').innerHTML = `Na faixa lida: longs ${fm(sumL)} · shorts ${fm(sumS)} · Coinversa, ${ago(d.ts)}. Laranja: longs liquidados se cair; azul: shorts se subir. Bolinhas: liquidações reais dos últimos 15 min. Linha: preço ao vivo, rastro de 15 min (de cima = agora).` +
+    renderGat(A);
+    $('.lv-foot').innerHTML = `Livro de ordens da Hyperliquid, agora: parede pode sumir e não prevê direção. Na faixa lida: longs ${fm(sumL)} · shorts ${fm(sumS)} · Coinversa, ${ago(d.ts)}. Laranja: longs liquidados se cair; azul: shorts se subir. Bolinhas: liquidações reais dos últimos 15 min. Linha: preço ao vivo, rastro de 15 min (de cima = agora).` +
       (C && C.conf ? ` Chance de tocar conferida no histórico (70/30): ~25% → ${pp(C.conf[0].tocou)}, ~50% → ${pp(C.conf[1].tocou)}, ~75% → ${pp(C.conf[2].tocou)}.` : '');
     if (hov) tipFor(hov);
   }
@@ -455,15 +466,28 @@ function criarApp(mercado, painel, raiz) {
     let x = mx0 - wr.left + 14; if (x + tip.offsetWidth > wr.width) x = mx0 - wr.left - tip.offsetWidth - 14;
     tip.style.left = x + 'px'; tip.style.top = (my0 - wr.top + 14) + 'px';
   }
+  /* faixa do gatilho: o melhor veredito de day trade da Trava, dito como o roteiro diz (nota não é chance) */
+  function renderGat(A) {
+    const el = $('.lv-gat'); if (!el) return;
+    const a = avaliar(SEL, A, 'day', 'compra'), b = avaliar(SEL, A, 'day', 'venda');
+    const okA = !a.blocks.length, okB = !b.blocks.length;
+    const r = okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
+    const est = r.st[0], acao = est === 'BLOQUEADO' ? 'Não entrar' : est === 'LIBERADO' ? 'Liberado pelo roteiro' : 'Aguardar gatilho';
+    const falta = r.blocks.length ? r.blocks[0] : est === 'LIBERADO' ? (r.stop && r.alvo ? `stop ${fpx(r.stop)} · alvo ${fpx(r.alvo)} · R:R ${r.rr != null ? f1(r.rr) : '—'}` : '')
+      : (r.cons.length ? 'falta: ' + r.cons[0].replace(/^-?\d+ /, '') : `falta nota ${ROTEIRO.liberado} (hoje ${r.sc})`);
+    el.innerHTML = `<div class="lv-gatb" style="border-color:${r.st[1]};color:${r.st[1]}"><b>${acao}</b> · day trade · ${r.l} · <span class="lv-gatf">${falta}</span><span style="flex:1"></span><b class="num">${r.sc}/100</b> <span class="small muted">nota do roteiro</span></div>
+      <p class="small muted" style="margin:4px 0 0">A nota soma o que o roteiro confere (R:R, estrutura, fluxo, RSI). É contexto, não chance de acerto: ainda não há histórico medido dela.</p>`;
+  }
   function renderCards(A) {
     const { cur, zn } = A, k = SEL;
     const card = (o, isL) => { const c = isL ? COR.long : COR.short, t = isL ? 'Apoio' : 'Venda';
       if (!o) return `<div class="box"><h3 style="color:${c}">${t}</h3><p class="muted small">Sem cluster relevante ${isL ? 'abaixo' : 'acima'} na faixa lida.</p></div>`;
       const E = isL ? o.a[0] + zn.bw / 2 : o.a[0] - zn.bw / 2;
-      return `<div class="box"><h3 style="color:${c}">${t}</h3><p class="lv-rng num">${fpx(o.a[0] - zn.bw / 2)} – ${fpx(o.a[0] + zn.bw / 2)}</p>
+      const dd = Math.abs(E / cur - 1) * 100;
+      return `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h3 style="color:${c}">${t}</h3><span class="chip ${dd < 0.6 ? 'warn' : ''}">${dd < 0.6 ? 'preço encostado' : 'a ' + f1(dd) + '%'}</span></div><p class="lv-rng num">${fpx(o.a[0] - zn.bw / 2)} – ${fpx(o.a[0] + zn.bw / 2)}</p>
         <p class="small muted">${fm(o.a[1])} em liquidações${o.a[2] != null ? ' · ' + o.a[2] + ' posições' : ''} · ${pc((o.a[0] / cur - 1) * 100)} do preço</p>
         <div class="lv-row"><span class="muted">Chance de tocar</span><span>4 h <b>${pp(pTouch(k, E, cur, 4))}</b> · 24 h <b>${pp(pTouch(k, E, cur, 24))}</b></span></div>
-        <div class="lv-row"><span class="muted">RSI se chegar lá</span><span>${TF.map(([lb, tf, ms]) => { const r = rsiAt(k, tf, ms, E); return `${lb === '15 min' ? '15m' : lb === 'Semana' ? 'S' : lb === 'Dia' ? 'D' : lb} <b style="color:${r ? rsiCol(r.v) : COR.mu}">${r ? f1(r.v) : '—'}</b>`; }).join(' · ')}</span></div></div>`; };
+        <div class="lv-row"><span class="muted">RSI se chegar lá <span class="small">(conta, não previsão)</span></span><span>${TF.map(([lb, tf, ms]) => { const r = rsiAt(k, tf, ms, E); return `${lb === '15 min' ? '15m' : lb === 'Semana' ? 'S' : lb === 'Dia' ? 'D' : lb} <b style="color:${r ? rsiCol(r.v) : COR.mu}">${r ? f1(r.v) : '—'}</b>`; }).join(' · ')}</span></div></div>`; };
     $('.lv-cards').innerHTML = card(zn.ap, true) + card(zn.ve, false);
   }
   function renderLiqs() {
@@ -593,6 +617,13 @@ css.textContent = `
 .lv-cbar{position:relative;height:9px;background:var(--surface-2);border-radius:5px}
 .lv-cbar:before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--faint)}
 .lv-cbar i{position:absolute;top:0;bottom:0;border-radius:5px}
+.lv-zcs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.lv-zc{display:grid;gap:2px;padding:10px 12px;border:1px solid var(--line);border-left-width:3px;border-radius:8px;background:var(--surface-2)}
+.lv-zd{font:800 22px var(--f-display)}
+.lv-lados:empty{display:none}.lv-lados{margin-top:6px}
+.lv-gatb{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;padding:7px 10px;border:1px solid;border-radius:8px;background:var(--surface-2);font-size:13px;margin-top:6px}
+.lv-gatf{color:var(--fg)}
+@media (max-width:600px){.lv-zcs{grid-template-columns:1fr}}
 .lv-som{cursor:pointer;font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg)}.lv-som[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
 .lv-ess .lv-full{display:none!important}`;
 document.head.appendChild(css);
