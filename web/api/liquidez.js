@@ -19,8 +19,9 @@ export async function hl(body) {
 }
 
 // mapa de liquidações: L = faixas abaixo do preço (longs), S = acima (shorts), em US$ milhões
-export async function mapa(coin) {
-  const { R, nb } = faixa(coin);
+// largo = ±50% em faixas de 2% (para o Gráfico de 4H e Diário enxergar a liquidez longe do preço)
+export async function mapa(coin, largo = false) {
+  const { R, nb } = largo ? { R: 50, nb: 50 } : faixa(coin);
   const j = await cv(`/live/liquidation-heatmap/${encodeURIComponent(coin)}?buckets=${nb}&range=${R}`);
   const b = j.buckets, h = nb / 2, m = v => +(v / 1e6).toFixed(4);
   return { coin, ts: Date.now(), p: j.currentPrice, R, nb,
@@ -80,7 +81,7 @@ export async function press(coin) {
     cohorts: Array.isArray(cb) ? cb.map(x => ({ tier: x.pnlTier, L: x.longNotional, S: x.shortNotional, bias: x.netBiasByNotional })) : [] };
 }
 
-const CACHE_S = { mapa: 120, liqs: 30, press: 120 };
+const CACHE_S = { mapa: 120, mapal: 300, liqs: 30, press: 120 };
 export default async function handler(req, res) {
   const senha = (process.env.PAINEL_SENHA || '').trim();
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -89,7 +90,7 @@ export default async function handler(req, res) {
   const q = String(req.query.q || ''), coin = String(req.query.coin || '');
   if (!CACHE_S[q] || !ok(coin)) { res.setHeader('Cache-Control', 'no-store'); res.status(400).json({ erro: 'parâmetros' }); return; }
   try {
-    const dados = q === 'mapa' ? await mapa(coin) : q === 'liqs' ? await liqs(coin) : await press(coin);
+    const dados = q === 'mapa' ? await mapa(coin) : q === 'mapal' ? await mapa(coin, true) : q === 'liqs' ? await liqs(coin) : await press(coin);
     res.setHeader('Cache-Control', `public, s-maxage=${CACHE_S[q]}, stale-while-revalidate=${CACHE_S[q]}`);
     res.setHeader('Vary', 'x-senha');
     res.status(200).json(dados);

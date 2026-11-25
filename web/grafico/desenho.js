@@ -29,7 +29,7 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   if (plano) for (const p of [plano.stop, plano.alvo]) if (p >= lo - 0.5 * r0 && p <= hi + 0.5 * r0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }   // o plano sempre à vista
   if (rsiPreco) for (const { p } of rsiPreco) if (p >= lo - 0.15 * r0 && p <= hi + 0.15 * r0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }   // RSI 70/30 perto da tela: alarga um pouco para caber
   const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
-  const Y = p => T + (hi - p) / (hi - lo) * (y1 - T), xc = perfil && perfil.bw ? x1 - 128 : x1, step = (xc - L) / c.length, X = i => L + (i + 0.5) * step, bw = Math.max(1.5, Math.min(12, step * 0.64));
+  const Y = p => T + (hi - p) / (hi - lo) * (y1 - T), xc = perfil && perfil.bw ? x1 - 64 : x1, step = (xc - L) / c.length, X = i => L + (i + 0.5) * step, bw = Math.max(1.5, Math.min(12, step * 0.64));
   const HR = rsi ? 124 : 0, HB = bolhas ? 74 : 0;   // HB = faixa das liquidações por vela
   let s = `<svg viewBox="0 0 ${W} ${H + HB + HR}" width="100%" role="img" aria-label="Gráfico de velas com níveis do dia e estrutura${rsi ? ' e RSI' : ''}">`;
   // grade e escala de preço
@@ -38,15 +38,14 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   // horas no eixo
   const cada = Math.max(1, Math.round(c.length / 6));
   for (let i = 0; i < c.length; i += cada) s += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" style="fill:var(--muted);font-size:10.5px">${ms >= 864e5 ? soDia(c[i].t) : ms >= 36e5 ? diaHora(c[i].t) : hora(c[i].t)}</text>`;
-  // perfil da liquidez em risco: barras deitadas a partir da borda direita, no mesmo eixo de preço.
-  // Preenchido = foto atual; contorno = foto anterior (mostra se a faixa cresceu ou foi consumida).
+  // perfil da liquidez em risco: barras deitadas a partir da borda direita, no mesmo eixo de preço, entrando por trás das velas
+  // (até ~35% da largura, semitransparentes). Preenchido = foto atual; contorno = foto anterior (mostra se a faixa cresceu ou foi consumida).
   const liqRot = [];
   if (perfil && perfil.bw) {
-    s += `<line x1="${xc + 4}" x2="${xc + 4}" y1="${T}" y2="${y1}" style="stroke:var(--line)"/>`;
-    const PW = 122, faixas = [...perfil.L.map(a => [...a, 'L']), ...perfil.S.map(a => [...a, 'S'])].filter(a => a[0] + perfil.bw / 2 > lo && a[0] - perfil.bw / 2 < hi);
+    const PW = Math.round((x1 - L) * 0.35), faixas = [...perfil.L.map(a => [...a, 'L']), ...perfil.S.map(a => [...a, 'S'])].filter(a => a[0] + perfil.bw / 2 > lo && a[0] - perfil.bw / 2 < hi);
     const mx = Math.max(1, ...faixas.map(a => Math.max(a[1], a[2] || 0)));
-    // as 2 maiores de cada lado ganham rótulo com o valor (e a mudança desde a foto anterior)
-    const top = new Set(['L', 'S'].flatMap(l => faixas.filter(a => a[4] === l && a[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 2)));
+    // as 3 maiores de cada lado ganham rótulo com o valor (e a mudança desde a foto anterior)
+    const top = new Set(['L', 'S'].flatMap(l => faixas.filter(a => a[4] === l && a[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 3)));
     const dif = (v, ant) => ant == null ? '' : (Math.abs(v - ant) < 0.05 * Math.max(v, ant, 1) ? '' : ` (${v >= ant ? '+' : '−'}${usdCurto(Math.abs(v - ant))})`);
     const ocup = [];
     faixas.forEach(a => {
@@ -54,8 +53,8 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
       const ya = Y(Math.min(hi, p + perfil.bw / 2)), yb = Y(Math.max(lo, p - perfil.bw / 2)), h = Math.max(1, yb - ya - 1), col = lado === 'L' ? 'var(--lv-long)' : 'var(--lv-short)';
       const tip = `${fmtPreco(p - perfil.bw / 2)}–${fmtPreco(p + perfil.bw / 2)} · ${lado === 'L' ? 'longs' : 'shorts'} a liquidar ${usdTxt(v)}${n != null ? ' · ' + n + ' posições' : ''}${ant != null ? ' · na foto anterior ' + usdTxt(ant) : ''}`;
       // faixa clicável/dica em toda a largura da coluna, para achar até as barras pequenas
-      s += `<rect x="${xc + 4}" y="${(ya + 0.5).toFixed(1)}" width="${(x1 - xc - 4).toFixed(1)}" height="${h.toFixed(1)}" style="fill:transparent"><title>${esc(tip)}</title></rect>`;
-      const w = v / mx * PW; if (w >= 0.5) s += `<rect x="${(x1 - w).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" style="fill:${col};opacity:.22"><title>${esc(tip)}</title></rect>`;
+      s += `<rect x="${(x1 - PW).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${PW}" height="${h.toFixed(1)}" style="fill:transparent"><title>${esc(tip)}</title></rect>`;
+      const w = v / mx * PW; if (w >= 0.5) s += `<rect x="${(x1 - w).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" style="fill:${col};opacity:.2"><title>${esc(tip)}</title></rect>`;
       if (top.has(a)) { const yt = (ya + yb) / 2 + 3.5; if (yt > T + 40 && yt < y1 && !ocup.some(y => Math.abs(y - yt) < 12)) { ocup.push(yt);
         liqRot.push(`<text x="${x1 - 3}" y="${yt.toFixed(1)}" text-anchor="end" style="${HALO}fill:${col};font-size:10.5px;font-weight:800">US$ ${usdCurto(v)}${dif(v, ant)}<title>${esc(tip)}</title></text>`); } }
       if (ant != null && Math.abs(ant - v) > 0.05 * mx) { const wa = ant / mx * PW; s += `<rect x="${(x1 - wa).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${wa.toFixed(1)}" height="${h.toFixed(1)}" style="fill:none;stroke:${col};stroke-width:1;stroke-dasharray:2 2;opacity:.8"/>`; }
@@ -80,7 +79,8 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
     if (!(p > lo && p < hi)) continue;
     const y = Y(p), col = v === 70 ? 'var(--down)' : v === 30 ? 'var(--up)' : 'var(--muted)', dica = `Se a vela atual fechar em ${fmtPreco(p)}, o RSI 14 fica em ${v}`;
     s += `<line x1="${L}" x2="${xc}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:${col};stroke-width:1;stroke-dasharray:1 4;opacity:${v === 50 ? .45 : .75}"><title>${esc(dica)}</title></line>`;
-    rsiRot.push(`<text x="${(xc - 4).toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="end" style="${HALO}fill:${col};font-size:10.5px;font-weight:700;opacity:${v === 50 ? .8 : 1}">RSI ${v} · ${fmtPreco(p)}<title>${esc(dica)}</title></text>`);
+    const yr = perfil && perfil.bw && y < T + 48 ? Math.max(y + 12, T + 52) : y - 3;   // perto do topo: desce para não cobrir o quadro da liquidez
+    rsiRot.push(`<text x="${(xc - 4).toFixed(1)}" y="${yr.toFixed(1)}" text-anchor="end" style="${HALO}fill:${col};font-size:10.5px;font-weight:700;opacity:${v === 50 ? .8 : 1}">RSI ${v} · ${fmtPreco(p)}<title>${esc(dica)}</title></text>`);
   }
   // velas
   c.forEach((v, i) => { const up = v.c >= v.o, col = up ? 'var(--up)' : 'var(--down)', yo = Y(v.o), yc = Y(v.c);

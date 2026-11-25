@@ -144,6 +144,7 @@ async function carregarLivro(k, cur) {
 
 /* ---------- dados da Coinversa (via /api/liquidez) ---------- */
 const mapas = {}, liqs = {}, press = {}, erros = {};
+const mapasL = {}, mapaLT = {};   // mapa largo (±50%) só para o Gráfico de 4H e Diário, pedido no máximo a cada 5 min por moeda
 async function buscar(q, k, alvo, transf = x => x) {
   try { alvo[k] = transf(await meuApi(q, k)); delete erros[q + k]; } catch (e) { erros[q + k] = e.message; if (e.message === 'senha') erros.senha = true; }
 }
@@ -579,9 +580,15 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     if (mercado === 'cripto') buscarOkxLiq(k);
     return histLiq(k);
   }
+  const largoGTF = () => GTF === '4h' || GTF === '1d';
+  function carregarMapaL(k) {
+    if (!largoGTF() || Date.now() - (mapaLT[k] || 0) < 300e3) return;
+    mapaLT[k] = Date.now();
+    buscar('mapal', k, mapasL).then(() => { gSig = ''; renderGrafico(); });
+  }
   function perfilDe(k) {
-    const m = mapas[k]; if (!m) return null;
-    const p = mapaPrev[k] || (mapaPrev[k] = { cur: null, ant: null });
+    const largo = largoGTF() && mapasL[k], m = largo ? mapasL[k] : mapas[k]; if (!m) return null;
+    const pk = largo ? k + '|L' : k, p = mapaPrev[pk] || (mapaPrev[pk] = { cur: null, ant: null });
     if (!p.cur || p.cur.ts !== m.ts) { p.ant = p.cur; p.cur = m; }
     const d = build(m), da = p.ant ? build(p.ant) : null;
     // valor da foto anterior no mesmo preço (as faixas andam com o preço de cada foto, então casa pelo preço, não pela posição)
@@ -620,13 +627,14 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
   function renderGrafico() {
     const box = $('.lv-graf'); if (!box) return;
     const k = SEL, G0 = graf[k], cur = live[k];
+    if (CAM.liq) carregarMapaL(k);   // 4H/Diário: liquidez ±50% (no 15m/1H fica o mapa de ±15%, mais detalhado)
     const G = G0 && cur ? { ...G0, c15: aoVivo(G0.c15, 9e5, cur), c1h: aoVivo(G0.c1h, 36e5, cur), c4h: aoVivo(G0.c4h, 144e5, cur), c1d: aoVivo(G0.c1d, 864e5, cur) } : G0;
     box.querySelectorAll('.lv-gtf button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.g === GTF)));
     if (!G || !cur) { if (gSig !== 'x') { $('.lv-gsvg').innerHTML = '<p class="muted small">Buscando as velas…</p>'; $('.lv-gleit').textContent = ''; gSig = 'x'; } return; }
     const ms = { '15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5 }[GTF] || 9e5, todas = { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] || G.c15, c = todas.slice(-({ '15m': 120, '1h': 96, '4h': 120, '1d': 120 }[GTF] || 120));
     const curto = ms < 864e5, bol = curto ? guardarLiqs(k) : null, perf = perfilDe(k);   // barras em todos os tempos; liquidações por vela até 4 h (o histórico guardado é de 3 dias)
     const pl = vista === 'graf' && CAM.plano ? planoDe() : null, tds = vista === 'graf' && CAM.trades ? diario.trades.filter(t => mesmoAtivo(k, t.ativo) && t.abertura && t.entrada) : null;
-    const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0, JSON.stringify(CAM), pl ? pl.stop + '/' + pl.alvo + '/' + pl.st : '', diario.t, tds ? tds.length : 0, bol ? bol.length : 0].join('|'); if (sig === gSig) return; gSig = sig;
+    const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0, mapasL[k] ? mapasL[k].ts : 0, JSON.stringify(CAM), pl ? pl.stop + '/' + pl.alvo + '/' + pl.st : '', diario.t, tds ? tds.length : 0, bol ? bol.length : 0].join('|'); if (sig === gSig) return; gSig = sig;
     const cam = $('.lv-gcam');
     if (cam) cam.innerHTML = '<span class="small muted">Mostrar:</span>' + CAMADAS.map(([c, n]) => `<button type="button" class="chip" data-c="${c}" aria-pressed="${!!CAM[c]}" style="cursor:pointer;font:inherit;font-size:12px;border:1px solid ${CAM[c] ? 'var(--accent)' : 'var(--line)'};background:${CAM[c] ? 'var(--accent-soft)' : 'none'};color:var(--fg)">${CAM[c] ? '✓ ' : ''}${n}</button>`).join('');
     const pe = $('.lv-gplano');
