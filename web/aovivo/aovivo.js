@@ -6,7 +6,7 @@
 import { fraseRsi, rsiSerie, regime as regimeRsi, rsiWilder, agrupar, faixa as faixaRsi, resumo as resumoRsi, precoParaRsi } from '../rsi/calc.js';
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
-import { estavel } from './estavel.js';
+import { gatilho as gatilhoDe, velaDe, proximoFechamento } from './gatilho.js';
 import { niveisDia, niveisPeriodo, estrutura as estruturaVelas, leitura as leituraGrafico, zonasSR } from '../grafico/calc.js';
 import { graficoSvg } from '../grafico/desenho.js';
 import { checklist as checklistRegras, REGRAS_PADRAO } from '../risco/regras.js';
@@ -20,8 +20,6 @@ const ROTEIRO = {               // regras do roteiro do Marcelo (ajuste aqui)
   // as regras do Connors RSI (veto de venda no swing, ETH sem edge, bônus de RSI diário em sobrevenda) saíram em 25/11/2026:
   // o estudo do CRSI não achou vantagem clara contra entrar em qualquer dia do mesmo regime
   liberado: 70, cuidado: 50,
-  confirmaMs: 120e3,            // nota estável: só vira LIBERADO depois de 2 min seguidos acima de 'liberado'...
-  folga: 5,                     // ...e só sai de LIBERADO se cair abaixo de 'liberado' − folga (ou se algo bloquear)
 };
 const TF = [['Semana', '1w', 7 * 864e5], ['Dia', '1d', 864e5], ['4H', '4h', 144e5], ['15 min', '15m', 9e5]];
 const TIER = [['money_printer', 'Top lucro (Apex)'], ['smart_money', 'Lucrativos (Sharps)'], ['grinder', 'Consistentes'], ['humble_earner', 'Pequeno lucro'],
@@ -249,8 +247,10 @@ function estrutura(k, tf, cur, n) {
   if (p.lo != null && cur < p.lo) return { s: -1, t: `${n} perdeu o último fundo (${fpx(p.lo)})` };
   return null;
 }
-const ESTAVEL = {};   // estado comum a todas as telas (ver aovivo/estavel.js)
-function avaliar(k, A, modo, lado) {
+/* ---------- Trava em três camadas (ver aovivo/gatilho.js) ---------- */
+// 1) SETUP: só o que muda devagar (R:R, chance de tocar, estrutura, 15 min, RSI 15 min, quem está apertado). Calculado com o preço do
+//    fechamento da vela de 15 min e guardado até o próximo fechamento: a nota não pisca a cada minuto e cada nota fica registrada.
+function setupDe(k, A, modo, lado) {
   const { cur, zn } = A, isBuy = lado === 'compra', bw = zn.bw, H = modo === 'day' ? 4 : 24;
   const blocks = [], pros = [], cons = [], faltam = []; let sc = 50;
   const falta = (v, t) => faltam.push([v, t]);
@@ -261,7 +261,8 @@ function avaliar(k, A, modo, lado) {
   const rr = stop && alvo ? Math.abs(alvo - cur) / Math.abs(cur - stop) : null;
   if (rr == null) cons.push('sem alvo/stop claros no mapa — R:R não calculável');
   else if (rr < ROTEIRO.rrMin) { const e = (alvo + ROTEIRO.rrMin * stop) / (1 + ROTEIRO.rrMin);
-    blocks.push(`R:R ${f1(rr)} abaixo de ${ROTEIRO.rrMin}:1 — só vale ${isBuy ? 'comprando em' : 'vendendo em'} ${fpx(e)} ou ${isBuy ? 'abaixo' : 'acima'} (${pc((e / cur - 1) * 100)})`); }
+    // não bloqueia o setup: vira preço-limite de entrada, que o gatilho confere ao vivo (como uma ordem limitada no nível)
+    cons.push(`R:R ${f1(rr)} no preço do fechamento: entrada só ${isBuy ? 'em' : 'em'} ${fpx(e)} ou ${isBuy ? 'abaixo' : 'acima'} (${pc((e / cur - 1) * 100)})`); }
   else if (rr >= 3) add(15, `R:R ${f1(rr)}:1`); else add(8, `R:R ${f1(rr)}:1`);
   if (alvo && stop) { const pa = pTouch(k, alvo, cur, H), ps = pTouch(k, stop, cur, H);
     if (pa != null && ps != null) { const df = (pa - ps) * 100;
@@ -273,19 +274,12 @@ function avaliar(k, A, modo, lado) {
     const e4 = estrutura(k, '4h', cur, '4H'); if (e4) add(10 * e4.s * sL, e4.t);
     if (!e4 || e4.s !== sL) { const pv = pivots(cand[k] && cand[k]['4h']), nv = pv && (isBuy ? pv.hi : pv.lo);
       if (nv != null) falta(e4 ? 20 : 10, `4H ${isBuy ? 'romper o último topo' : 'perder o último fundo'} (${fpx(nv)}, ${pc((nv / cur - 1) * 100)})`); }
-    if (A.tr.dir) add(5 * A.tr.dir * sL, `último minuto ${A.tr.dir > 0 ? 'subindo' : 'caindo'}`);
-    if (A.tr.dir !== sL) falta(A.tr.dir ? 10 : 5, `último minuto ${isBuy ? 'subindo' : 'caindo'}`);
     if (Math.abs(A.tr.c15) >= 0.3) add((A.tr.c15 > 0 ? 5 : -5) * sL, `15 min ${pc2(A.tr.c15)}`);
     if (!(A.tr.c15 * sL >= 0.3)) falta(A.tr.c15 * sL <= -0.3 ? 10 : 5, `15 min ${isBuy ? 'subindo' : 'caindo'} 0,3% ou mais (hoje ${pc2(A.tr.c15)})`);
     const r15 = rsiAt(k, '15m', 9e5, cur);
     if (r15 && r15.v <= 30) add(isBuy ? 5 : -5, `RSI 15 min em sobrevenda (${f1(r15.v)})`);
     if (r15 && r15.v >= 70) add(isBuy ? -5 : 5, `RSI 15 min em sobrecompra (${f1(r15.v)})`);
     if (r15 && (isBuy ? r15.v > 30 : r15.v < 70)) falta(5, `RSI 15 min ${isBuy ? 'em sobrevenda (≤30)' : 'em sobrecompra (≥70)'} (hoje ${f1(r15.v)})`);
-    const bk = book[k]; if (bk && Date.now() - bk.t < 30000) {
-      const near = arr => arr.filter(o => Math.abs(o.px / cur - 1) < 0.005).reduce((t, o) => t + o.usd, 0), b = near(bk.bids), a = near(bk.asks);
-      const im = b + a > 0 ? (b - a) / (b + a) : 0;
-      if (Math.abs(im) > 0.3) add((im > 0 ? 5 : -5) * sL, `livro perto do preço com mais ${im > 0 ? 'compra' : 'venda'} (${Math.round(Math.abs(im) * 100)}%)`);
-      if (!(im * sL > 0.3)) falta(im * sL < -0.3 ? 10 : 5, `livro perto do preço com mais ${isBuy ? 'compra' : 'venda'}`); }
   } else {
     const eD = estrutura(k, '1d', cur, 'Diário'); if (eD) add(10 * eD.s * sL, eD.t);
     const rD = rsiAt(k, '1d', 864e5, cur), rW = rsiAt(k, '1w', 7 * 864e5, cur);
@@ -296,14 +290,51 @@ function avaliar(k, A, modo, lado) {
   if (q && q.t === 'Longs apertados') add(isBuy ? -10 : 10, 'longs apertados');
   if (q && q.t === 'Shorts apertados') add(isBuy ? 10 : -10, 'shorts apertados');
   if (!q || q.t !== (isBuy ? 'Shorts apertados' : 'Longs apertados')) falta(q && q.t === (isBuy ? 'Longs apertados' : 'Shorts apertados') ? 20 : 10, `${isBuy ? 'shorts' : 'longs'} ficarem apertados (funding, OI e grupos)`);
+  sc = Math.max(0, Math.min(100, Math.round(sc)));
+  faltam.sort((x, y) => y[0] - x[0]);
+  return { sc, blocks, pros, cons, stop, alvo, rr, faltam };
+}
+
+const SETUP = {};   // k|modo|lado → { vela, t, cur, completo, r }: comum a todas as telas
+const horaTxt = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+function registrarNota(k, modo, lado, S) {   // histórico das notas de fechamento (neste navegador), para medir a Trava depois
+  try {
+    const L = JSON.parse(localStorage.getItem('radar-notas') || '[]'), r = S.r, t = S.vela * 9e5;
+    if (L.some(x => x.t === t && x.k === k && x.m === modo && x.l === lado)) return;
+    L.push({ t, k, m: modo, l: lado, sc: r.sc, b: r.blocks.length ? 1 : 0, e: S.cur, s: r.stop, a: r.alvo });
+    localStorage.setItem('radar-notas', JSON.stringify(L.slice(-4000)));
+  } catch (e) {}
+}
+// 2) GATILHO e 3) RISCO, ao vivo sobre o setup guardado
+function avaliar(k, A, modo, lado) {
+  const agora = Date.now(), vela = velaDe(agora), key = k + '|' + modo + '|' + lado;
+  const completo = !!(press[k] && chance[k] && cand[k] && cand[k]['15m'] && cand[k]['4h']);
+  let S = SETUP[key];
+  if (!S || S.vela !== vela || (!S.completo && completo)) {
+    S = SETUP[key] = { vela, t: agora, cur: A.cur, completo, r: setupDe(k, A, modo, lado) };
+    if (completo) registrarNota(k, modo, lado, S);
+  }
+  const r = S.r, isBuy = lado === 'compra', sL = isBuy ? 1 : -1, cur = A.cur, zn = A.zn, prox = proximoFechamento(agora);
+  const blocks = [...r.blocks], faltam = [...r.faltam];
+  // risco ao vivo: cascata de liquidações contra o lado
   const l5 = liqSum(realLiqs(k), 300e3), lim = Math.max(500e3, 0.25 * Math.max(zn.ap ? zn.ap.a[1] : 0, zn.ve ? zn.ve.a[1] : 0));
   if (isBuy && l5.long >= lim) blocks.push(`cascata de longs em curso (${fm(l5.long)} em 5 min) — não pegue faca caindo`);
   if (!isBuy && l5.short >= lim) blocks.push(`cascata de shorts em curso (${fm(l5.short)} em 5 min)`);
-  sc = Math.max(0, Math.min(100, Math.round(sc)));
-  const E = estavel(ESTAVEL, k + '|' + modo + '|' + lado, sc, blocks.length > 0, Date.now(), ROTEIRO);
-  const st = blocks.length ? ['BLOQUEADO', COR.dn] : E.lib ? ['LIBERADO', COR.up] : E.espera ? ['CONFIRMANDO', COR.am] : sc >= ROTEIRO.cuidado ? ['CUIDADO', COR.am] : ['FRACO', COR.mu];
-  faltam.sort((x, y) => y[0] - x[0]);
-  return { sc, st, blocks, pros, cons, stop, alvo, rr, faltam, espera: E.espera };
+  let st, gat = null;
+  if (!blocks.length && r.sc >= ROTEIRO.liberado && r.stop && r.alvo) {
+    const bk = book[k]; let livro = null;
+    if (bk && agora - bk.t < 30000) { const near = arr => arr.filter(o => Math.abs(o.px / cur - 1) < 0.005).reduce((t, o) => t + o.usd, 0), b = near(bk.bids), a = near(bk.asks); livro = b + a > 0 ? (b - a) / (b + a) : null; }
+    gat = gatilhoDe({ lado, cur, stop: r.stop, alvo: r.alvo, rrMin: ROTEIRO.rrMin, dir: A.tr.dir, livro });
+    if (gat.estado === 'stop') blocks.push(`o preço passou do stop do plano (${fpx(r.stop)}): plano desarmado até o fechamento das ${horaTxt(prox)}`);
+    else if (gat.estado === 'alvo') blocks.push(`o preço já chegou ao alvo (${fpx(r.alvo)}): não persiga`);
+  }
+  if (blocks.length) st = ['BLOQUEADO', COR.dn];
+  else if (gat && gat.estado === 'ok') st = ['LIBERADO', COR.up];
+  else if (gat) st = ['ARMADO', COR.am];
+  else st = r.sc >= ROTEIRO.cuidado ? ['CUIDADO', COR.am] : ['FRACO', COR.mu];
+  const gFalta = !gat ? '' : gat.estado === 'fora' ? `preço ${isBuy ? 'recuar até' : 'subir até'} ${fpx(gat.eLim)} ou ${isBuy ? 'abaixo' : 'acima'} (${pc(gat.distPct)}) para o R:R chegar a ${ROTEIRO.rrMin}:1`
+    : gat.estado === 'espera' ? `confirmação: último minuto ${isBuy ? 'subindo' : 'caindo'} ou livro com mais ${isBuy ? 'compra' : 'venda'}` : '';
+  return { sc: r.sc, st, blocks, pros: r.pros, cons: r.cons, stop: r.stop, alvo: r.alvo, rr: r.rr, faltam, gat, gFalta, notaT: S.t, notaCur: S.cur, meioVela: S.t - S.vela * 9e5 > 90e3, prox, armado: !!gat && !blocks.length };
 }
 
 /* histórico local para o gráfico (compartilhado entre as abas): liquidações reais vistas e a foto anterior do mapa */
@@ -569,16 +600,15 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const a = avaliar(SEL, A, 'day', 'compra'), b = avaliar(SEL, A, 'day', 'venda');
     const okA = !a.blocks.length, okB = !b.blocks.length;
     const r = okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
-    const est = r.st[0], acao = est === 'BLOQUEADO' ? 'Não entrar' : est === 'LIBERADO' ? 'Liberado pelo roteiro' : est === 'CONFIRMANDO' ? 'Confirmando' : 'Aguardar gatilho';
+    const est = r.st[0], acao = est === 'BLOQUEADO' ? 'Não entrar' : est === 'LIBERADO' ? 'Liberado: gatilho confirmado' : est === 'ARMADO' ? 'Armado: esperando o gatilho' : 'Aguardar setup';
     const precisa = Math.max(0, ROTEIRO.liberado - r.sc);
     let lista = [], soma = 0; for (const [v, t] of r.faltam) { if (soma >= precisa) break; lista.push(`${t} (+${v})`); soma += v; }
     const oQueFalta = !precisa ? '' : soma >= precisa ? `faltam ${precisa} pontos: ${lista.join(' · ')}` : `faltam ${precisa} pontos e nem tudo a favor chega lá hoje: espere outro setup`;
     const falta = r.blocks.length ? r.blocks[0] + (oQueFalta ? `. Depois disso, ${oQueFalta}` : '')
-      : est === 'CONFIRMANDO' ? `a nota passou de ${ROTEIRO.liberado}; libera se continuar por mais ${Math.ceil(r.espera / 1000)} s sem cair abaixo de ${ROTEIRO.liberado - ROTEIRO.folga} (evita liberar num pico de segundos)`
-      : est === 'LIBERADO' ? (r.stop && r.alvo ? `stop ${fpx(r.stop)} · alvo ${fpx(r.alvo)} · R:R ${r.rr != null ? f1(r.rr) : '—'}` : '')
-      : oQueFalta;
+      : r.gat ? `${est === 'LIBERADO' ? r.gat.motivo + ' · ' : 'falta ' + r.gFalta + ' · '}entrada em ${fpx(r.gat.eLim)} ou ${r.l === 'compra' ? 'abaixo' : 'acima'} · stop ${fpx(r.stop)} · alvo ${fpx(r.alvo)} · R:R agora ${r.gat.rrAgora != null ? f1(r.gat.rrAgora) : '—'} · válido até ${horaTxt(r.prox)}`
+      : (oQueFalta ? oQueFalta + ' — ' : '') + `nova nota no fechamento das ${horaTxt(r.prox)}`;
     el.innerHTML = `<div class="lv-gatb" style="border-color:${r.st[1]};color:${r.st[1]}"><b>${acao}</b> · day trade · ${r.l} · <span class="lv-gatf">${falta}</span><span style="flex:1"></span><b class="num">${r.sc}/100</b> <span class="small muted">nota do roteiro</span></div>
-      <p class="small muted" style="margin:4px 0 0">A nota soma o que o roteiro confere (R:R, estrutura, fluxo, RSI). É contexto, não chance de acerto: ainda não há histórico medido dela.</p>`;
+      <p class="small muted" style="margin:4px 0 0">${r.meioVela ? `Nota calculada às ${horaTxt(r.notaT)}, quando a página abriu (preço ${fpx(r.notaCur)})` : `Nota do fechamento das ${horaTxt(r.notaT)} (preço ${fpx(r.notaCur)})`}, fixa até ${horaTxt(r.prox)}: soma R:R, estrutura, 15 min, RSI e quem está apertado. Nota ≥ ${ROTEIRO.liberado} arma o plano; libera quando o preço está na zona de entrada e o último minuto ou o livro confirmam. É contexto, não chance de acerto: ainda não há histórico medido dela.</p>`;
   }
   function renderCards(A) {
     const { cur, zn } = A, k = SEL;
@@ -668,7 +698,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const vel = G ? { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] : null, eT = vel && vel.length > 30 ? estruturaVelas(vel.slice(-200)) : null;
     if (eT && ((o.l === 'venda' && eT.tendencia === 'alta') || (o.l === 'compra' && eT.tendencia === 'baixa')))
       avisos.push(`Contra a estrutura do ${{ '15m': '15 min', '1h': '1H', '4h': '4H', '1d': 'diário' }[GTF] || GTF} (topos e fundos ${eT.tendencia === 'alta' ? 'mais altos' : 'mais baixos'})`);
-    return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, espera: o.r.espera, bloq: o.r.blocks[0] || '', avisos };
+    return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, armado: o.r.armado, eLim: o.r.gat ? o.r.gat.eLim : null, gFalta: o.r.gFalta, prox: o.r.prox, notaT: o.r.notaT, meioVela: o.r.meioVela, bloq: o.r.blocks[0] || '', avisos };
   }
   function aoVivo(arr, ms, px) {
     if (!arr || !arr.length || !px) return arr;
@@ -690,7 +720,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const cam = $('.lv-gcam');
     if (cam) cam.innerHTML = '<span class="small muted">Mostrar:</span>' + CAMADAS.map(([c, n]) => `<button type="button" class="chip" data-c="${c}" aria-pressed="${!!CAM[c]}" style="cursor:pointer;font:inherit;font-size:12px;border:1px solid ${CAM[c] ? 'var(--accent)' : 'var(--line)'};background:${CAM[c] ? 'var(--accent-soft)' : 'none'};color:var(--fg)">${CAM[c] ? '✓ ' : ''}${n}</button>`).join('');
     const pe = $('.lv-gplano');
-    if (pe) pe.innerHTML = !CAM.plano ? '' : pl && pl.bloq ? `<span class="muted">Meu plano: nenhum day trade liberado agora. O melhor lado (${pl.lado}) está bloqueado: ${pl.bloq}.</span>${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}` : pl ? `<span style="color:${pl.cor};font-weight:700">Meu plano · day trade ${pl.lado} · ${pl.st} ${pl.sc}</span> <span class="muted">(da Trava do roteiro: entrada ~${fpx(pl.entrada)} · stop ${fpx(pl.stop)} · alvo ${fpx(pl.alvo)}${pl.rr != null ? ' · R:R ' + f1(pl.rr) : ''}${pl.bloq ? ' · ⛔ ' + pl.bloq : ''})</span>${pl.st === 'LIBERADO' ? ' <button type="button" class="lv-gdiario hj-link" style="font-size:12px">guardar plano e ir ao passo 5 (hora de entrar?) →</button>' : pl.st === 'CONFIRMANDO' ? ` <b style="color:var(--warn)">· confirmando</b> <span class="muted">(a nota passou do limite; libera se continuar por mais ${Math.ceil(pl.espera / 1000)} s)</span>` : ` <b style="color:var(--warn)">· aguardar gatilho</b> <span class="muted">(nota ${pl.sc}: ainda não chegou em LIBERADO; o mesmo que a Liquidez ao vivo mostra)</span>`}${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}`
+    if (pe) pe.innerHTML = !CAM.plano ? '' : pl && pl.bloq ? `<span class="muted">Meu plano: nenhum day trade liberado agora. O melhor lado (${pl.lado}) está bloqueado: ${pl.bloq}.</span>${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}` : pl ? `<span style="color:${pl.cor};font-weight:700">Meu plano · day trade ${pl.lado} · ${pl.st} ${pl.sc}</span> <span class="muted">(nota ${pl.meioVela ? 'calculada às' : 'do fechamento das'} ${horaTxt(pl.notaT)}: ${pl.armado ? `entrada em ${fpx(pl.eLim)} ou ${pl.lado === 'compra' ? 'abaixo' : 'acima'}` : `entrada ~${fpx(pl.entrada)}`} · stop ${fpx(pl.stop)} · alvo ${fpx(pl.alvo)}${pl.rr != null ? ' · R:R ' + f1(pl.rr) : ''} · fixo até ${horaTxt(pl.prox)})</span>${pl.armado ? `${pl.st === 'ARMADO' ? ` <span style="color:var(--warn)">· falta ${pl.gFalta}</span>` : ''} <button type="button" class="lv-gdiario hj-link" style="font-size:12px">guardar plano e ir ao passo 5 (hora de entrar?) →</button>` : ` <b style="color:var(--warn)">· aguardar setup</b> <span class="muted">(nota ${pl.sc}, precisa de ${ROTEIRO.liberado}; nova nota às ${horaTxt(pl.prox)})</span>`}${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}`
       : '<span class="muted">Meu plano: sem plano agora (a Trava precisa do mapa da Coinversa para achar stop e alvo).</span>';
     const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
     if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
@@ -749,8 +779,8 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const m = e.target.closest('.lv-mode button'); if (m) { setModo(m.dataset.m); return; }
     const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); return; }
     if (e.target.closest('.lv-gdiario')) {   // passo 4 → 5: o plano fica guardado; no passo 5 você decide se entra e só então ele vai para o diário
-      const pl = planoDe(); if (!pl || pl.bloq || pl.st !== 'LIBERADO') return;
-      try { sessionStorage.setItem('radar-plano-pendente', JSON.stringify({ ativo: nome(SEL), coin: SEL, mercado, lado: pl.lado, tf: GTF, entrada: pl.entrada, stop: pl.stop, alvo1: pl.alvo, setup: 'Plano da Trava (Gráfico)', ts: Date.now() })); } catch (x) {}
+      const pl = planoDe(); if (!pl || pl.bloq || !pl.armado) return;
+      try { sessionStorage.setItem('radar-plano-pendente', JSON.stringify({ ativo: nome(SEL), coin: SEL, mercado, lado: pl.lado, tf: GTF, entrada: pl.eLim || pl.entrada, stop: pl.stop, alvo1: pl.alvo, setup: 'Plano da Trava (Gráfico)', ts: Date.now() })); } catch (x) {}
       window.dispatchEvent(new CustomEvent('radar-abrir-ativo', { detail: { coin: SEL, mercado } }));
       if (typeof window.show === 'function') window.show(mercado === 'acoes' ? 'a-aovivo' : 'aovivo'); window.scrollTo(0, 0); return;
     }
