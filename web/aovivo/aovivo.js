@@ -385,7 +385,6 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
   const pc1 = v => v.toFixed(1).replace('.', ',') + '%';
   function renderPainelLiq(A) {
     const el = $('.lv-liqp'), wrap = $('.lv-gwrap') || document.createElement('div'); if (!el) return;   // na Liquidez ao vivo não há .lv-gwrap
-    if (mercado !== 'cripto') { el.hidden = true; wrap.classList.add('sem'); return; }
     el.hidden = false;
     let h;
     if (!painelAberto()) { h = `<button type="button" class="lv-lp-abrir" title="Abrir o painel de liquidações">Liquidações ▸</button>`; wrap.classList.add('sem'); }
@@ -660,7 +659,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     return histLiq(k);
   }
   const largoGTF = () => GTF === '4h' || GTF === '1d';
-  const painelAberto = () => mercado === 'cripto' && ls('liqp') !== '0';   // o mesmo painel no Gráfico e na Liquidez ao vivo
+  const painelAberto = () => ls('liqp') !== '0';   // o mesmo painel no Gráfico e na Liquidez ao vivo (ações e cripto)
   let HZ = ls('hz') || '720', lpSig = '';   // prazo da "chance de tocar" do painel (horas)
   function carregarMapaL(k) {
     if (!(largoGTF() || painelAberto()) || Date.now() - (mapaLT[k] || 0) < 300e3) return;
