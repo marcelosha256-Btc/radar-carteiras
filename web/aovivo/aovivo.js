@@ -6,6 +6,8 @@
 import { fraseRsi } from '../rsi/calc.js';
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
+import { niveisDia, estrutura as estruturaVelas, leitura as leituraGrafico } from '../grafico/calc.js';
+import { graficoSvg } from '../grafico/desenho.js';
 const HL = 'https://api.hyperliquid.xyz/info';
 const ATIVOS = { cripto: ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'],
   acoes: ['xyz:SP500', 'xyz:XYZ100', 'xyz:NVDA', 'xyz:TSLA', 'xyz:MU', 'xyz:SKHX', 'xyz:GOOGL', 'xyz:GOLD'] };
@@ -140,6 +142,17 @@ async function carregarCandles(k, tfs) {
     try { const c = await hlApi({ type: 'candleSnapshot', req: { coin: k, interval: tf, startTime: now - 110 * ms, endTime: now } });
       (cand[k] || (cand[k] = {}))[tf] = c.map(x => ({ t: x.t, c: +x.c, h: +x.h, l: +x.l })); } catch (e) {}
   }
+}
+/* velas completas (com abertura e volume) para o gráfico de níveis e estrutura: 15 min (~4 dias) e 1 h (~14 dias) */
+const graf = {};
+async function carregarGrafico(k) {
+  const now = Date.now(), conv = c => c.map(x => ({ t: x.t, o: +x.o, h: +x.h, l: +x.l, c: +x.c, v: +x.v }));
+  try {
+    const [a, b] = await Promise.all([
+      hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '15m', startTime: now - 4 * 864e5, endTime: now } }),
+      hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '1h', startTime: now - 14 * 864e5, endTime: now } })]);
+    graf[k] = { t: now, c15: conv(a), c1h: conv(b) };
+  } catch (e) {}
 }
 async function carregarMinuto(k) {
   const now = Date.now();
@@ -288,7 +301,7 @@ function avaliar(k, A, modo, lado) {
 function criarApp(mercado, painel, raiz) {
   let lista = mercado === 'acoes' && Array.isArray(window.radarAcoes) && window.radarAcoes.length ? window.radarAcoes.slice(0, 12) : ATIVOS[mercado];
   const ls = (n, v) => { try { if (v === undefined) return localStorage.getItem('lv-' + mercado + '-' + n); localStorage.setItem('lv-' + mercado + '-' + n, v); } catch (e) { return null; } };
-  let SEL = ls('sel') || lista[0], Z = +(ls('zoom') || 0.5), MODO = ls('modo') || 'full', hov = null, mx0 = 0, my0 = 0;
+  let SEL = ls('sel') || lista[0], Z = +(ls('zoom') || 0.5), MODO = ls('modo') || 'full', GTF = ls('gtf') || '15m', hov = null, mx0 = 0, my0 = 0, gSig = '';
   const rOpen = new Set();
 
   raiz.innerHTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span>
@@ -300,6 +313,8 @@ function criarApp(mercado, painel, raiz) {
       <div class="box"><div class="box-head"><h2>Mapa de liquidações</h2><div class="seg lv-zoom"><button data-z="1">±15%</button><button data-z="0.5">±7,5%</button><button data-z="0.2">±3%</button></div></div>
         <div class="lv-gat"></div>
         <div class="lv-chart"><div class="lv-svg"></div><div class="lv-tip"></div></div><p class="small muted lv-foot"></p></div>
+      <div class="box lv-graf"><div class="box-head"><h2>Gráfico · níveis do dia e estrutura</h2><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button></div></div>
+        <p class="small lv-gleit"></p><div class="lv-gsvg"></div><p class="small muted lv-gnota"></p></div>
       <div class="lv-cards"></div>
       <div class="box lv-full lv-liqr"></div>
     </div><div class="lv-side">
@@ -553,8 +568,24 @@ function criarApp(mercado, painel, raiz) {
   function renderComo() {
     $('.lv-como').innerHTML = `<div class="box-head"><h2>O que ficou de fora</h2></div><p class="small muted">"Qual lado é capturado primeiro" e "escada/possível cascata" não aparecem aqui: testados no radar em 11/11/2026, o primeiro é só a distância e o segundo aparecia em 99% das zonas, com resultado guiado pela queda do mês. As chances usam o mesmo método do Resumo (excursão histórica ÷ volatilidade), calculadas no seu navegador para este ativo.</p>`;
   }
+  function renderGrafico() {
+    const box = $('.lv-graf'); if (!box) return;
+    const k = SEL, G = graf[k], cur = live[k];
+    box.querySelectorAll('.lv-gtf button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.g === GTF)));
+    if (!G || !cur) { if (gSig !== 'x') { $('.lv-gsvg').innerHTML = '<p class="muted small">Buscando as velas…</p>'; $('.lv-gleit').textContent = ''; gSig = 'x'; } return; }
+    const ms = GTF === '1h' ? 36e5 : 9e5, todas = GTF === '1h' ? G.c1h : G.c15, c = todas.slice(-(GTF === '1h' ? 96 : 120));
+    const sig = [k, GTF, G.t, cur, c.length].join('|'); if (sig === gSig) return; gSig = sig;
+    const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
+    const { svg, fora } = graficoSvg({ candles: c, niv, est, preco: cur, ms });
+    $('.lv-gsvg').innerHTML = svg;
+    $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
+    $('.lv-gnota').textContent = `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
+      (fora.length ? `Fora da vista: ${fora.map(n => n.rot + ' ' + fpx(n.preco)).join(', ')}. ` : '') +
+      'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Regras objetivas, ainda sem medição de acerto: contexto, não sinal.';
+  }
   function render() {
     renderTabs();
+    renderGrafico();
     const A = analyze();
     renderBar(A);
     const err = erros.senha ? 'Digite a senha do radar no topo da página para ver o mapa da Coinversa.' : erros['mapa' + SEL] ? `Sem mapa agora: ${erros['mapa' + SEL]}` : '';
@@ -570,7 +601,8 @@ function criarApp(mercado, painel, raiz) {
     const sm = e.target.closest('.lv-som');
     if (sm) { const on = !SOM; setSom(on); if (on) { bip(); try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (er) {} } return; }
     const m = e.target.closest('.lv-mode button'); if (m) { setModo(m.dataset.m); return; }
-    const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); }
+    const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); return; }
+    const g = e.target.closest('.lv-gtf button'); if (g) { GTF = g.dataset.g; ls('gtf', GTF); gSig = ''; renderGrafico(); }
   });
   const svg = $('.lv-svg');
   svg.addEventListener('mousemove', e => { mx0 = e.clientX; my0 = e.clientY; const t = e.target.closest('[data-k]');
@@ -584,6 +616,7 @@ function criarApp(mercado, painel, raiz) {
     await Promise.all([buscar('mapa', k, mapas), carregarMinuto(k), carregarChance(k).catch(() => {})]);
     render();
     buscar('liqs', k, liqs).then(render); buscar('press', k, press).then(render);
+    carregarGrafico(k).then(render);
     carregarCandles(k, ['15m', '4h']).then(() => { render(); carregarCandles(k, ['1d', '1w']).then(render); });
     if (live[k]) carregarLivro(k, live[k]).then(render);
   }
@@ -605,6 +638,7 @@ function criarApp(mercado, painel, raiz) {
     if (n % 30 === 0) buscar('liqs', k, liqs);
     if (n % 120 === 0) buscar('press', k, press);
     if (n % 180 === 0) carregarCandles(k, ['15m']);
+    if (n % 60 === 0) carregarGrafico(k);
     if (n % 3 === 0 && live[k]) carregarLivro(k, live[k]);
     if (vis) render(); else vigiar();
   }, 1000);
