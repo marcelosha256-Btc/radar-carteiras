@@ -321,9 +321,11 @@ function criarApp(mercado, painel, raiz) {
     const d = sel(), cur = live[SEL] || (d && d.p) || null; if (!d || !cur) return null;
     return { d, cur, zn: zones(d, cur), tr: trend(SEL, cur) };
   }
+  const CORES = { BTC: '#ef9f27', ETH: '#7f77dd', SOL: '#1d9e75', XRP: '#378add', HYPE: '#5dcaa5', NEAR: '#d4537e' };
+  const corAtivo = k => CORES[nome(k)] || `hsl(${[...nome(k)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7)} 55% 55%)`;
   function renderTabs() {
     $('.lv-tabs').innerHTML = lista.map(k => { const cur = live[k], tr = cur ? trend(k, cur) : null;
-      return `<button class="lv-tab" data-k="${k}" aria-pressed="${k === SEL}"><b>${nome(k)}</b> <span style="color:${tr ? tr.color : COR.mu}">${tr ? tr.arrow : ''}</span><br><span class="small muted num">${cur ? fpx(cur) : '—'}</span></button>`; }).join('');
+      return `<button class="lv-tab" data-k="${k}" aria-pressed="${k === SEL}"><i class="lv-dot" style="background:${corAtivo(k)}"></i><b>${nome(k)}</b><span style="color:${tr ? tr.color : COR.mu}">${tr ? tr.arrow : ''}</span><span class="small muted num">${cur ? fpx(cur) : '—'}</span></button>`; }).join('');
   }
   function renderBar(A) {
     const k = SEL, cur = A ? A.cur : live[k];
@@ -380,9 +382,8 @@ function criarApp(mercado, painel, raiz) {
         <b class="lv-zd" style="color:${c}">${pc(dd)}</b><span class="num">${fpx(o.a[0] - zn.bw / 2)} – ${fpx(o.a[0] + zn.bw / 2)}</span>
         <span class="small muted">${fm(o.a[1])}${o.a[2] != null ? ' · ' + o.a[2] + ' posições' : ''} · tocar 4 h <b>${pp(pTouch(k, E, cur, 4))}</b> · 24 h <b>${pp(pTouch(k, E, cur, 24))}</b></span></div>`;
     };
-    $('.lv-top').innerHTML = `<div class="lv-zcs">${zc(zn.ve, false)}${zc(zn.ap, true)}</div><div class="lv-lados">${(vac(zn.vL, true) + vac(zn.vS, false)).replace(/^<br>/, '')}</div>
+    $('.lv-top').innerHTML = `<div class="lv-zcs">${zc(zn.ve, false)}${zc(zn.ap, true)}<div class="lv-zc lv-zrsi"><span class="small muted">RSI 14 · ao vivo</span><div class="lv-rsi">${rs}</div></div></div><div class="lv-lados">${(vac(zn.vL, true) + vac(zn.vS, false)).replace(/^<br>/, '')}</div>
       <p class="small muted" style="margin-top:4px">1m ${pc2(tr.c1)} · 5m ${pc2(tr.c5)} · 15m ${pc2(tr.c15)}${q ? ` · quem está apertado: <b style="color:${q.c}">${q.t}</b>` : ''}</p>
-      <div class="lv-rsi">${rs}</div>
       ${al.length ? `<div class="lv-alerts">${al.slice(0, 3).map(([c, t]) => `<div class="chip ${c}">${t}</div>`).join('')}</div>` : ''}`;
   }
   function renderChart(A) {
@@ -590,8 +591,9 @@ css.textContent = `
 :root{--lv-long:#e0822e;--lv-short:#3b7ddd}
 .lv-bar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 12px;margin-bottom:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 .lv-an{font:800 18px var(--f-display)}.lv-px{font-size:19px;font-weight:700;transition:color .2s}
-.lv-tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px}
-.lv-tab{flex:1;min-width:96px;text-align:left;font:inherit;padding:7px 10px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
+.lv-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.lv-tab{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:13px;padding:4px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
+.lv-dot{width:8px;height:8px;border-radius:50%;flex:none}
 .lv-tab[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
 .lv-erro{padding:8px 12px;border-radius:var(--r);background:var(--warn-soft);color:var(--warn);margin-bottom:10px}
 .lv-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px;align-items:start}
@@ -617,7 +619,9 @@ css.textContent = `
 .lv-cbar{position:relative;height:9px;background:var(--surface-2);border-radius:5px}
 .lv-cbar:before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--faint)}
 .lv-cbar i{position:absolute;top:0;bottom:0;border-radius:5px}
-.lv-zcs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.lv-zcs{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:10px}
+.lv-zrsi .lv-rsi{grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}.lv-zrsi .lv-rt{padding:4px 8px}.lv-zrsi .lv-rt b{font-size:15px}
+@media (max-width:900px){.lv-zcs{grid-template-columns:1fr 1fr}.lv-zrsi{grid-column:1/-1}.lv-zrsi .lv-rsi{grid-template-columns:repeat(4,1fr)}}
 .lv-zc{display:grid;gap:2px;padding:10px 12px;border:1px solid var(--line);border-left-width:3px;border-radius:8px;background:var(--surface-2)}
 .lv-zd{font:800 22px var(--f-display)}
 .lv-lados:empty{display:none}.lv-lados{margin-top:6px}
