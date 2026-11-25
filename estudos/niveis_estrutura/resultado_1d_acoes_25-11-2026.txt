@@ -1,0 +1,76 @@
+TEMPO GRÁFICO 1d · velas: {
+  SPY: '3771 (2011-11-25 a 2026-11-24)',
+  QQQ: '3771 (2011-11-25 a 2026-11-24)',
+  AAPL: '3771 (2011-11-25 a 2026-11-24)',
+  MSFT: '3771 (2011-11-25 a 2026-11-24)',
+  NVDA: '3771 (2011-11-25 a 2026-11-24)',
+  AMZN: '3771 (2011-11-25 a 2026-11-24)',
+  GOOGL: '3771 (2011-11-25 a 2026-11-24)',
+  META: '3651 (2012-05-18 a 2026-11-24)',
+  TSLA: '3771 (2011-11-25 a 2026-11-24)',
+  JPM: '3771 (2011-11-25 a 2026-11-24)',
+  V: '3771 (2011-11-25 a 2026-11-24)',
+  JNJ: '3771 (2011-11-25 a 2026-11-24)',
+  WMT: '3771 (2011-11-25 a 2026-11-24)',
+  XOM: '3771 (2011-11-25 a 2026-11-24)',
+  PG: '3771 (2011-11-25 a 2026-11-24)',
+  HD: '3771 (2011-11-25 a 2026-11-24)',
+  KO: '3771 (2011-11-25 a 2026-11-24)',
+  PEP: '3771 (2011-11-25 a 2026-11-24)',
+  COST: '3771 (2011-11-25 a 2026-11-24)',
+  AVGO: '3771 (2011-11-25 a 2026-11-24)',
+  NFLX: '3771 (2011-11-25 a 2026-11-24)',
+  AMD: '3771 (2011-11-25 a 2026-11-24)',
+  ORCL: '3771 (2011-11-25 a 2026-11-24)',
+  BAC: '3771 (2011-11-25 a 2026-11-24)',
+  CVX: '3771 (2011-11-25 a 2026-11-24)',
+  MRK: '3771 (2011-11-25 a 2026-11-24)',
+  ABBV: '3496 (2013-01-02 a 2026-11-24)',
+  CSCO: '3771 (2011-11-25 a 2026-11-24)',
+  ADBE: '3771 (2011-11-25 a 2026-11-24)',
+  CRM: '3771 (2011-11-25 a 2026-11-24)'
+}
+
+=== 1d A) stop 1 ATR, alvo 1,5, até 20 dias · custo 0.1% ida e volta (≈ 0.054R por operação) ===
+base sem sinal: compra n=10835 líq. +0.075R · venda n=10991 líq. -0.179R
+SINAL                                                      n  acerto   líq.R  vs base     t | 1ªmet   2ªmet     | por ativo (líq.R)
+BOS p/ baixo                                            2846     38%  -0.106   +0.073   2.9 | +0.051   +0.088   | 
+CHoCH p/ baixo                                          1810     37%  -0.130   +0.049   1.6 | -0.020   +0.104   | 
+Reteste confirmado depois de CHoCH p/ baixo              555     37%  -0.134   +0.046   0.9 | +0.038   +0.052   | 
+Rompeu mín. da semana passada (fechou abaixo)           5246     37%  -0.138   +0.041   2.0 | -0.013   +0.081   | 
+Varreu máx. da semana passada e voltou (vende)          4587     36%  -0.150   +0.029   1.4 | +0.017   +0.037   | 
+Varreu máx. da mês passado e voltou (vende)             1387     36%  -0.161   +0.018   0.5 | +0.006   +0.028   | 
+Rompeu máx. da mês passado (fechou acima)               2615     46%  +0.093   +0.018   0.7 | +0.044   -0.002   | 
+Reteste confirmado depois de BOS p/ cima                1741     46%  +0.089   +0.014   0.4 | -0.009   +0.030   | 
+CHoCH p/ cima                                           1718     46%  +0.082   +0.007   0.2 | +0.032   -0.011   | 
+Rompeu mín. da mês passado (fechou abaixo)              1585     35%  -0.174   +0.005   0.2 | -0.074   +0.056   | 
+Estrutura nova de baixa (entra a favor)                 4146     35%  -0.178   +0.002   0.1 | -0.012   +0.012   | 
+Reteste confirmado depois de BOS p/ baixo               1070     35%  -0.182   -0.002  -0.1 | -0.019   +0.008   | 
+Varreu mín. da semana passada e voltou (compra)         3977     45%  +0.055   -0.020  -0.9 | +0.012   -0.043   | 
+Estrutura nova de alta (entra a favor)                  5331     44%  +0.049   -0.026  -1.3 | -0.030   -0.023   | 
+BOS p/ cima                                             4139     44%  +0.038   -0.037  -1.6 | -0.021   -0.049   | 
+Rompeu máx. da semana passada (fechou acima)            6600     44%  +0.036   -0.039  -2.0 | -0.026   -0.048   | 
+Varreu mín. da mês passado e voltou (compra)             977     44%  +0.034   -0.041  -1.0 | +0.028   -0.091   | 
+Reteste confirmado depois de CHoCH p/ cima               587     43%  +0.016   -0.059  -1.1 | -0.050   -0.065   | 
+
+=== 1d B) stop 2 ATR, alvo 3, até 60 dias · custo 0.1% ida e volta (≈ 0.025R por operação) ===
+base sem sinal: compra n=3346 líq. -0.039R · venda n=4022 líq. -0.527R
+SINAL                                                      n  acerto   líq.R  vs base     t | 1ªmet   2ªmet     | por ativo (líq.R)
+Varreu máx. da mês passado e voltou (vende)             1116     23%  -0.483   +0.044   1.3 | +0.056   +0.034   | 
+CHoCH p/ baixo                                          1541     21%  -0.498   +0.029   1.0 | -0.073   +0.110   | 
+Varreu máx. da semana passada e voltou (vende)          2670     21%  -0.512   +0.015   0.6 | +0.040   -0.003   | 
+Estrutura nova de baixa (entra a favor)                 2263     21%  -0.517   +0.010   0.4 | -0.022   +0.035   | 
+Rompeu mín. da semana passada (fechou abaixo)           2846     21%  -0.521   +0.006   0.2 | -0.043   +0.043   | 
+Reteste confirmado depois de CHoCH p/ baixo              523     21%  -0.522   +0.005   0.1 | -0.069   +0.065   | 
+BOS p/ baixo                                            1789     20%  -0.549   -0.022  -0.8 | -0.030   -0.016   | 
+CHoCH p/ cima                                           1358     38%  -0.062   -0.023  -0.6 | +0.013   -0.050   | 
+Reteste confirmado depois de BOS p/ cima                1227     39%  -0.069   -0.029  -0.7 | -0.052   -0.013   | 
+Estrutura nova de alta (entra a favor)                  2463     39%  -0.070   -0.031  -1.0 | -0.015   -0.043   | 
+Rompeu máx. da semana passada (fechou acima)            2844     38%  -0.078   -0.039  -1.2 | -0.030   -0.045   | 
+Rompeu máx. da mês passado (fechou acima)               1717     38%  -0.092   -0.053  -1.5 | -0.007   -0.088   | 
+Rompeu mín. da mês passado (fechou abaixo)              1251     18%  -0.582   -0.055  -1.8 | -0.102   -0.024   | 
+BOS p/ cima                                             2160     37%  -0.099   -0.060  -1.8 | -0.057   -0.062   | 
+Reteste confirmado depois de BOS p/ baixo                859     18%  -0.592   -0.065  -1.9 | -0.040   -0.083   | 
+Varreu mín. da semana passada e voltou (compra)         2227     37%  -0.112   -0.073  -2.2 | -0.062   -0.081   | 
+Varreu mín. da mês passado e voltou (compra)             811     37%  -0.113   -0.074  -1.6 | -0.021   -0.114   | 
+Reteste confirmado depois de CHoCH p/ cima               536     36%  -0.120   -0.081  -1.4 | -0.100   -0.063   | 

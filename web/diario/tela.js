@@ -232,8 +232,25 @@ function ligar(root, modo) {
 
 /* ---------------------------------------------------------------- início ---- */
 let iniciou = false;
-function abrir() { if (!iniciou) { iniciou = true; desenhar(); carregar(); } else if (S.lista) desenhar(); }
+function abrir() { if (!iniciou) { iniciou = true; desenhar(); carregar(); } else if (S.lista) desenhar(); usarPendente(); }
 document.querySelectorAll('.tab[data-tab="trades"]').forEach(b => b.addEventListener('click', abrir));
+/* Plano guardado no Gráfico (passo 4) e confirmado no passo 5: ao abrir o diário, preenche o formulário.
+   Você ajusta a entrada ao preço real, completa risco/quantidade e registra. */
+const lerPendente = () => { try { const p = JSON.parse(sessionStorage.getItem('radar-plano-pendente') || 'null'); return p && Date.now() - p.ts < 6 * 36e5 ? p : null; } catch (e) { return null; } };
+function usarPendente() {
+  const p = lerPendente(), root = document.getElementById(MODOS.tudo); if (!p || !root || !root.querySelector('[data-form]')) return;
+  try { sessionStorage.removeItem('radar-plano-pendente'); } catch (e) {}
+  const set = (k, v) => { const i = root.querySelector(`[data-form] [data-k="${k}"]`); if (i && v != null && v !== '') i.value = v; };
+  const n = v => v == null ? null : parseFloat((+v).toPrecision(6));
+  const sel = root.querySelector('[data-form] [data-k="ativo"]'), tem = sel && [...sel.options].some(o => o.value === p.ativo);
+  if (tem) set('ativo', p.ativo);
+  set('lado', p.lado); if (TFS.some(([v]) => v === p.tf)) set('tf', p.tf);
+  set('entrada', n(p.entrada)); set('stop', n(p.stop)); set('alvo1', n(p.alvo1)); set('setup', p.setup);
+  const msg = root.querySelector('[data-msg]');
+  if (msg) msg.textContent = (tem ? '' : `Escolha o ativo (${p.ativo} não está na lista). `) + 'Plano guardado no Gráfico preenchido. Ajuste a entrada ao preço em que você realmente entrou, complete risco e quantidade (ou "preencher com a calculadora") e registre.';
+  const f = root.querySelector('[data-form]'); if (f) f.scrollIntoView({ block: 'center' });
+}
+window.addEventListener('radar-usar-plano', () => { abrir(); usarPendente(); });
 window.addEventListener('hashchange', () => { if (/^#(a-)?trades$/.test(location.hash)) abrir(); });
 setTimeout(() => { const p = document.querySelector('.panel:not([hidden])'); if (p && /^p-(a-)?trades$/.test(p.id)) abrir(); }, 600);
 setInterval(() => {   // atualiza o R ao vivo das abertas, sem atrapalhar quem está digitando

@@ -320,27 +320,28 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
   <div class="tabs-scroll">
     <nav class="tabs" role="tablist" aria-label="Seções do radar">
       <button class="tab" role="tab" data-tab="hoje">Hoje</button>
-      <button class="tab" role="tab" data-tab="trades">Meu diário</button>
-      <button class="tab" role="tab" data-tab="aovivo" data-alias="a-aovivo">Liquidez ao vivo</button>
       <button class="tab" role="tab" data-tab="a-eventos">Balanços e eventos</button>
-      <button class="tab-mais" id="tabMais" aria-expanded="false" title="Abas de pesquisa e contexto, por mercado (swing, baleias, on-chain, backtest)">Pesquisa ▾</button>
-      <button class="tab" role="tab" data-tab="rsi" data-sec>RSI Mestre</button>
+      <button class="tab" role="tab" data-tab="rsi">RSI Mestre</button>
+      <button class="tab" role="tab" data-tab="grafico" data-alias="a-grafico">Gráfico</button>
+      <button class="tab" role="tab" data-tab="aovivo" data-alias="a-aovivo">Liquidez ao vivo</button>
+      <button class="tab" role="tab" data-tab="trades">Meu diário</button>
+      <button class="tab-mais" id="tabMais" aria-expanded="false" title="Abas de pesquisa e contexto, por mercado (swing, baleias, on-chain, backtest): para ler com calma, não para decidir a entrada">Pesquisa ▾</button>
       <span class="tab-grupo" data-sec>Ações:</span>
       <button class="tab" role="tab" data-tab="a-resumo" data-sec>Resumo</button>
       <button class="tab" role="tab" data-tab="a-carteiras" data-sec>Carteiras</button>
       <button class="tab" role="tab" data-tab="a-fluxo" data-sec>Fluxo e alertas</button>
       <button class="tab" role="tab" data-tab="a-liquidez" data-sec>Stops e liquidações</button>
       <button class="tab" role="tab" data-tab="a-forca" data-sec>Para onde vai o dinheiro</button>
-      <button class="tab" role="tab" data-tab="a-diario" data-sec>Diário de sinais</button>
+      <button class="tab" role="tab" data-tab="a-diario" data-sec>Histórico de sinais</button>
       <button class="tab" role="tab" data-tab="a-swing" data-sec>Swing trade</button>
       <span class="tab-grupo" data-sec>Cripto:</span>
       <button class="tab" role="tab" data-tab="resumo" data-sec>Resumo</button>
       <button class="tab" role="tab" data-tab="carteiras" data-sec>Carteiras</button>
       <button class="tab" role="tab" data-tab="fluxo" data-sec>Fluxo e alertas</button>
       <button class="tab" role="tab" data-tab="liquidez" data-sec>Stops e liquidações</button>
-      <button class="tab" role="tab" data-tab="sr" data-sec>Suportes e resistências</button>
+      <button class="tab" role="tab" data-tab="sr" data-sec>Zonas do livro</button>
       <button class="tab" role="tab" data-tab="sopr" data-sec>SOPR e suportes</button>
-      <button class="tab" role="tab" data-tab="diario" data-sec>Diário de sinais</button>
+      <button class="tab" role="tab" data-tab="diario" data-sec>Histórico de sinais</button>
       <button class="tab" role="tab" data-tab="swing" data-sec>Swing trade</button>
       <button class="tab" role="tab" data-tab="backtest" data-sec>Backtest</button>
     </nav>
@@ -406,6 +407,11 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
   <!-- AÇÕES: BALANÇOS E EVENTOS -->
   <section class="panel" id="p-a-eventos" role="tabpanel" hidden>
     <div class="kpis" id="aEvKpis"></div>
+    <div class="box" id="aEvHoje" hidden></div>
+    <div class="box">
+      <div class="box-head"><h2>Agenda macro dos EUA · próximos 10 dias</h2><p>Vale para ações <b>e cripto</b>: inflação, emprego, juros e PIB mexem em tudo ao mesmo tempo. Horários no seu fuso.</p></div>
+      <div class="tbl-wrap"><table id="aMacro"></table></div>
+    </div>
     <div class="box" id="aAgoraBox">
       <div class="box-head"><h2>Contrato × último fechamento da bolsa</h2><span class="chip" id="aAgoraChip"></span></div>
       <p class="small muted" id="aAgoraNota"></p>
@@ -415,10 +421,6 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
       <div class="box-head"><h2>Próximos balanços e reação histórica</h2><p>Reação = do fechamento do pregão anterior ao anúncio até o fechamento do pregão seguinte (2 pregões), nos últimos 10 anos. "Vezes o normal" compara com o movimento comum de 2 pregões da mesma ação.</p></div>
       <div class="tbl-wrap"><table id="aBalancos"></table></div>
       <p class="small muted" id="aBalNota"></p>
-    </div>
-    <div class="box">
-      <div class="box-head"><h2>Agenda macro dos EUA · próximos 10 dias</h2><p>Os dados que mexem em tudo ao mesmo tempo: inflação, emprego, juros e PIB. Horários no seu fuso.</p></div>
-      <div class="tbl-wrap"><table id="aMacro"></table></div>
     </div>
     <div class="box">
       <div class="box-head"><h2>Teste: o contrato no fim de semana antecipa a abertura de segunda?</h2><span class="chip warn">em teste</span></div>
@@ -464,6 +466,18 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
     <div class="seg" role="group" aria-label="Mercado" style="margin-bottom:12px"><button data-ir="a-aovivo" aria-pressed="true">Ações</button><button data-ir="aovivo" aria-pressed="false">Cripto</button></div>
     <div class="box-head"><h2>Liquidez ao vivo · ações</h2><p>O mesmo painel para os contratos de ações, índices e commodities (grupo xyz). Fora do pregão, o preço é só da Hyperliquid.</p></div>
     <div id="lvAcoes"><p class="muted">Carregando…</p></div>
+  </section>
+
+  <!-- GRÁFICO (montado por aovivo/aovivo.js na vista "graf": velas, níveis, estrutura, liquidez, liquidações, RSI e o plano da Trava) -->
+  <section class="panel" id="p-grafico" role="tabpanel" hidden>
+    <div class="seg" role="group" aria-label="Mercado" style="margin-bottom:12px"><button data-ir="a-grafico" aria-pressed="false">Ações</button><button data-ir="grafico" aria-pressed="true">Cripto</button></div>
+    <div class="box-head"><h2>Gráfico · cripto</h2><p>Velas da Hyperliquid com os níveis do dia, a estrutura, a liquidez em risco, as liquidações reais, o RSI e o plano da Trava. Ligue e desligue cada camada em "Mostrar". Contexto para ler o preço, não sinal de entrada.</p></div>
+    <div id="gfCripto"><p class="muted">Carregando…</p></div>
+  </section>
+  <section class="panel" id="p-a-grafico" role="tabpanel" hidden>
+    <div class="seg" role="group" aria-label="Mercado" style="margin-bottom:12px"><button data-ir="a-grafico" aria-pressed="true">Ações</button><button data-ir="grafico" aria-pressed="false">Cripto</button></div>
+    <div class="box-head"><h2>Gráfico · ações</h2><p>O mesmo gráfico para os contratos de ações, índices e commodities (grupo xyz). Níveis do dia pela sessão de Nova York.</p></div>
+    <div id="gfAcoes"><p class="muted">Carregando…</p></div>
   </section>
 
   <!-- RSI MESTRE: RSI 14 em 5 tempos gráficos, ações e cripto (montado por rsi/tela.js) -->
@@ -1307,6 +1321,21 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
       const futuros = linhas.filter(l => l.p && diasAte(l.p.data) >= 0);
       const prox = futuros[0];
       const altos = (E.macro || []).filter(e => e.impacto === 'alto' && (e.t || 0) >= Date.now() - 36e5);
+      // resumo do passo 2 do roteiro: o que pode mexer no mercado nas próximas 36 h (macro vale para cripto também) + balanços da semana
+      {
+        const agora = Date.now(), M = (E.macro || []).filter(e => e.t && e.t >= agora - 30 * 60000 && e.t <= agora + 36 * 36e5 && (e.impacto === 'alto' || e.impacto === 'médio'));
+        const fortes = M.filter(e => e.impacto === 'alto'), semana = futuros.filter(l => diasAte(l.p.data) <= 7);
+        const quandoRel = ms => ms <= 0 ? 'andamento' : ms < 36e5 ? Math.round(ms / 60000) + ' min' : Math.round(ms / 36e5) + ' h';
+        const hm = t => new Date(t).toLocaleDateString('pt-BR', { weekday: 'short' }) + ' ' + new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const ver = fortes.length ? `<span class="chip down" style="white-space:normal;border-radius:8px">Notícia forte em ${quandoRel(fortes[0].t - agora)} (${fortes[0].nome}, ${hm(fortes[0].t)}): não entre de 15 min antes até 30 min depois — em ações e em cripto.</span>`
+          : `<span class="chip up">Nenhum dado de alto impacto nas próximas 36 h</span>`;
+        $('#aEvHoje').hidden = false;
+        $('#aEvHoje').innerHTML = `<div class="box-head"><h2>Antes de operar · ações e cripto</h2></div><p style="margin:0 0 8px">${ver}</p>
+          <div class="small" style="display:flex;flex-wrap:wrap;gap:4px 18px">
+            <span><b>Macro (36 h):</b> ${M.length ? M.map(e => `${e.impacto === 'alto' ? '<b>' : ''}${hm(e.t)} ${e.nome}${e.impacto === 'alto' ? '</b>' : ''}`).join(' · ') : '<span class="muted">nada de impacto médio ou alto</span>'}</span>
+            <span><b>Balanços em 7 dias:</b> ${semana.length ? semana.map(l => `<b>${l.a.tk}</b> ${dataBR(l.p.data)}${l.p.estimado ? ' (estimada)' : ''}`).join(' · ') + ' <span class="muted">— fique fora desses papéis até sair</span>' : '<span class="muted">nenhum dos mercados acompanhados</span>'}</span>
+          </div>`;
+      }
       $('#aEvKpis').innerHTML =
         kpi('Próximo balanço', prox ? prox.a.tk : '—', prox ? `${dataBR(prox.p.data)} · ${emDias(diasAte(prox.p.data))}${prox.p.estimado ? ' · data estimada' : ''}` : 'nenhum nos próximos 60 dias') +
         kpi('Balanços em 14 dias', futuros.filter(l => diasAte(l.p.data) <= 14 && !l.p.estimado).length, `entre as ${linhas.length} empresas dos 20 mercados`) +
@@ -2038,7 +2067,7 @@ function hojeMontar(root, modo) {
   const pos = (L_, S_) => L_ + S_ === 0 ? '<span class="muted">—</span>' : `${L_}↑ ${S_}↓`;
   const linhasHtml = lista.map(r => `<tr>
       <td><button class="hj-estrela" data-act="obs" data-t="${r.t}" aria-pressed="${obs.includes(r.t)}" title="Lista de observação">${obs.includes(r.t) ? '★' : '☆'}</button></td>
-      <td><b>${r.t}</b>${r.setor ? `<br><span class="small muted">${r.setor}</span>` : ''}${r.mercado === 'acoes' && r.aberta === false ? '<br><span class="chip warn">pregão fechado</span>' : ''}</td>
+      <td><b>${r.t}</b>${window.hlLink ? window.hlLink(hojeChave(r)) : ''}${r.setor ? `<br><span class="small muted">${r.setor}</span>` : ''}${r.mercado === 'acoes' && r.aberta === false ? '<br><span class="chip warn">pregão fechado</span>' : ''}</td>
       <td>${fmtPx(r.px)}<br><span class="small ${r.ch >= 0 ? 'pos' : 'neg'}">${r.ch >= 0 ? '+' : ''}${fmt(r.ch, 1)}%</span></td>
       <td><span class="chip ${r.D === 'up' ? 'up' : r.D === 'down' ? 'down' : 'flat'}">${TL[r.D]}</span> <span class="chip ${r.H === 'up' ? 'up' : r.H === 'down' ? 'down' : 'flat'}">${TL[r.H]} 4h</span></td>
       <td>${fmt(r.funding, 1)}%</td>
@@ -2361,6 +2390,7 @@ function hojePregaoKpi(kpi, ny, hora) {
   }
   return kpi('Pregão de Nova York', ny ? (ny.aberta ? 'ABERTO' : 'FECHADO') : '—', ny ? `${ny.aberta ? 'fecha' : 'abre'} às ${hora(ny.muda_em)} · fora do pregão o preço é só da Hyperliquid` : '');
 }
+window.addEventListener('hl-pronto', () => { try { if (DADOS_HOJE) hojeRender(); } catch (e) {} });   // o link da Hyperliquid chega depois do primeiro desenho
 function hojeRender() {
   const u = document.getElementById('hojeUnico');
   try { if (u) hojeMontar(u, 'tudo'); } catch (e) { console.error('Hoje:', e); }
@@ -2451,6 +2481,7 @@ const ANTIGAS = { 'a-hoje': 'hoje', 'a-trades': 'trades' };   // links antigos (
 function show(id) {
   id = ANTIGAS[id] || id;
   if (id === 'aovivo-pref') { id = 'a-aovivo'; try { id = localStorage.getItem('radar-aovivo') || 'a-aovivo'; } catch (e) {} }
+  if (id === 'grafico-pref') { id = 'a-grafico'; try { id = localStorage.getItem('radar-grafico') || (localStorage.getItem('radar-aovivo') === 'aovivo' ? 'grafico' : 'a-grafico'); } catch (e) {} }
   if (!document.getElementById('p-' + id)) id = 'hoje';
   const modo = id.startsWith('a-') ? 'acoes' : 'cripto';
   modoAtual = modo;
@@ -2462,9 +2493,10 @@ function show(id) {
   document.querySelectorAll('.panel').forEach(p => { p.hidden = p.id !== 'p-' + id; });
   abaAtual = id; atualizarSub();
   if (id === 'aovivo' || id === 'a-aovivo') try { localStorage.setItem('radar-aovivo', id); } catch (e) {}
+  if (id === 'grafico' || id === 'a-grafico') try { localStorage.setItem('radar-grafico', id); } catch (e) {}
   try { localStorage.setItem('radar-tab', id); } catch (e) {}
 }
-tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab === 'aovivo' ? 'aovivo-pref' : t.dataset.tab)));
+tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab === 'aovivo' ? 'aovivo-pref' : t.dataset.tab === 'grafico' ? 'grafico-pref' : t.dataset.tab)));
 document.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => show(b.dataset.ir)));   // Ações/Cripto dentro da Liquidez ao vivo
 document.getElementById('tabMais').addEventListener('click', () => {
   let m = false; try { m = localStorage.getItem('radar-mais') === '1'; localStorage.setItem('radar-mais', m ? '0' : '1'); } catch (e) {}
@@ -2931,10 +2963,13 @@ conectarLiquidacoes();
 </script>
 <script type="module" src="backtest/tela.js"></script>
 <script type="module" src="aovivo/aovivo.js"></script>
+<script type="module" src="contexto/leiamais.js"></script>
+<script type="module" src="contexto/roteiro.js"></script>
 <script type="module" src="diario/tela.js"></script>
 <script type="module" src="risco/tela.js"></script>
 <script type="module" src="posicoes/tela.js"></script>
 <script type="module" src="mercado/tela.js"></script>
 <script type="module" src="rsi/tela.js"></script>
+<script type="module" src="contexto/hl.js"></script>
 <script type="module" src="contexto/painel.js"></script>
 <script type="module" src="manha/tela.js"></script>

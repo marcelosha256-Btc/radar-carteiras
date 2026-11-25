@@ -3,33 +3,24 @@
  * Chance de tocar = método do coletor/chance.py (excursão das próximas 4 h/24 h ÷ amplitude média das 24 velas de 1 h
  * anteriores, 5.000 velas da Hyperliquid), calculada aqui no navegador para qualquer ativo, com conferência 70/30.
  * Fora de propósito: "qual lado é capturado primeiro" e "escada/cascata" — testados no radar em 11/11/2026 e rejeitados. */
-import { fraseRsi } from '../rsi/calc.js';
+import { fraseRsi, rsiSerie, regime as regimeRsi, rsiWilder, agrupar, faixa as faixaRsi, resumo as resumoRsi, precoParaRsi } from '../rsi/calc.js';
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
+import { gatilho as gatilhoDe, velaDe, proximoFechamento } from './gatilho.js';
+import { ROTEIRO, fm, fB, sgn, fpx, pc, pc2, pp, f1, montarMapa as build, zones, squeeze as squeezeDe, estruturaDe, rsiAtArr, chanceDe, pTouchC, setupNota } from './trava.js';
+import { niveisDia, niveisPeriodo, estrutura as estruturaVelas, leitura as leituraGrafico, zonasSR } from '../grafico/calc.js';
+import { graficoSvg } from '../grafico/desenho.js';
+import { checklist as checklistRegras, REGRAS_PADRAO } from '../risco/regras.js';
+import { hlLink } from '../contexto/hl.js';
 const HL = 'https://api.hyperliquid.xyz/info';
 const ATIVOS = { cripto: ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'],
   acoes: ['xyz:SP500', 'xyz:XYZ100', 'xyz:NVDA', 'xyz:TSLA', 'xyz:MU', 'xyz:SKHX', 'xyz:GOOGL', 'xyz:GOLD'] };
-const ROTEIRO = {               // regras do roteiro do Marcelo (ajuste aqui)
-  rrMin: 2,                     // R:R mínimo: abaixo disso, BLOQUEADO
-  stopBuf: 0.0015,              // stop 0,15% além da zona de liquidação mais próxima
-  // as regras do Connors RSI (veto de venda no swing, ETH sem edge, bônus de RSI diário em sobrevenda) saíram em 25/11/2026:
-  // o estudo do CRSI não achou vantagem clara contra entrar em qualquer dia do mesmo regime
-  liberado: 70, cuidado: 50,
-};
 const TF = [['Semana', '1w', 7 * 864e5], ['Dia', '1d', 864e5], ['4H', '4h', 144e5], ['15 min', '15m', 9e5]];
 const TIER = [['money_printer', 'Top lucro (Apex)'], ['smart_money', 'Lucrativos (Sharps)'], ['grinder', 'Consistentes'], ['humble_earner', 'Pequeno lucro'],
   ['exit_liquidity', 'Multidão'], ['semi_rekt', 'Perdendo'], ['full_rekt', 'Muito no prejuízo'], ['giga_rekt', 'Quebrados']];
 
 /* ---------- formatação ---------- */
 const nome = k => k.replace('xyz:', '');
-const fm = n => n >= 995000 ? 'US$ ' + (n / 1e6).toFixed(1).replace('.', ',') + ' mi' : 'US$ ' + Math.round(n / 1e3) + ' mil';
-const fB = n => Math.abs(n) >= 1e9 ? 'US$ ' + (Math.abs(n) / 1e9).toFixed(2).replace('.', ',') + ' bi' : fm(Math.abs(n));
-const sgn = n => (n < 0 ? '-' : '+') + fB(n);
-const fpx = n => n >= 1000 ? n.toLocaleString('pt-BR', { maximumFractionDigits: n >= 10000 ? 0 : 1 }) : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: n < 10 ? 4 : 2 });
-const pc = v => (v > 0 ? '+' : '') + v.toFixed(1).replace('.', ',') + '%';
-const pc2 = v => (v > 0 ? '+' : '') + v.toFixed(2).replace('.', ',') + '%';
-const pp = v => v == null ? '…' : (v < 0.01 ? '<1%' : v > 0.99 ? '>99%' : Math.round(v * 100) + '%');
-const f1 = v => v.toFixed(1).replace('.', ',');
 const ago = t => { const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 60 ? 'há ' + s + 's' : 'há ' + Math.round(s / 60) + ' min'; };
 const V = n => `var(--${n})`;
 const COR = { up: V('up'), dn: V('down'), long: V('lv-long'), short: V('lv-short'), am: V('warn'), mu: V('muted'), fg: V('fg') };
@@ -83,55 +74,16 @@ function trend(k, cur) {
 
 /* ---------- chance de tocar (mesmo método do coletor/chance.py) ---------- */
 const chance = {};   // k -> {vol, q: {'4':{up,dn}, '24':{up,dn}}, conf, n}
-function quantis(arr) { const s = [...arr].sort((a, b) => a - b), q = []; for (let i = 0; i <= 100; i++) q.push(s[Math.min(s.length - 1, Math.round(i / 100 * (s.length - 1)))]); return q; }
-function probToque(qs, x) { if (x <= 0) return 1; let lo = 0, hi = qs.length; while (lo < hi) { const m = (lo + hi) >> 1; if (qs[m] < x) lo = m + 1; else hi = m; } return Math.max(0, Math.min(1, 1 - lo / (qs.length - 1))); }
 async function carregarChance(k) {
   if (chance[k] && Date.now() - chance[k].t < 6 * 3600e3) return;
   const now = Date.now();
   const c = (await hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '1h', startTime: now - 5000 * 3600e3, endTime: now } }))
     .map(x => ({ h: +x.h, l: +x.l, c: +x.c }));
-  if (c.length < 400) { chance[k] = { t: now, erro: 'pouco histórico' }; return; }
-  const amp = c.map(x => (x.h - x.l) / x.c), pts = [];
-  for (let i = 24; i < c.length; i++) {
-    let s = 0; for (let j = i - 24; j < i; j++) s += amp[j];
-    const vol = s / 24; if (!(vol > 0)) continue;
-    const ex = H => { if (i + H >= c.length) return null; let mx = -Infinity, mn = Infinity; for (let j = i + 1; j <= i + H; j++) { mx = Math.max(mx, c[j].h); mn = Math.min(mn, c[j].l); } return { up: (mx / c[i].c - 1) / vol, dn: (1 - mn / c[i].c) / vol }; };
-    pts.push({ e4: ex(4), e24: ex(24) });
-  }
-  const build = P => ({ '4': { up: quantis(P.filter(p => p.e4).map(p => p.e4.up)), dn: quantis(P.filter(p => p.e4).map(p => p.e4.dn)) },
-    '24': { up: quantis(P.filter(p => p.e24).map(p => p.e24.up)), dn: quantis(P.filter(p => p.e24).map(p => p.e24.dn)) } });
-  // conferência fora da amostra: quantis com os 70% iniciais, medido nos 30% finais (24 h, os dois lados)
-  const cut = Math.floor(pts.length * 0.7), qa = build(pts.slice(0, cut)), teste = pts.slice(cut).filter(p => p.e24);
-  const conf = [0.25, 0.5, 0.75].map(alvo => {
-    let x = 0, n = 0, hit = 0;
-    const qs = qa['24'].up; x = qs[Math.round((1 - alvo) * 100)];
-    for (const p of teste) { n += 2; if (p.e24.up >= x) hit++; if (p.e24.dn >= qa['24'].dn[Math.round((1 - alvo) * 100)]) hit++; }
-    return { prevista: alvo, tocou: n ? hit / n : null };
-  });
-  let s = 0; for (let j = amp.length - 24; j < amp.length; j++) s += amp[j];
-  chance[k] = { t: now, vol: s / 24, q: build(pts), conf, n: pts.length };
+  chance[k] = chanceDe(c, now);
 }
-function pTouch(k, level, cur, h) {
-  const C = chance[k]; if (!C || !C.q) return null;
-  const up = level > cur, d = Math.abs(level / cur - 1);
-  return probToque(C.q[String(h)][up ? 'up' : 'dn'], d / C.vol);
-}
-
+const pTouch = (k, level, cur, h) => pTouchC(chance[k], level, cur, h);
 /* ---------- RSI 14 (Wilder) ao vivo ---------- */
 const cand = {};
-function rsiCalc(cl) {
-  if (cl.length < 16) return null;
-  let g = 0, l = 0; for (let q = 1; q <= 14; q++) { const ch = cl[q] - cl[q - 1]; if (ch > 0) g += ch; else l -= ch; }
-  g /= 14; l /= 14; const out = [], r = () => l === 0 ? 100 : 100 - 100 / (1 + g / l); out.push(r());
-  for (let q = 15; q < cl.length; q++) { const ch = cl[q] - cl[q - 1]; g = (g * 13 + Math.max(ch, 0)) / 14; l = (l * 13 + Math.max(-ch, 0)) / 14; out.push(r()); }
-  return out;
-}
-function rsiAt(k, tf, ms, price) {
-  const a = cand[k] && cand[k][tf]; if (!a || a.length < 16) return null;
-  const cl = a.map(x => x.c), last = a[a.length - 1];
-  if (last.t + ms > Date.now()) cl[cl.length - 1] = price; else cl.push(price);
-  const r = rsiCalc(cl); return r ? { v: r[r.length - 1], prev: r[r.length - 2] } : null;
-}
 const rsiCol = v => v <= 30 ? COR.am : v >= 70 ? COR.dn : COR.fg;
 async function carregarCandles(k, tfs) {
   const now = Date.now();
@@ -140,6 +92,19 @@ async function carregarCandles(k, tfs) {
     try { const c = await hlApi({ type: 'candleSnapshot', req: { coin: k, interval: tf, startTime: now - 110 * ms, endTime: now } });
       (cand[k] || (cand[k] = {}))[tf] = c.map(x => ({ t: x.t, c: +x.c, h: +x.h, l: +x.l })); } catch (e) {}
   }
+}
+/* velas completas (com abertura e volume) para o gráfico de níveis e estrutura: 15 min (~4 dias) e 1 h (~14 dias) */
+const graf = {};
+async function carregarGrafico(k) {
+  const now = Date.now(), conv = c => c.map(x => ({ t: x.t, o: +x.o, h: +x.h, l: +x.l, c: +x.c, v: +x.v }));
+  try {
+    const [a, b, d4, d1] = await Promise.all([
+      hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '15m', startTime: now - 4 * 864e5, endTime: now } }),
+      hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '1h', startTime: now - 14 * 864e5, endTime: now } }),
+      hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '4h', startTime: now - 70 * 864e5, endTime: now } }),
+      hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '1d', startTime: now - 400 * 864e5, endTime: now } })]);
+    graf[k] = { t: now, c15: conv(a), c1h: conv(b), c4h: conv(d4), c1d: conv(d1) };
+  } catch (e) {}
 }
 async function carregarMinuto(k) {
   const now = Date.now();
@@ -159,24 +124,11 @@ async function carregarLivro(k, cur) {
 
 /* ---------- dados da Coinversa (via /api/liquidez) ---------- */
 const mapas = {}, liqs = {}, press = {}, erros = {};
-const build = d => { const lo = d.p * (1 - d.R / 100), w = d.p * 2 * d.R / 100 / d.nb, h = d.nb / 2;
-  return { ...d, bw: w, L: d.L.map((v, i) => [lo + (i + 0.5) * w, v * 1e6, d.LP ? d.LP[i] : null]), S: d.S.map((v, i) => [lo + (h + i + 0.5) * w, v * 1e6, d.SP ? d.SP[i] : null]) }; };
 async function buscar(q, k, alvo, transf = x => x) {
   try { alvo[k] = transf(await meuApi(q, k)); delete erros[q + k]; } catch (e) { erros[q + k] = e.message; if (e.message === 'senha') erros.senha = true; }
 }
 
 /* ---------- análise ---------- */
-function zones(d, cur) {
-  const bw = d.bw, mL = Math.max(1, ...d.L.map(a => a[1])), mS = Math.max(1, ...d.S.map(a => a[1]));
-  const Lo = d.L.map((a, j) => ({ a, j })).filter(o => o.a[0] + bw / 2 < cur).sort((x, y) => y.a[0] - x.a[0]);
-  const So = d.S.map((a, j) => ({ a, j })).filter(o => o.a[0] - bw / 2 > cur).sort((x, y) => x.a[0] - y.a[0]);
-  const ap = Lo.find(o => o.a[1] >= 0.35 * mL), ve = So.find(o => o.a[1] >= 0.35 * mS);
-  const vac = (arr, m) => { const runs = []; let r = null; arr.forEach((o, idx) => {
-    if (o.a[1] < 0.08 * m) { if (!r) r = { i0: idx, lo: o.a[0] - bw / 2, hi: o.a[0] + bw / 2, n: 0, js: [] }; r.n++; r.lo = Math.min(r.lo, o.a[0] - bw / 2); r.hi = Math.max(r.hi, o.a[0] + bw / 2); r.js.push(o.j); }
-    else { if (r) runs.push(r); r = null; } });
-    if (r) runs.push(r); return runs.filter(x => x.n >= 2 && x.i0 > 0); };
-  return { bw, mL, mS, Lo, So, ap, ve, vL: vac(Lo, mL), vS: vac(So, mS) };
-}
 function realLiqs(k) {
   return ((liqs[k] && liqs[k].events) || []).map(e => {
     let side = e.side, px = e.px;
@@ -187,117 +139,127 @@ function realLiqs(k) {
 }
 function liqSum(ev, ms) { const now = Date.now(), o = { long: 0, short: 0, nl: 0, ns: 0 };
   for (const e of ev) { if (now - e.t > ms) continue; if (e.side === 'long') { o.long += e.usd; o.nl++; } else if (e.side === 'short') { o.short += e.usd; o.ns++; } } return o; }
-function squeeze(k, P) {
-  if (!P) return null;
-  let L = 0, S = 0; const why = [];
-  const ann = P.funding != null ? P.funding * 24 * 365 * 100 : null, base = k.startsWith('xyz:') ? 5.475 : 10.95;
-  // funding-piso da Hyperliquid (10,95% a.a. no cripto, 5,475% no xyz) é neutro: só conta o que passar bem dele
-  if (ann != null && ann > base + 10) { L++; why.push(['L', `longs pagando funding de ${f1(ann)}% a.a.`]); }
-  if (ann != null && ann < -10) { S++; why.push(['S', `shorts pagando funding de ${f1(-ann)}% a.a.`]); }
-  const ls = P.ls;
-  if (ls && ls.longPnl != null) {
-    if (ls.longPnl < 0 && ls.shortPnl > 0) { L++; why.push(['L', `longs no prejuízo (${sgn(ls.longPnl)})`]); }
-    else if (ls.shortPnl < 0 && ls.longPnl > 0) { S++; why.push(['S', `shorts no prejuízo (${sgn(ls.shortPnl)})`]); } }
-  if (ls) { const r = ls.longAcc / Math.max(1, ls.shortAcc), pL = Math.round(100 * ls.longAcc / (ls.longAcc + ls.shortAcc));
-    if (r > 1.5) { L++; why.push(['L', `multidão comprada (${pL}% das contas)`]); } else if (r < 0.67) { S++; why.push(['S', `multidão vendida (${100 - pL}% das contas)`]); } }
-  const grp = ks => { let l = 0, s = 0; for (const c of P.cohorts) if (ks.includes(c.tier)) { l += c.L; s += c.S; } return l + s ? (l - s) / (l + s) : 0; };
-  const smart = grp(['money_printer', 'smart_money']), crowd = grp(['exit_liquidity', 'humble_earner']);
-  if (smart < -0.2 && crowd > 0.1) { L++; why.push(['L', 'lucrativos vendidos × multidão comprada']); }
-  else if (smart > 0.2 && crowd < -0.1) { S++; why.push(['S', 'lucrativos comprados × multidão vendida']); }
-  const c4 = P.oiChg && P.oiChg.h4;
-  if (c4 && Math.abs(c4.oi) > 0.005) {
-    if (c4.oi > 0 && c4.px < 0) { L++; why.push(['L', `OI ${pc(c4.oi * 100)} com preço caindo (4 h): shorts abrindo`]); }
-    else if (c4.oi < 0 && c4.px < 0) { L++; why.push(['L', `OI ${pc(c4.oi * 100)} com preço caindo (4 h): longs saindo`]); }
-    else if (c4.oi > 0 && c4.px > 0) { S++; why.push(['S', `OI ${pc(c4.oi * 100)} com preço subindo (4 h): longs abrindo`]); }
-    else if (c4.oi < 0 && c4.px > 0) { S++; why.push(['S', `OI ${pc(c4.oi * 100)} com preço subindo (4 h): shorts fechando`]); } }
-  const h = liqs[k] && liqs[k].sum1h;
-  if (h && h.long > 2 * h.short && h.long > 250e3) { L++; why.push(['L', `${fm(h.long)} de longs liquidados em 1 h`]); }
-  if (h && h.short > 2 * h.long && h.short > 250e3) { S++; why.push(['S', `${fm(h.short)} de shorts liquidados em 1 h`]); }
-  const v = L - S >= 2 ? { t: 'Longs apertados', c: COR.dn } : S - L >= 2 ? { t: 'Shorts apertados', c: COR.up } : { t: 'Sem lado claramente apertado', c: COR.mu };
-  return { ...v, L, S, why, ann };
+/* nota de setup: cálculo em trava.js (o mesmo do servidor); aqui só junta os dados que a página já tem */
+const squeeze = (k, P) => squeezeDe(k, P, liqs[k] && liqs[k].sum1h, COR);
+const estrutura = (k, tf, cur, n) => estruturaDe(cand[k] && cand[k][tf], cur, n);
+const rsiAt = (k, tf, ms, price) => rsiAtArr(cand[k] && cand[k][tf], ms, price);
+const setupDe = (k, A, modo, lado) => setupNota({ k, cur: A.cur, zn: A.zn, c15: A.tr.c15, cand: cand[k] || {}, chance: chance[k], press: press[k], sum1h: liqs[k] && liqs[k].sum1h, modo, lado });
+/* ---------- Trava em três camadas (ver aovivo/gatilho.js) ---------- */
+// 1) SETUP: só o que muda devagar (R:R, chance de tocar, estrutura, 15 min, RSI 15 min, quem está apertado). Calculado com o preço do
+//    fechamento da vela de 15 min e guardado até o próximo fechamento: a nota não pisca a cada minuto e cada nota fica registrada.
+const SETUP = {};   // k|modo|lado → { vela, t, cur, completo, r }: comum a todas as telas
+const horaTxt = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+function registrarNota(k, modo, lado, S) {   // histórico das notas de fechamento (neste navegador), para medir a Trava depois
+  try {
+    const L = JSON.parse(localStorage.getItem('radar-notas') || '[]'), r = S.r, t = S.vela * 9e5;
+    if (L.some(x => x.t === t && x.k === k && x.m === modo && x.l === lado)) return;
+    L.push({ t, k, m: modo, l: lado, sc: r.sc, b: r.blocks.length ? 1 : 0, e: S.cur, s: r.stop, a: r.alvo });
+    localStorage.setItem('radar-notas', JSON.stringify(L.slice(-4000)));
+  } catch (e) {}
 }
-function pivots(arr) {
-  if (!arr || arr.length < 8) return null; let hi = null, lo = null;
-  for (let i = arr.length - 3; i >= 2 && (hi == null || lo == null); i--) { const x = arr[i];
-    if (hi == null && x.h > arr[i - 1].h && x.h > arr[i - 2].h && x.h >= arr[i + 1].h && x.h >= arr[i + 2].h) hi = x.h;
-    if (lo == null && x.l < arr[i - 1].l && x.l < arr[i - 2].l && x.l <= arr[i + 1].l && x.l <= arr[i + 2].l) lo = x.l; }
-  return { hi, lo };
-}
-function estrutura(k, tf, cur, n) {
-  const p = pivots(cand[k] && cand[k][tf]); if (!p) return null;
-  if (p.hi != null && cur > p.hi) return { s: 1, t: `${n} rompeu o último topo (${fpx(p.hi)})` };
-  if (p.lo != null && cur < p.lo) return { s: -1, t: `${n} perdeu o último fundo (${fpx(p.lo)})` };
-  return null;
-}
+// 2) GATILHO e 3) RISCO, ao vivo sobre o setup guardado
 function avaliar(k, A, modo, lado) {
-  const { cur, zn } = A, isBuy = lado === 'compra', bw = zn.bw, H = modo === 'day' ? 4 : 24;
-  const blocks = [], pros = [], cons = [], faltam = []; let sc = 50;
-  const falta = (v, t) => faltam.push([v, t]);
-  const add = (v, t) => { sc += v; (v >= 0 ? pros : cons).push((v >= 0 ? '+' : '') + v + ' ' + t); };
-  let stop = null, alvo = null;
-  if (isBuy) { if (zn.ap) stop = (zn.ap.a[0] - bw / 2) * (1 - ROTEIRO.stopBuf); if (zn.ve) alvo = zn.ve.a[0] - bw / 2; }
-  else { if (zn.ve) stop = (zn.ve.a[0] + bw / 2) * (1 + ROTEIRO.stopBuf); if (zn.ap) alvo = zn.ap.a[0] + bw / 2; }
-  const rr = stop && alvo ? Math.abs(alvo - cur) / Math.abs(cur - stop) : null;
-  if (rr == null) cons.push('sem alvo/stop claros no mapa — R:R não calculável');
-  else if (rr < ROTEIRO.rrMin) { const e = (alvo + ROTEIRO.rrMin * stop) / (1 + ROTEIRO.rrMin);
-    blocks.push(`R:R ${f1(rr)} abaixo de ${ROTEIRO.rrMin}:1 — só vale ${isBuy ? 'comprando em' : 'vendendo em'} ${fpx(e)} ou ${isBuy ? 'abaixo' : 'acima'} (${pc((e / cur - 1) * 100)})`); }
-  else if (rr >= 3) add(15, `R:R ${f1(rr)}:1`); else add(8, `R:R ${f1(rr)}:1`);
-  if (alvo && stop) { const pa = pTouch(k, alvo, cur, H), ps = pTouch(k, stop, cur, H);
-    if (pa != null && ps != null) { const df = (pa - ps) * 100;
-      if (df >= 10) add(10, `alvo mais provável que o stop em ${H} h (${pp(pa)} × ${pp(ps)})`);
-      else if (df <= -10) add(-10, `stop mais provável que o alvo em ${H} h (${pp(ps)} × ${pp(pa)})`);
-      if (df < 10 && Math.max(pa, ps) >= 0.05) falta(df <= -10 ? 20 : 10, `alvo ficar mais provável que o stop em ${H} h (hoje ${pp(pa)} × ${pp(ps)})`); } }
-  const sL = isBuy ? 1 : -1;
-  if (modo === 'day') {
-    const e4 = estrutura(k, '4h', cur, '4H'); if (e4) add(10 * e4.s * sL, e4.t);
-    if (!e4 || e4.s !== sL) { const pv = pivots(cand[k] && cand[k]['4h']), nv = pv && (isBuy ? pv.hi : pv.lo);
-      if (nv != null) falta(e4 ? 20 : 10, `4H ${isBuy ? 'romper o último topo' : 'perder o último fundo'} (${fpx(nv)}, ${pc((nv / cur - 1) * 100)})`); }
-    if (A.tr.dir) add(5 * A.tr.dir * sL, `último minuto ${A.tr.dir > 0 ? 'subindo' : 'caindo'}`);
-    if (A.tr.dir !== sL) falta(A.tr.dir ? 10 : 5, `último minuto ${isBuy ? 'subindo' : 'caindo'}`);
-    if (Math.abs(A.tr.c15) >= 0.3) add((A.tr.c15 > 0 ? 5 : -5) * sL, `15 min ${pc2(A.tr.c15)}`);
-    if (!(A.tr.c15 * sL >= 0.3)) falta(A.tr.c15 * sL <= -0.3 ? 10 : 5, `15 min ${isBuy ? 'subindo' : 'caindo'} 0,3% ou mais (hoje ${pc2(A.tr.c15)})`);
-    const r15 = rsiAt(k, '15m', 9e5, cur);
-    if (r15 && r15.v <= 30) add(isBuy ? 5 : -5, `RSI 15 min em sobrevenda (${f1(r15.v)})`);
-    if (r15 && r15.v >= 70) add(isBuy ? -5 : 5, `RSI 15 min em sobrecompra (${f1(r15.v)})`);
-    if (r15 && (isBuy ? r15.v > 30 : r15.v < 70)) falta(5, `RSI 15 min ${isBuy ? 'em sobrevenda (≤30)' : 'em sobrecompra (≥70)'} (hoje ${f1(r15.v)})`);
-    const bk = book[k]; if (bk && Date.now() - bk.t < 30000) {
-      const near = arr => arr.filter(o => Math.abs(o.px / cur - 1) < 0.005).reduce((t, o) => t + o.usd, 0), b = near(bk.bids), a = near(bk.asks);
-      const im = b + a > 0 ? (b - a) / (b + a) : 0;
-      if (Math.abs(im) > 0.3) add((im > 0 ? 5 : -5) * sL, `livro perto do preço com mais ${im > 0 ? 'compra' : 'venda'} (${Math.round(Math.abs(im) * 100)}%)`);
-      if (!(im * sL > 0.3)) falta(im * sL < -0.3 ? 10 : 5, `livro perto do preço com mais ${isBuy ? 'compra' : 'venda'}`); }
-  } else {
-    const eD = estrutura(k, '1d', cur, 'Diário'); if (eD) add(10 * eD.s * sL, eD.t);
-    const rD = rsiAt(k, '1d', 864e5, cur), rW = rsiAt(k, '1w', 7 * 864e5, cur);
-    if (!isBuy && rD && rD.v >= 70) add(5, `RSI diário em sobrecompra (${f1(rD.v)})`);
-    if (rW && rW.v >= 70) add(isBuy ? -5 : 5, `RSI semanal esticado (${f1(rW.v)})`);
+  const agora = Date.now(), vela = velaDe(agora), key = k + '|' + modo + '|' + lado;
+  const completo = !!(press[k] && chance[k] && cand[k] && cand[k]['15m'] && cand[k]['4h']);
+  let S = SETUP[key];
+  if (!S || S.vela !== vela || (!S.completo && completo)) {
+    S = SETUP[key] = { vela, t: agora, cur: A.cur, completo, r: setupDe(k, A, modo, lado) };
+    if (completo) registrarNota(k, modo, lado, S);
   }
-  const q = squeeze(k, press[k]);
-  if (q && q.t === 'Longs apertados') add(isBuy ? -10 : 10, 'longs apertados');
-  if (q && q.t === 'Shorts apertados') add(isBuy ? 10 : -10, 'shorts apertados');
-  if (!q || q.t !== (isBuy ? 'Shorts apertados' : 'Longs apertados')) falta(q && q.t === (isBuy ? 'Longs apertados' : 'Shorts apertados') ? 20 : 10, `${isBuy ? 'shorts' : 'longs'} ficarem apertados (funding, OI e grupos)`);
+  const r = S.r, isBuy = lado === 'compra', sL = isBuy ? 1 : -1, cur = A.cur, zn = A.zn, prox = proximoFechamento(agora);
+  const blocks = [...r.blocks], faltam = [...r.faltam];
+  // risco ao vivo: cascata de liquidações contra o lado
   const l5 = liqSum(realLiqs(k), 300e3), lim = Math.max(500e3, 0.25 * Math.max(zn.ap ? zn.ap.a[1] : 0, zn.ve ? zn.ve.a[1] : 0));
   if (isBuy && l5.long >= lim) blocks.push(`cascata de longs em curso (${fm(l5.long)} em 5 min) — não pegue faca caindo`);
   if (!isBuy && l5.short >= lim) blocks.push(`cascata de shorts em curso (${fm(l5.short)} em 5 min)`);
-  sc = Math.max(0, Math.min(100, Math.round(sc)));
-  const st = blocks.length ? ['BLOQUEADO', COR.dn] : sc >= ROTEIRO.liberado ? ['LIBERADO', COR.up] : sc >= ROTEIRO.cuidado ? ['CUIDADO', COR.am] : ['FRACO', COR.mu];
-  faltam.sort((x, y) => y[0] - x[0]);
-  return { sc, st, blocks, pros, cons, stop, alvo, rr, faltam };
+  let st, gat = null;
+  if (!blocks.length && r.sc >= ROTEIRO.liberado && r.stop && r.alvo) {
+    const bk = book[k]; let livro = null;
+    if (bk && agora - bk.t < 30000) { const near = arr => arr.filter(o => Math.abs(o.px / cur - 1) < 0.005).reduce((t, o) => t + o.usd, 0), b = near(bk.bids), a = near(bk.asks); livro = b + a > 0 ? (b - a) / (b + a) : null; }
+    gat = gatilhoDe({ lado, cur, stop: r.stop, alvo: r.alvo, rrMin: ROTEIRO.rrMin, dir: A.tr.dir, livro });
+    if (gat.estado === 'stop') blocks.push(`o preço passou do stop do plano (${fpx(r.stop)}): plano desarmado até o fechamento das ${horaTxt(prox)}`);
+    else if (gat.estado === 'alvo') blocks.push(`o preço já chegou ao alvo (${fpx(r.alvo)}): não persiga`);
+  }
+  if (blocks.length) st = ['BLOQUEADO', COR.dn];
+  else if (gat && gat.estado === 'ok') st = ['LIBERADO', COR.up];
+  else if (gat) st = ['ARMADO', COR.am];
+  else st = r.sc >= ROTEIRO.cuidado ? ['CUIDADO', COR.am] : ['FRACO', COR.mu];
+  const gFalta = !gat ? '' : gat.estado === 'fora' ? `preço ${isBuy ? 'recuar até' : 'subir até'} ${fpx(gat.eLim)} ou ${isBuy ? 'abaixo' : 'acima'} (${pc(gat.distPct)}) para o R:R chegar a ${ROTEIRO.rrMin}:1`
+    : gat.estado === 'espera' ? `confirmação: último minuto ${isBuy ? 'subindo' : 'caindo'} ou livro com mais ${isBuy ? 'compra' : 'venda'}` : '';
+  return { sc: r.sc, st, blocks, pros: r.pros, cons: r.cons, stop: r.stop, alvo: r.alvo, rr: r.rr, faltam, gat, gFalta, notaT: S.t, notaCur: S.cur, meioVela: S.t - S.vela * 9e5 > 90e3, prox, armado: !!gat && !blocks.length };
 }
 
-/* ---------- uma instância por mercado (Cripto / Ações) ---------- */
-function criarApp(mercado, painel, raiz) {
+/* histórico local para o gráfico (compartilhado entre as abas): liquidações reais vistas e a foto anterior do mapa */
+const liqHist = {}, mapaPrev = {};
+/* liquidações guardadas por moeda (3 dias, neste navegador), de três fontes:
+ *  Hyperliquid (via Coinversa; muitas com preço/lado estimados), Binance (WebSocket ao vivo, exatas, no máx. 1 por segundo por moeda)
+ *  e OKX (as últimas 100, exatas, relidas a cada 60 s). Só cripto nas duas últimas. */
+const liqSujo = {};
+function histLiq(k) {
+  if (!liqHist[k]) { try { liqHist[k] = JSON.parse(localStorage.getItem('radar-liqhist-' + k) || '[]'); } catch (e) { liqHist[k] = []; } liqHist[k].ch = new Set(liqHist[k].map(chLiq)); }
+  return liqHist[k];
+}
+const chLiq = e => (e.fonte || 'Hyperliquid') + '|' + e.t + '|' + Math.round(e.usd);
+function addLiq(k, e) {
+  const h = histLiq(k), c = chLiq(e); if (h.ch.has(c)) return; h.ch.add(c); h.push(e); liqSujo[k] = true;
+}
+setInterval(() => {   // poda e grava a cada 10 s (não a cada evento)
+  for (const k of Object.keys(liqSujo)) { if (!liqSujo[k]) continue; liqSujo[k] = false;
+    const lim = Date.now() - 3 * 864e5, h = liqHist[k].filter(e => e.t >= lim).sort((a, b) => a.t - b.t).slice(-6000); h.ch = new Set(h.map(chLiq)); liqHist[k] = h;
+    try { localStorage.setItem('radar-liqhist-' + k, JSON.stringify(h)); } catch (e) {} }
+}, 10000);
+const CRIPTO_LIQ = ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'];
+const binLiq = { sock: null, quer: false };
+function ligarBinanceLiq() {
+  binLiq.quer = true; if (binLiq.sock && binLiq.sock.readyState <= 1) return;
+  try { binLiq.sock = new WebSocket('wss://fstream.binance.com/market/ws/!forceOrder@arr'); } catch (e) { return; }
+  binLiq.sock.onmessage = m => { let o; try { o = JSON.parse(m.data).o; } catch (e) { return; } if (!o || !/USDT$/.test(o.s)) return;
+    const k = o.s.replace(/USDT$/, ''); if (!CRIPTO_LIQ.includes(k)) return; const px = +o.ap || +o.p;
+    addLiq(k, { t: o.T, px, usd: px * +o.z, side: o.S === 'SELL' ? 'long' : 'short', ex: true, fonte: 'Binance' }); };   // venda forçada = long liquidado
+  binLiq.sock.onclose = () => setTimeout(() => { if (binLiq.quer && !document.hidden) ligarBinanceLiq(); }, 5000);
+}
+const okxLiq = { ct: {}, t: {} };
+async function buscarOkxLiq(k) {
+  if (!CRIPTO_LIQ.includes(k) || Date.now() - (okxLiq.t[k] || 0) < 60e3) return; okxLiq.t[k] = Date.now();
+  try {
+    if (!okxLiq.ct[k]) { const j = await fetch(`https://www.okx.com/api/v5/public/instruments?instType=SWAP&instId=${k}-USDT-SWAP`).then(r => r.json()); okxLiq.ct[k] = +((j.data || [])[0] || {}).ctVal || 0; }
+    if (!okxLiq.ct[k]) return;
+    const j = await fetch(`https://www.okx.com/api/v5/public/liquidation-orders?instType=SWAP&uly=${k}-USDT&state=filled&limit=100`).then(r => r.json());
+    for (const d of (((j.data || [])[0]) || {}).details || []) addLiq(k, { t: +d.ts, px: +d.bkPx, usd: +d.sz * okxLiq.ct[k] * +d.bkPx, ex: true, fonte: 'OKX',
+      side: d.posSide === 'long' || (d.posSide === 'net' && d.side === 'sell') ? 'long' : 'short' });
+  } catch (e) {}
+}
+/* trades do Meu diário (mesma senha), para marcar no gráfico; relidos no máximo a cada 60 s */
+const diario = { t: 0, trades: [] };
+async function carregarDiario() {
+  if (!senha() || Date.now() - diario.t < 60e3) return; diario.t = Date.now();
+  try { const r = await fetch('api/trades', { headers: { 'x-senha': senha() } }); if (r.ok) diario.trades = (await r.json()).trades || []; } catch (e) {}
+}
+const mesmoAtivo = (k, a) => !!a && (a === k || 'xyz:' + a === k || k.replace(/^xyz:/, '') === String(a).replace(/^xyz:/, ''));
+const GRAF_HTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span><span class="small muted lv-st"></span></div>
+    <div class="lv-tabs"></div>
+    <div class="lv-erro" hidden></div>
+    <div class="box lv-graf"><div class="box-head" style="flex-wrap:wrap;gap:8px"><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div>
+      <div class="lv-gcam" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div><span style="flex:1"></span><button class="lv-grsi" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">ver no RSI Mestre ↗</button></div>
+      <p class="small lv-gleit lm-nao"></p><div class="lv-gplano small"></div><div class="lv-gsvg"></div><div class="lv-grsil"></div><p class="small muted lv-gresumo" style="margin:6px 0 2px"></p><details class="small muted lv-gmais"><summary style="cursor:pointer;color:var(--fg)">Como ler este gráfico</summary><p class="lv-gnota" style="margin:6px 0 0"></p></details></div>`;
+const CAMADAS = [['sr', 'Suporte/resistência'], ['niv', 'Níveis'], ['est', 'Estrutura'], ['liq', 'Liquidez'], ['bol', 'Liquidações'], ['rsi', 'RSI'], ['plano', 'Meu plano'], ['trades', 'Meus trades'], ['rsima', 'Média do RSI']];
+
+/* ---------- uma instância por mercado (Cripto / Ações) e por vista (Liquidez ao vivo / Gráfico) ---------- */
+function criarApp(mercado, painel, raiz, vista = 'liq') {
   let lista = mercado === 'acoes' && Array.isArray(window.radarAcoes) && window.radarAcoes.length ? window.radarAcoes.slice(0, 12) : ATIVOS[mercado];
   const ls = (n, v) => { try { if (v === undefined) return localStorage.getItem('lv-' + mercado + '-' + n); localStorage.setItem('lv-' + mercado + '-' + n, v); } catch (e) { return null; } };
-  let SEL = ls('sel') || lista[0], Z = +(ls('zoom') || 0.5), MODO = ls('modo') || 'full', hov = null, mx0 = 0, my0 = 0;
+  let SEL = ls('sel') || lista[0], Z = +(ls('zoom') || 0.5), MODO = ls('modo') || 'full', GTF = ls('gtf') || '15m', hov = null, mx0 = 0, my0 = 0, gSig = '';
+  let CAM = Object.fromEntries(CAMADAS.map(([k]) => [k, k !== 'rsima']));   // a média do RSI começa desligada
+  try { Object.assign(CAM, JSON.parse(ls('gcam') || '{}')); } catch (e) {}
   const rOpen = new Set();
 
-  raiz.innerHTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span>
+  raiz.innerHTML = vista === 'graf' ? GRAF_HTML : `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span>
     <button class="chip lv-som" type="button"></button><div class="seg lv-mode"><button data-m="ess">Essencial</button><button data-m="full">Completo</button></div><span class="small muted lv-st"></span></div>
     <div class="lv-tabs"></div>
     <div class="lv-erro" hidden></div>
     <div class="lv-grid"><div class="lv-main">
       <div class="box lv-top"></div>
-      <div class="box"><div class="box-head"><h2>Mapa de liquidações</h2><div class="seg lv-zoom"><button data-z="1">±15%</button><button data-z="0.5">±7,5%</button><button data-z="0.2">±3%</button></div></div>
+      <div class="box"><div class="box-head"><h2>Mapa de liquidações</h2><button class="lv-irgraf" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">abrir no Gráfico ↗</button><div class="seg lv-zoom"><button data-z="1">±15%</button><button data-z="0.5">±7,5%</button><button data-z="0.2">±3%</button></div></div>
         <div class="lv-gat"></div>
         <div class="lv-chart"><div class="lv-svg"></div><div class="lv-tip"></div></div><p class="small muted lv-foot"></p></div>
       <div class="lv-cards"></div>
@@ -313,9 +275,10 @@ function criarApp(mercado, painel, raiz) {
   setModo(MODO); setZoom(Z);
 
   /* ---- aviso sonoro + notificação do navegador (ativo selecionado; só enquanto esta página estiver aberta) ---- */
-  let SOM = ls('som') === '1', actx = null; const avisados = {}, ultTrava = {};
+  let SOM = vista === 'graf' ? false : ls('som') === '1', actx = null; const avisados = {}, ultTrava = {};
   const visivel = () => !painel.hidden && !document.hidden;
   function setSom(on) {
+    if (vista === 'graf') return;   // o aviso sonoro fica só na Liquidez ao vivo
     SOM = on; ls('som', on ? '1' : '0'); const b = $('.lv-som'); b.textContent = on ? '🔔 Aviso ligado' : '🔕 Aviso desligado'; b.setAttribute('aria-pressed', String(on));
     b.title = 'Toca um bip e mostra uma notificação quando o preço chegar perto de uma zona, houver liquidações em curso ou a Trava mudar (ativo selecionado). Só funciona com esta página aberta.';
   }
@@ -343,9 +306,9 @@ function criarApp(mercado, painel, raiz) {
   }
   function renderBar(A) {
     const k = SEL, cur = A ? A.cur : live[k];
-    $('.lv-an').textContent = nome(k);
+    const an = $('.lv-an'); if (an.dataset.k !== k) { an.dataset.k = k; an.innerHTML = nome(k) + hlLink(k); }   // só refaz ao trocar de ativo, para o link aceitar o clique
     const px = $('.lv-px'); px.textContent = cur ? fpx(cur) : '—'; px.style.color = flash[k] && flash[k].until > Date.now() ? flash[k].col : '';
-    $('.lv-tr').innerHTML = A ? `<span class="chip" style="color:${A.tr.color}">${A.tr.arrow} ${A.tr.label}</span>` : '';
+    $('.lv-tr').innerHTML = A ? `<span class="chip" style="color:${A.tr.color}" title="Variação do preço nos últimos 1 a 5 minutos. Não é a tendência do dia nem o lado do plano.">${A.tr.arrow} impulso curto: ${A.tr.label.toLowerCase()}</span>` : '';
     if (A) {
       const est = ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda'); return (m === 'day' ? 'Day' : 'Swing') + ' ' + [!a.blocks.length ? 'compra livre' : '', !b.blocks.length ? 'venda livre' : ''].filter(Boolean).join(' e ') || 'bloqueado'; }).join(' · ');
       if (ultTrava[k] != null && ultTrava[k] !== est) avisar('trava|' + est, 'A Trava do roteiro mudou: ' + est + '.', 60e3);
@@ -489,15 +452,15 @@ function criarApp(mercado, painel, raiz) {
     const a = avaliar(SEL, A, 'day', 'compra'), b = avaliar(SEL, A, 'day', 'venda');
     const okA = !a.blocks.length, okB = !b.blocks.length;
     const r = okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
-    const est = r.st[0], acao = est === 'BLOQUEADO' ? 'Não entrar' : est === 'LIBERADO' ? 'Liberado pelo roteiro' : 'Aguardar gatilho';
+    const est = r.st[0], acao = est === 'BLOQUEADO' ? 'Não entrar' : est === 'LIBERADO' ? 'Liberado: gatilho confirmado' : est === 'ARMADO' ? 'Armado: esperando o gatilho' : 'Aguardar setup';
     const precisa = Math.max(0, ROTEIRO.liberado - r.sc);
     let lista = [], soma = 0; for (const [v, t] of r.faltam) { if (soma >= precisa) break; lista.push(`${t} (+${v})`); soma += v; }
     const oQueFalta = !precisa ? '' : soma >= precisa ? `faltam ${precisa} pontos: ${lista.join(' · ')}` : `faltam ${precisa} pontos e nem tudo a favor chega lá hoje: espere outro setup`;
     const falta = r.blocks.length ? r.blocks[0] + (oQueFalta ? `. Depois disso, ${oQueFalta}` : '')
-      : est === 'LIBERADO' ? (r.stop && r.alvo ? `stop ${fpx(r.stop)} · alvo ${fpx(r.alvo)} · R:R ${r.rr != null ? f1(r.rr) : '—'}` : '')
-      : oQueFalta;
+      : r.gat ? `${est === 'LIBERADO' ? r.gat.motivo + ' · ' : 'falta ' + r.gFalta + ' · '}entrada em ${fpx(r.gat.eLim)} ou ${r.l === 'compra' ? 'abaixo' : 'acima'} · stop ${fpx(r.stop)} · alvo ${fpx(r.alvo)} · R:R agora ${r.gat.rrAgora != null ? f1(r.gat.rrAgora) : '—'} · válido até ${horaTxt(r.prox)}`
+      : (oQueFalta ? oQueFalta + ' — ' : '') + `nova nota no fechamento das ${horaTxt(r.prox)}`;
     el.innerHTML = `<div class="lv-gatb" style="border-color:${r.st[1]};color:${r.st[1]}"><b>${acao}</b> · day trade · ${r.l} · <span class="lv-gatf">${falta}</span><span style="flex:1"></span><b class="num">${r.sc}/100</b> <span class="small muted">nota do roteiro</span></div>
-      <p class="small muted" style="margin:4px 0 0">A nota soma o que o roteiro confere (R:R, estrutura, fluxo, RSI). É contexto, não chance de acerto: ainda não há histórico medido dela.</p>`;
+      <p class="small muted" style="margin:4px 0 0">${r.meioVela ? `Nota calculada às ${horaTxt(r.notaT)}, quando a página abriu (preço ${fpx(r.notaCur)})` : `Nota do fechamento das ${horaTxt(r.notaT)} (preço ${fpx(r.notaCur)})`}, fixa até ${horaTxt(r.prox)}: soma R:R, estrutura, 15 min, RSI e quem está apertado. Nota ≥ ${ROTEIRO.liberado} arma o plano; libera quando o preço está na zona de entrada e o último minuto ou o livro confirmam. É contexto, não chance de acerto: ainda não há histórico medido dela.</p>`;
   }
   function renderCards(A) {
     const { cur, zn } = A, k = SEL;
@@ -553,8 +516,104 @@ function criarApp(mercado, painel, raiz) {
   function renderComo() {
     $('.lv-como').innerHTML = `<div class="box-head"><h2>O que ficou de fora</h2></div><p class="small muted">"Qual lado é capturado primeiro" e "escada/possível cascata" não aparecem aqui: testados no radar em 11/11/2026, o primeiro é só a distância e o segundo aparecia em 99% das zonas, com resultado guiado pela queda do mês. As chances usam o mesmo método do Resumo (excursão histórica ÷ volatilidade), calculadas no seu navegador para este ativo.</p>`;
   }
+  /* histórico local para o gráfico: liquidações reais (guardadas por 3 dias neste navegador) e a foto anterior do mapa */
+  function guardarLiqs(k) {
+    for (const e of realLiqs(k)) if (e.px != null && e.usd > 0) addLiq(k, { t: e.t, px: e.px, usd: e.usd, side: e.side, ex: !!e.exact, fonte: 'Hyperliquid' });
+    if (mercado === 'cripto') buscarOkxLiq(k);
+    return histLiq(k);
+  }
+  function perfilDe(k) {
+    const m = mapas[k]; if (!m) return null;
+    const p = mapaPrev[k] || (mapaPrev[k] = { cur: null, ant: null });
+    if (!p.cur || p.cur.ts !== m.ts) { p.ant = p.cur; p.cur = m; }
+    const d = build(m), da = p.ant ? build(p.ant) : null;
+    // valor da foto anterior no mesmo preço (as faixas andam com o preço de cada foto, então casa pelo preço, não pela posição)
+    const antEm = px => { if (!da) return null; const x = da.L.concat(da.S).find(f => Math.abs(f[0] - px) <= da.bw / 2); return x ? x[1] : 0; };
+    const casa = arr => arr.map(x => [x[0], x[1], antEm(x[0]), x[2]]);   // preço, US$, US$ na foto anterior, posições
+    return { bw: d.bw, L: casa(d.L), S: casa(d.S),
+      hora: new Date(m.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
+  }
+  function planoDe() {
+    const A = analyze(); if (!A) return null;
+    const op = ['compra', 'venda'].map(l => ({ l, r: avaliar(SEL, A, 'day', l) })).filter(o => o.r.stop && o.r.alvo);
+    if (!op.length) return null;
+    op.sort((a, b) => (a.r.blocks.length - b.r.blocks.length) || (b.r.sc - a.r.sc));
+    // as suas Regras do dia (janela de entrada, pregão de NY): o mesmo checklist da calculadora, sem a parte de tamanho
+    let regras = REGRAS_PADRAO; try { regras = { ...REGRAS_PADRAO, ...(JSON.parse(localStorage.getItem('radar-regras') || 'null') || {}) }; } catch (e) {}
+    const avisos = checklistRegras({ calc: null, trava: null, regras, mercado }).filter(x => x[0] !== 'ok').map(x => x[1]);
+    const o = op[0];
+    // contexto que a Trava não pesa: vender com o diário esticado para baixo (ou comprar esticado para cima) e operar contra a estrutura do tempo que você está vendo.
+    // Só avisa (não bloqueia): ainda não foi medido se isso melhora o resultado.
+    const G = graf[SEL], fc = a => (a || []).map(x => x.c), rd = G ? rsiWilder(fc(G.c1d)) : null;
+    if (rd != null && o.l === 'venda' && rd <= 30) avisos.push(`Vendendo com o RSI diário em sobrevenda (${f1(rd)}): risco de vender no fundo`);
+    if (rd != null && o.l === 'compra' && rd >= 70) avisos.push(`Comprando com o RSI diário em sobrecompra (${f1(rd)}): risco de comprar no topo`);
+    const vel = G ? { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] : null, eT = vel && vel.length > 30 ? estruturaVelas(vel.slice(-200)) : null;
+    if (eT && ((o.l === 'venda' && eT.tendencia === 'alta') || (o.l === 'compra' && eT.tendencia === 'baixa')))
+      avisos.push(`Contra a estrutura do ${{ '15m': '15 min', '1h': '1H', '4h': '4H', '1d': 'diário' }[GTF] || GTF} (topos e fundos ${eT.tendencia === 'alta' ? 'mais altos' : 'mais baixos'})`);
+    return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, armado: o.r.armado, eLim: o.r.gat ? o.r.gat.eLim : null, gFalta: o.r.gFalta, prox: o.r.prox, notaT: o.r.notaT, meioVela: o.r.meioVela, bloq: o.r.blocks[0] || '', avisos };
+  }
+  function aoVivo(arr, ms, px) {
+    if (!arr || !arr.length || !px) return arr;
+    const u = arr[arr.length - 1], agora = Date.now();
+    if (agora < u.t + ms) return arr.slice(0, -1).concat({ ...u, c: px, h: Math.max(u.h, px), l: Math.min(u.l, px) });
+    const t = u.t + Math.floor((agora - u.t) / ms) * ms;
+    return arr.concat({ t, o: u.c, h: Math.max(u.c, px), l: Math.min(u.c, px), c: px, v: 0 });
+  }
+  function renderGrafico() {
+    const box = $('.lv-graf'); if (!box) return;
+    const k = SEL, G0 = graf[k], cur = live[k];
+    const G = G0 && cur ? { ...G0, c15: aoVivo(G0.c15, 9e5, cur), c1h: aoVivo(G0.c1h, 36e5, cur), c4h: aoVivo(G0.c4h, 144e5, cur), c1d: aoVivo(G0.c1d, 864e5, cur) } : G0;
+    box.querySelectorAll('.lv-gtf button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.g === GTF)));
+    if (!G || !cur) { if (gSig !== 'x') { $('.lv-gsvg').innerHTML = '<p class="muted small">Buscando as velas…</p>'; $('.lv-gleit').textContent = ''; gSig = 'x'; } return; }
+    const ms = { '15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5 }[GTF] || 9e5, todas = { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] || G.c15, c = todas.slice(-({ '15m': 120, '1h': 96, '4h': 120, '1d': 120 }[GTF] || 120));
+    const curto = ms < 864e5, bol = curto ? guardarLiqs(k) : null, perf = perfilDe(k);   // barras em todos os tempos; liquidações por vela até 4 h (o histórico guardado é de 3 dias)
+    const pl = vista === 'graf' && CAM.plano ? planoDe() : null, tds = vista === 'graf' && CAM.trades ? diario.trades.filter(t => mesmoAtivo(k, t.ativo) && t.abertura && t.entrada) : null;
+    const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0, JSON.stringify(CAM), pl ? pl.stop + '/' + pl.alvo + '/' + pl.st : '', diario.t, tds ? tds.length : 0, bol ? bol.length : 0].join('|'); if (sig === gSig) return; gSig = sig;
+    const cam = $('.lv-gcam');
+    if (cam) cam.innerHTML = '<span class="small muted">Mostrar:</span>' + CAMADAS.map(([c, n]) => `<button type="button" class="chip" data-c="${c}" aria-pressed="${!!CAM[c]}" style="cursor:pointer;font:inherit;font-size:12px;border:1px solid ${CAM[c] ? 'var(--accent)' : 'var(--line)'};background:${CAM[c] ? 'var(--accent-soft)' : 'none'};color:var(--fg)">${CAM[c] ? '✓ ' : ''}${n}</button>`).join('');
+    const pe = $('.lv-gplano');
+    if (pe) pe.innerHTML = !CAM.plano ? '' : pl && pl.bloq ? `<span class="muted">Meu plano: nenhum day trade liberado agora. O melhor lado (${pl.lado}) está bloqueado: ${pl.bloq}.</span>${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}` : pl ? `<span style="color:${pl.cor};font-weight:700">Meu plano · day trade ${pl.lado} · ${pl.st} ${pl.sc}</span> <span class="muted">(nota ${pl.meioVela ? 'calculada às' : 'do fechamento das'} ${horaTxt(pl.notaT)}: ${pl.armado ? `entrada em ${fpx(pl.eLim)} ou ${pl.lado === 'compra' ? 'abaixo' : 'acima'}` : `entrada ~${fpx(pl.entrada)}`} · stop ${fpx(pl.stop)} · alvo ${fpx(pl.alvo)}${pl.rr != null ? ' · R:R ' + f1(pl.rr) : ''} · fixo até ${horaTxt(pl.prox)})</span>${pl.armado ? `${pl.st === 'ARMADO' ? ` <span style="color:var(--warn)">· falta ${pl.gFalta}</span>` : ''} <button type="button" class="lv-gdiario hj-link" style="font-size:12px">guardar plano e ir ao passo 5 (hora de entrar?) →</button>` : ` <b style="color:var(--warn)">· aguardar setup</b> <span class="muted">(nota ${pl.sc}, precisa de ${ROTEIRO.liberado}; nova nota às ${horaTxt(pl.prox)})</span>`}${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}`
+      : '<span class="muted">Meu plano: sem plano agora (a Trava precisa do mapa da Coinversa para achar stop e alvo).</span>';
+    const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
+    if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
+    // linha do RSI Mestre: os cinco tempos, com as mesmas cores e o mesmo regime da aba RSI Mestre
+    const fc = a => (a || []).map(x => x.c), rv = { '15m': rsiWilder(fc(G.c15)), '1h': rsiWilder(fc(G.c1h)), '4h': rsiWilder(fc(G.c4h)), '1d': rsiWilder(fc(G.c1d)), '1w': rsiWilder(fc(agrupar(G.c1d || [], 7 * 864e5))) };
+    const rg = regimeRsi(rv['1d']), rr = resumoRsi(Object.values(rv));
+    const chip = (k, nome) => { const v = rv[k], f = faixaRsi(v), bg = f.lado < 0 ? 'var(--warn-soft)' : f.lado > 0 ? 'var(--down-soft)' : 'transparent', cor = f.lado < 0 ? 'var(--warn)' : f.lado > 0 ? 'var(--down)' : 'var(--fg)';
+      return `<button type="button" ${k !== '1w' ? `data-g="${k}"` : 'disabled'} title="${f.txt}" style="font:inherit;font-size:12.5px;padding:3px 9px;border-radius:6px;cursor:${k !== '1w' ? 'pointer' : 'default'};background:${bg};color:${cor};border:1px solid ${k === GTF ? 'var(--fg)' : 'var(--line)'};${f.nivel === 2 ? 'font-weight:800' : ''}"><span class="muted" style="font-weight:400">${nome}</span> <b class="num">${v == null ? '—' : v.toFixed(1).replace('.', ',')}</b></button>`; };
+    const corReg = rg.lado > 0 ? 'var(--up)' : rg.lado < 0 ? 'var(--warn)' : 'var(--muted)';
+    $('.lv-grsil').innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 8px;padding-left:8px"><span class="small muted">RSI 14 nos 5 tempos</span>${[['15m', '15 min'], ['1h', '1H'], ['4h', '4H'], ['1d', 'Dia'], ['1w', 'Semana']].map(([k, n]) => chip(k, n)).join('')}` +
+      `<span style="font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid ${corReg};color:${corReg}">${rg.t}</span><span class="small muted">${rr.txt}</span></div>`;
+    // suporte e resistência mais próximos: níveis de ontem/semana/mês, topos e fundos, zonas de liquidação e a maior parede do livro
+    let sr = null;
+    if (CAM.sr && est) {
+      const F = niveisDia(G.c15, mercado).niveis.filter(n => ['PDH', 'PDL', 'MXD', 'MND'].includes(n.id)).map(n => ({ p: n.preco, nome: n.rot }))
+        .concat(niveisPeriodo(G.c1d).map(n => ({ p: n.preco, nome: n.rot })))
+        .concat(est.pivos.slice(-30).map(x => ({ p: x.p, nome: (x.tipo === 'H' ? 'topo ' : 'fundo ') + (x.r || '') + ' (' + GTF + ')' })));
+      const A = analyze();
+      if (A && A.zn) { if (A.zn.ap) F.push({ p: A.zn.ap.a[0], nome: `liquidações de longs ${fm(A.zn.ap.a[1])}` }); if (A.zn.ve) F.push({ p: A.zn.ve.a[0], nome: `liquidações de shorts ${fm(A.zn.ve.a[1])}` }); }
+      const bk = book[k]; if (bk && Date.now() - bk.t < 30000) { const mx = a => a.reduce((x, y) => y.usd > x.usd ? y : x, a[0]); if (bk.bids.length) { const w = mx(bk.bids); F.push({ p: w.px, nome: `parede de compra ${fm(w.usd)}` }); } if (bk.asks.length) { const w = mx(bk.asks); F.push({ p: w.px, nome: `parede de venda ${fm(w.usd)}` }); } }
+      sr = zonasSR(cur, F, est.atr);
+    }
+    const fech = todas.map(x => x.c), rsTodo = rsiSerie(fech);
+    const rsMed = CAM.rsima ? rsTodo.map((v, i) => { if (i < 13) return null; const j = rsTodo.slice(i - 13, i + 1); return j.some(x => x == null) ? null : j.reduce((a, b) => a + b, 0) / 14; }).slice(-c.length) : null;
+    const rsNiv = [70, 50, 30].map(v => ({ v, p: precoParaRsi(fech, v) }));
+    const rs = rsTodo.slice(-c.length), rd = G.c1d && G.c1d.length > 20 ? rsiSerie(G.c1d.map(x => x.c)).pop() : null;
+    const { svg, fora } = graficoSvg({ candles: c, niv: CAM.niv ? niv : null, est: CAM.est ? est : null, preco: cur, ms, perfil: CAM.liq ? perf : null, bolhas: CAM.bol ? bol : null,
+      rsi: CAM.rsi ? rs : null, rsiMedia: CAM.rsi ? rsMed : null, rsiNiveis: rsNiv, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl && !pl.bloq ? pl : null,   // plano bloqueado não é desenhado
+      trades: tds, sr });
+    const gb = $('.lv-gsvg'), noFim = gb.scrollLeft + gb.clientWidth >= gb.scrollWidth - 4; gb.innerHTML = svg; if (noFim) gb.scrollLeft = gb.scrollWidth;   // fica nas velas mais recentes
+    $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
+    const nF = f => bol ? bol.filter(e => (e.fonte || 'Hyperliquid') === f).length : 0;
+    const res = $('.lv-gresumo');
+    if (res) res.textContent = 'Mapa de contexto, não gatilho: nos testes, nenhum sinal de nível ou de estrutura deu ganho depois dos custos.' + (curto && bol ? ` Liquidações guardadas: ${mercado === 'cripto' ? `Binance ${nF('Binance')} · OKX ${nF('OKX')} · ` : ''}Hyperliquid ${nF('Hyperliquid')}.` : '') + (mapas[k] ? '' : ' Sem liquidez: falta a senha do radar.');
+    $('.lv-gnota').textContent = (curto ? `Liquidações por vela (faixa entre as velas e o RSI): para cima = shorts liquidados (empurraram o preço para cima), para baixo = longs liquidados; altura pela raiz do valor; ▲/▼ no pavio = rajada bem acima do normal da tela. Guardadas neste navegador por 3 dias, desde que a página abriu: ${mercado === 'cripto' ? `Binance ao vivo ${nF('Binance')}, OKX ${nF('OKX')}, ` : ''}Hyperliquid ${nF('Hyperliquid')} (Hyperliquid via Coinversa: só os ~200 registros mais recentes e, em geral, preço/lado estimados${mercado === 'cripto' ? '; Binance manda no máximo 1 por segundo por moeda' : ''}). ` : 'No Diário não há liquidações por vela (o histórico guardado é de só 3 dias). ') + 'Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ' + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
+      (fora.length ? `Fora da vista: ${fora.map(n => n.rot + ' ' + fpx(n.preco)).join(', ')}. ` : '') +
+      'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Medido em BTC, ETH e SOL (15 min, 1 h, 4 h e diário) e em ações (diário): nenhum desses sinais deu ganho firme depois dos custos, e vários foram piores que entrar sem sinal. Uma pista no diário de cripto (fechar abaixo da mínima do mês passado) não se repetiu em 30 ações dos EUA (15 anos). É mapa de contexto, não gatilho (estudo em estudos/niveis_estrutura).';
+  }
   function render() {
     renderTabs();
+    if (vista === 'graf') { renderBar(analyze()); renderGrafico(); return; }
     const A = analyze();
     renderBar(A);
     const err = erros.senha ? 'Digite a senha do radar no topo da página para ver o mapa da Coinversa.' : erros['mapa' + SEL] ? `Sem mapa agora: ${erros['mapa' + SEL]}` : '';
@@ -570,9 +629,20 @@ function criarApp(mercado, painel, raiz) {
     const sm = e.target.closest('.lv-som');
     if (sm) { const on = !SOM; setSom(on); if (on) { bip(); try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (er) {} } return; }
     const m = e.target.closest('.lv-mode button'); if (m) { setModo(m.dataset.m); return; }
-    const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); }
+    const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); return; }
+    if (e.target.closest('.lv-gdiario')) {   // passo 4 → 5: o plano fica guardado; no passo 5 você decide se entra e só então ele vai para o diário
+      const pl = planoDe(); if (!pl || pl.bloq || !pl.armado) return;
+      try { sessionStorage.setItem('radar-plano-pendente', JSON.stringify({ ativo: nome(SEL), coin: SEL, mercado, lado: pl.lado, tf: GTF, entrada: pl.eLim || pl.entrada, stop: pl.stop, alvo1: pl.alvo, setup: 'Plano da Trava (Gráfico)', ts: Date.now() })); } catch (x) {}
+      window.dispatchEvent(new CustomEvent('radar-abrir-ativo', { detail: { coin: SEL, mercado } }));
+      if (typeof window.show === 'function') window.show(mercado === 'acoes' ? 'a-aovivo' : 'aovivo'); window.scrollTo(0, 0); return;
+    }
+    if (e.target.closest('.lv-grsi')) { if (typeof window.show === 'function') window.show('rsi'); window.scrollTo(0, 0); return; }
+    if (e.target.closest('.lv-irgraf')) { if (typeof window.show === 'function') window.show(mercado === 'acoes' ? 'a-grafico' : 'grafico'); window.scrollTo(0, 0); return; }
+    if (e.target.closest('.lv-gmais summary')) setTimeout(() => ls('gmais', $('.lv-gmais').open ? '1' : '0'), 0);
+    const cm = e.target.closest('.lv-gcam button'); if (cm) { CAM[cm.dataset.c] = !CAM[cm.dataset.c]; ls('gcam', JSON.stringify(CAM)); gSig = ''; renderGrafico(); return; }
+    const g = e.target.closest('.lv-gtf button, .lv-grsil button[data-g]'); if (g) { GTF = g.dataset.g; ls('gtf', GTF); gSig = ''; renderGrafico(); }
   });
-  const svg = $('.lv-svg');
+  const svg = $('.lv-svg') || document.createElement('div');   // a aba Gráfico não tem o mapa
   svg.addEventListener('mousemove', e => { mx0 = e.clientX; my0 = e.clientY; const t = e.target.closest('[data-k]');
     if (!t) { if (hov) { hov = null; $('.lv-tip').style.display = 'none'; } return; } const k = t.getAttribute('data-k'); if (k !== hov) { hov = k; render(); } else tipFor(k); });
   svg.addEventListener('mouseleave', () => { hov = null; $('.lv-tip').style.display = 'none'; });
@@ -583,7 +653,9 @@ function criarApp(mercado, painel, raiz) {
     const k = SEL;
     await Promise.all([buscar('mapa', k, mapas), carregarMinuto(k), carregarChance(k).catch(() => {})]);
     render();
-    buscar('liqs', k, liqs).then(render); buscar('press', k, press).then(render);
+    buscar('liqs', k, liqs).then(render); if (vista !== 'graf') buscar('press', k, press).then(render);
+    if (vista === 'graf') carregarGrafico(k).then(render);   // as velas do gráfico só na aba Gráfico
+    if (vista === 'graf') carregarDiario().then(render);
     carregarCandles(k, ['15m', '4h']).then(() => { render(); carregarCandles(k, ['1d', '1w']).then(render); });
     if (live[k]) carregarLivro(k, live[k]).then(render);
   }
@@ -603,13 +675,18 @@ function criarApp(mercado, painel, raiz) {
     const k = SEL;
     if (n % 60 === 0) buscar('mapa', k, mapas).then(render);
     if (n % 30 === 0) buscar('liqs', k, liqs);
-    if (n % 120 === 0) buscar('press', k, press);
+    if (n % 120 === 0 && vista !== 'graf') buscar('press', k, press);
     if (n % 180 === 0) carregarCandles(k, ['15m']);
+    if (n % 60 === 0 && vista === 'graf') carregarGrafico(k);
+    if (vista === 'graf' && n % 60 === 0) carregarDiario();
     if (n % 3 === 0 && live[k]) carregarLivro(k, live[k]);
     if (vis) render(); else vigiar();
   }, 1000);
   window.addEventListener('radar-acoes', ev => { if (mercado === 'acoes' && ev.detail && ev.detail.length) { lista = ev.detail.slice(0, 12); if (!lista.includes(SEL)) SEL = lista[0]; render(); } });
-  return { iniciar: trocar, ativo: () => visivel() || SOM };
+  if (vista === 'graf' && mercado === 'cripto') ligarBinanceLiq();
+  { const dm = $('.lv-gmais'); if (dm && ls('gmais') === '1') dm.open = true; }
+  function sincronizar() { const s = ls('sel'); if (s && s !== SEL) { if (!lista.includes(s)) lista = [s, ...lista].slice(0, 12); SEL = s; hov = null; trocar(); } else render(); }
+  return { iniciar: trocar, sincronizar, ativo: () => visivel() || SOM };
 }
 
 /* ---------- estilo (usa as cores do radar; claro e escuro) ---------- */
@@ -656,15 +733,16 @@ css.textContent = `
 .lv-gatf{color:var(--fg)}
 @media (max-width:600px){.lv-zcs{grid-template-columns:1fr}}
 .lv-som{cursor:pointer;font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg)}.lv-som[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
-.lv-ess .lv-full{display:none!important}`;
+.lv-ess .lv-full{display:none!important}
+.lv-gsvg{overflow-x:auto;-webkit-overflow-scrolling:touch}.lv-gsvg svg{display:block;min-width:720px}   /* no celular o gráfico rola de lado em vez de encolher o texto */`;
 document.head.appendChild(css);
 
 /* ---------- montagem: cada painel monta quando é aberto pela primeira vez ---------- */
 const apps = {};
-for (const [mercado, id, raizId] of [['cripto', 'p-aovivo', 'lvCripto'], ['acoes', 'p-a-aovivo', 'lvAcoes']]) {
-  const painel = document.getElementById(id), raiz = document.getElementById(raizId);
+for (const [mercado, id, raizId, vista] of [['cripto', 'p-aovivo', 'lvCripto', 'liq'], ['acoes', 'p-a-aovivo', 'lvAcoes', 'liq'], ['cripto', 'p-grafico', 'gfCripto', 'graf'], ['acoes', 'p-a-grafico', 'gfAcoes', 'graf']]) {
+  const painel = document.getElementById(id), raiz = document.getElementById(raizId), chave = mercado + '-' + vista;
   if (!painel || !raiz) continue;
-  const montar = () => { if (painel.hidden) return; if (!apps[mercado]) { apps[mercado] = criarApp(mercado, painel, raiz); apps[mercado].iniciar(); } };
+  const montar = () => { if (painel.hidden) return; if (!apps[chave]) { apps[chave] = criarApp(mercado, painel, raiz, vista); apps[chave].iniciar(); } else apps[chave].sincronizar(); };
   montar();
   new MutationObserver(montar).observe(painel, { attributes: true, attributeFilter: ['hidden'] });
 }

@@ -4,6 +4,7 @@
 import { rsiWilder, agrupar, faixa, resumo, mediaSimples, regime } from './calc.js';
 import { medo, frase, medidorMedo } from '../contexto/medo.js';
 import { medidor } from '../contexto/medidor.js';
+import { hlLink } from '../contexto/hl.js';
 import { vix, fraseVix, medidorVix } from '../contexto/vix.js';
 
 const HL = 'https://api.hyperliquid.xyz/info';
@@ -74,7 +75,7 @@ function desenhar() {
       ${S.vix && S.filtro !== 'cripto' ? medidor(medidorVix(S.vix)) : ''}${S.medo && S.filtro !== 'acoes' ? medidor(medidorMedo(S.medo)) : ''}</div>
     ${S.erro ? `<p class="small" style="color:var(--warn)">${esc(S.erro)}</p>` : ''}
     <div class="tbl-wrap"><table><thead><tr><th>Ativo</th><th>Preço · 24 h</th><th>Regime</th>${TFS.map(([, n]) => `<th style="text-align:center">${n}</th>`).join('')}<th>Leitura</th></tr></thead><tbody>
-    ${comRes.length ? comRes.map(l => `<tr class="rsi-lin" data-coin="${esc(l.coin)}" title="Abrir na Liquidez ao vivo" style="cursor:pointer"><td><b>${esc(l.coin.replace('xyz:', ''))}</b>${l.coin.startsWith('xyz:') ? ' <span class="small muted">ação</span>' : ''}</td>
+    ${comRes.length ? comRes.map(l => `<tr class="rsi-lin" data-coin="${esc(l.coin)}" title="Abrir na Liquidez ao vivo" style="cursor:pointer"><td><b>${esc(l.coin.replace('xyz:', ''))}</b>${hlLink(l.coin)}${l.coin.startsWith('xyz:') ? ' <span class="small muted">ação</span>' : ''}</td>
       <td class="num">${l.px != null ? l.px.toLocaleString('pt-BR', { maximumFractionDigits: l.px < 10 ? 4 : 2 }) : '—'}${l.ch24 != null ? ` <span class="small ${l.ch24 >= 0 ? 'pos' : 'neg'}">${l.ch24 >= 0 ? '+' : ''}${f1(l.ch24)}%</span>` : ''}</td>
       <td>${reg(l)}</td>
       ${TFS.map(([k]) => cel(l.r[k])).join('')}<td class="small ${l.res.n ? '' : 'muted'}">${l.res.txt}${medias(l)}</td></tr>`).join('')
@@ -106,7 +107,7 @@ async function carregar(forcar) {
 const painel = document.getElementById('p-rsi');
 if (painel) {
   document.getElementById('rsiMestre').addEventListener('click', ev => {
-    const lin = ev.target.closest('.rsi-lin'); if (lin && !ev.target.closest('button')) {
+    const lin = ev.target.closest('.rsi-lin'); if (lin && !ev.target.closest('button, a')) {
       const coin = lin.dataset.coin, acao = coin.startsWith('xyz:');
       try { localStorage.setItem('lv-' + (acao ? 'acoes' : 'cripto') + '-sel', coin); } catch (e) {}   // se a Liquidez ainda não abriu, ela já nasce neste ativo
       window.dispatchEvent(new CustomEvent('radar-abrir-ativo', { detail: { coin, mercado: acao ? 'acoes' : 'cripto' } }));
