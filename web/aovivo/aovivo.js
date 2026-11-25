@@ -342,12 +342,16 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     return okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
   }
   function faixaDirecao(k, A) {
-    const R = direcaoDe(k, A.cur), seta = d => d === 'alta' ? ['▲', COR.up] : d === 'baixa' ? ['▼', COR.dn] : d === 'lateral' ? ['▬', COR.mu] : ['…', COR.mu];
-    const pills = R.lista.map(([lb, d]) => { const [s, c] = seta(d); return `<span class="lv-dir" title="${lb}: ${d || 'carregando'}"><span class="muted">${lb}</span> <b style="color:${c}">${s}</b></span>`; }).join('');
+    const R = direcaoDe(k, A.cur);
+    const seta = d => d === 'alta' ? ['▲', COR.up, 'alta'] : d === 'baixa' ? ['▼', COR.dn, 'baixa'] : d === 'lateral' ? ['▬', COR.mu, 'lateral'] : ['…', COR.mu, 'carregando'];
+    const tint = (c, p) => `color-mix(in srgb, ${c} ${p}%, transparent)`;
+    const cels = R.lista.map(([lb, d]) => { const [s, c, nomeD] = seta(d);
+      return `<span class="lv-dc" style="background:${d && d !== 'lateral' ? tint(c, 16) : 'transparent'};color:${c}" title="${lb}: ${nomeD}"><span class="lv-dl">${lb}</span><b>${s}</b></span>`; }).join('');
     const r = melhorLado(k, A, 'day'), contra = !r.carregando && contraMaioria(r.l, R);
-    const corTxt = contra ? COR.am : R.lado === 'alta' ? COR.up : R.lado === 'baixa' ? COR.dn : COR.mu;
-    const txt = contra ? `plano de day é ${r.l} contra ${R.lado === 'alta' ? R.alta : R.baixa} de ${R.n} tempos` : R.txt;
-    return `<span class="chip lv-dirs" title="Para que lado o preço ESTÁ andando em cada tempo: topos e fundos subindo e preço acima da média de 20 = ▲; os dois descendo = ▼; mistura = ▬. É o que já aconteceu, não previsão.">${pills}<span style="color:${corTxt}">→ ${txt}</span></span>`;
+    const cor = contra ? COR.am : R.lado === 'alta' ? COR.up : R.lado === 'baixa' ? COR.dn : COR.mu;
+    const txt = contra ? `⚠ day ${r.l} contra ${R.lado === 'alta' ? R.alta : R.baixa} de ${R.n} tempos` : R.txt.charAt(0).toUpperCase() + R.txt.slice(1);
+    return `<span class="lv-dirs" title="Para que lado o preço ESTÁ andando em cada tempo: topos e fundos subindo e preço acima da média de 20 = ▲; os dois descendo = ▼; mistura = ▬. É o que já aconteceu, não previsão.">`
+      + `<span class="lv-dseg">${cels}</span><span class="lv-dres" style="color:${cor};border-color:${tint(cor, 45)};background:${tint(cor, 10)}">${txt}</span></span>`;
   }
   function renderBar(A) {
     const k = SEL, cur = A ? A.cur : live[k];
@@ -752,7 +756,13 @@ css.textContent = `
 .lv-bar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 12px;margin-bottom:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 .lv-an{font:800 18px var(--f-display)}.lv-px{font-size:19px;font-weight:700;transition:color .2s}
 .lv-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
-.lv-dirs{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px 10px;white-space:normal}.lv-dir{white-space:nowrap}
+.lv-dirs{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.lv-dseg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.lv-dc{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;font-size:14px;line-height:1.3;white-space:nowrap}
+.lv-dc+.lv-dc{border-left:1px solid var(--line)}
+.lv-dl{color:var(--muted);font-size:12px;font-weight:600;letter-spacing:.02em}
+.lv-dc b{font-size:13px}
+.lv-dres{display:inline-flex;align-items:center;padding:4px 12px;border:1px solid;border-radius:999px;font-size:13.5px;font-weight:600;white-space:nowrap}
 .lv-tab{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:13px;padding:4px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
 .lv-dot{width:8px;height:8px;border-radius:50%;flex:none}
 .lv-tab[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
