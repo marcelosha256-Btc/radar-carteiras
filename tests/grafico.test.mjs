@@ -140,3 +140,12 @@ test('gráfico: painel do RSI alinhado e regime do diário', () => {
   assert.equal((svg.match(/<polyline/g) || []).length, 1);
   assert.match(graficoSvg({ candles: c, ms: M15 }).svg, /viewBox="0 0 960 440"/);
 });
+
+test('gráfico: plano (entrada, stop e alvo) desenhado e sempre à vista', () => {
+  const c = Array.from({ length: 30 }, (_, i) => vela(i * M15, 100, 102, 98, 101));
+  const { svg } = graficoSvg({ candles: c, ms: M15, preco: 100, plano: { lado: 'compra', entrada: 100, stop: 96, alvo: 112, rr: 3 } });
+  assert.match(svg, /stop 96,00 \(-4,0%\)/); assert.match(svg, /alvo 112,00 \(12,0%\)/); assert.match(svg, /plano compra · R:R 3,0/);
+  assert.match(svg, /alvo 112,00 \(12,0%\) ↑ fora da vista/);   // alvo longe: fica preso na borda, não some
+  const perto = graficoSvg({ candles: c, ms: M15, preco: 100, plano: { lado: 'venda', entrada: 100, stop: 103, alvo: 96.5 } }).svg;
+  assert.ok(!perto.includes('fora da vista')); assert.match(perto, />96,[0-9]{2}</);   // perto: a escala inclui o alvo
+});

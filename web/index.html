@@ -322,6 +322,7 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
       <button class="tab" role="tab" data-tab="hoje">Hoje</button>
       <button class="tab" role="tab" data-tab="trades">Meu diário</button>
       <button class="tab" role="tab" data-tab="aovivo" data-alias="a-aovivo">Liquidez ao vivo</button>
+      <button class="tab" role="tab" data-tab="grafico" data-alias="a-grafico">Gráfico</button>
       <button class="tab" role="tab" data-tab="a-eventos">Balanços e eventos</button>
       <button class="tab-mais" id="tabMais" aria-expanded="false" title="Abas de pesquisa e contexto, por mercado (swing, baleias, on-chain, backtest)">Pesquisa ▾</button>
       <button class="tab" role="tab" data-tab="rsi" data-sec>RSI Mestre</button>
@@ -464,6 +465,18 @@ try { const t = localStorage.getItem('radar-tema'); if (t === 'claro' || t === '
     <div class="seg" role="group" aria-label="Mercado" style="margin-bottom:12px"><button data-ir="a-aovivo" aria-pressed="true">Ações</button><button data-ir="aovivo" aria-pressed="false">Cripto</button></div>
     <div class="box-head"><h2>Liquidez ao vivo · ações</h2><p>O mesmo painel para os contratos de ações, índices e commodities (grupo xyz). Fora do pregão, o preço é só da Hyperliquid.</p></div>
     <div id="lvAcoes"><p class="muted">Carregando…</p></div>
+  </section>
+
+  <!-- GRÁFICO (montado por aovivo/aovivo.js na vista "graf": velas, níveis, estrutura, liquidez, liquidações, RSI e o plano da Trava) -->
+  <section class="panel" id="p-grafico" role="tabpanel" hidden>
+    <div class="seg" role="group" aria-label="Mercado" style="margin-bottom:12px"><button data-ir="a-grafico" aria-pressed="false">Ações</button><button data-ir="grafico" aria-pressed="true">Cripto</button></div>
+    <div class="box-head"><h2>Gráfico · cripto</h2><p>Velas da Hyperliquid com os níveis do dia, a estrutura, a liquidez em risco, as liquidações reais, o RSI e o plano da Trava. Ligue e desligue cada camada em "Mostrar". Contexto para ler o preço, não sinal de entrada.</p></div>
+    <div id="gfCripto"><p class="muted">Carregando…</p></div>
+  </section>
+  <section class="panel" id="p-a-grafico" role="tabpanel" hidden>
+    <div class="seg" role="group" aria-label="Mercado" style="margin-bottom:12px"><button data-ir="a-grafico" aria-pressed="true">Ações</button><button data-ir="grafico" aria-pressed="false">Cripto</button></div>
+    <div class="box-head"><h2>Gráfico · ações</h2><p>O mesmo gráfico para os contratos de ações, índices e commodities (grupo xyz). Níveis do dia pela sessão de Nova York.</p></div>
+    <div id="gfAcoes"><p class="muted">Carregando…</p></div>
   </section>
 
   <!-- RSI MESTRE: RSI 14 em 5 tempos gráficos, ações e cripto (montado por rsi/tela.js) -->
@@ -2451,6 +2464,7 @@ const ANTIGAS = { 'a-hoje': 'hoje', 'a-trades': 'trades' };   // links antigos (
 function show(id) {
   id = ANTIGAS[id] || id;
   if (id === 'aovivo-pref') { id = 'a-aovivo'; try { id = localStorage.getItem('radar-aovivo') || 'a-aovivo'; } catch (e) {} }
+  if (id === 'grafico-pref') { id = 'a-grafico'; try { id = localStorage.getItem('radar-grafico') || (localStorage.getItem('radar-aovivo') === 'aovivo' ? 'grafico' : 'a-grafico'); } catch (e) {} }
   if (!document.getElementById('p-' + id)) id = 'hoje';
   const modo = id.startsWith('a-') ? 'acoes' : 'cripto';
   modoAtual = modo;
@@ -2462,9 +2476,10 @@ function show(id) {
   document.querySelectorAll('.panel').forEach(p => { p.hidden = p.id !== 'p-' + id; });
   abaAtual = id; atualizarSub();
   if (id === 'aovivo' || id === 'a-aovivo') try { localStorage.setItem('radar-aovivo', id); } catch (e) {}
+  if (id === 'grafico' || id === 'a-grafico') try { localStorage.setItem('radar-grafico', id); } catch (e) {}
   try { localStorage.setItem('radar-tab', id); } catch (e) {}
 }
-tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab === 'aovivo' ? 'aovivo-pref' : t.dataset.tab)));
+tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab === 'aovivo' ? 'aovivo-pref' : t.dataset.tab === 'grafico' ? 'grafico-pref' : t.dataset.tab)));
 document.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => show(b.dataset.ir)));   // Ações/Cripto dentro da Liquidez ao vivo
 document.getElementById('tabMais').addEventListener('click', () => {
   let m = false; try { m = localStorage.getItem('radar-mais') === '1'; localStorage.setItem('radar-mais', m ? '0' : '1'); } catch (e) {}

@@ -15,7 +15,7 @@ const diaHora = t => new Date(t).toLocaleString('pt-BR', { day: '2-digit', month
 /** opts: { candles, niv (niveisDia), est (estrutura), preco, ms, W, H, perfil, bolhas } → { svg, fora }
  *  perfil = { bw, L: [[preço, US$, US$ da foto anterior]], S: [...], hora } (liquidez em risco por faixa de preço, Coinversa)
  *  bolhas = [{ t, px, usd, side }] (liquidações reais) */
-export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null, rsi = null, regimeDia = null }) {
+export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null, rsi = null, regimeDia = null, plano = null }) {
   const c = candles; if (!c || c.length < 5) return { svg: '', fora: [] };
   const L = 8, R = 74, T = 14, B = 26, x1 = W - R, y1 = H - B;
   let lo = Math.min(...c.map(x => x.l)), hi = Math.max(...c.map(x => x.h)); const r0 = hi - lo || 1;
@@ -23,6 +23,7 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   const dentro = niveis.filter(n => n.preco >= lo - 0.3 * r0 && n.preco <= hi + 0.3 * r0), outros = niveis.filter(n => !dentro.includes(n));
   outros.forEach(n => fora.push(n));
   dentro.forEach(n => { lo = Math.min(lo, n.preco); hi = Math.max(hi, n.preco); });
+  if (plano) for (const p of [plano.stop, plano.alvo]) if (p >= lo - 0.5 * r0 && p <= hi + 0.5 * r0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }   // o plano sempre à vista
   const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
   const Y = p => T + (hi - p) / (hi - lo) * (y1 - T), xc = perfil && perfil.bw ? x1 - 128 : x1, step = (xc - L) / c.length, X = i => L + (i + 0.5) * step, bw = Math.max(1.5, Math.min(12, step * 0.64));
   const HR = rsi ? 124 : 0;
@@ -104,6 +105,18 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
       const nome = o.side === 'long' ? 'Longs liquidados' : o.side === 'short' ? 'Shorts liquidados' : 'Liquidações (lado incerto)';
       s += `<circle cx="${X(o.i).toFixed(1)}" cy="${Y(px).toFixed(1)}" r="${r.toFixed(1)}" style="fill:${col};fill-opacity:.35;stroke:${col};stroke-width:1.2${o.nx * 2 < o.n ? ';stroke-dasharray:3 2' : ''}"><title>${nome} · US$ ${Math.round(o.usd).toLocaleString('pt-BR')} em ${o.n} ${o.n > 1 ? 'eventos' : 'evento'} (${o.nx} com preço e lado exatos) · perto de ${fmtPreco(px)} · ${hora(o.t0)}${o.t1 - o.t0 > 6e4 ? '–' + hora(o.t1) : ''}</title></circle>`;
     });
+  }
+  // meu plano: faixa de risco (entrada → stop) e de alvo (entrada → alvo), com rótulos à direita das velas
+  if (plano && plano.stop && plano.alvo && plano.entrada) {
+    const lim = y => Math.max(T, Math.min(y1, y)), ye = lim(Y(plano.entrada)), ys = lim(Y(plano.stop)), ya = lim(Y(plano.alvo)), xi = Math.max(L, xc - 150), pct = p => ((p / plano.entrada - 1) * 100).toFixed(1).replace('.', ',') + '%';
+    s += `<rect x="${xi}" y="${Math.min(ye, ys).toFixed(1)}" width="${(xc - xi).toFixed(1)}" height="${Math.abs(ys - ye).toFixed(1)}" style="fill:var(--down);opacity:.12"/>`
+      + `<rect x="${xi}" y="${Math.min(ye, ya).toFixed(1)}" width="${(xc - xi).toFixed(1)}" height="${Math.abs(ya - ye).toFixed(1)}" style="fill:var(--up);opacity:.12"/>`;
+    for (const [p, col, nome] of [[plano.stop, 'var(--down)', 'stop'], [plano.alvo, 'var(--up)', 'alvo']]) {
+      const yr = Y(p), fora = yr < T || yr > y1, y = lim(yr), seta = yr < T ? ' ↑' : yr > y1 ? ' ↓' : '';
+      if (!fora) s += `<line x1="${L}" x2="${xc}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:${col};stroke-width:1.6"/>`;
+      rot.push(`<text x="${xc - 4}" y="${(y + (yr > ye ? (fora ? -4 : 13) : (fora ? 12 : -4))).toFixed(1)}" text-anchor="end" style="${HALO}fill:${col};font-size:11px;font-weight:800">${nome} ${fmtPreco(p)} (${pct(p)})${seta}${fora ? ' fora da vista' : ''}</text>`);
+    }
+    rot.push(`<text x="${xi + 4}" y="${(ye - 4).toFixed(1)}" style="${HALO}fill:var(--fg);font-size:11px;font-weight:700">plano ${esc(plano.lado || '')}${plano.rr != null ? ' · R:R ' + plano.rr.toFixed(1).replace('.', ',') : ''}</text>`);
   }
   // preço atual
   if (preco) { const y = Y(preco);

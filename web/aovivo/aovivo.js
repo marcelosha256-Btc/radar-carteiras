@@ -299,24 +299,34 @@ function avaliar(k, A, modo, lado) {
   return { sc, st, blocks, pros, cons, stop, alvo, rr, faltam };
 }
 
-/* ---------- uma instância por mercado (Cripto / Ações) ---------- */
-function criarApp(mercado, painel, raiz) {
+/* histórico local para o gráfico (compartilhado entre as abas): liquidações reais vistas e a foto anterior do mapa */
+const liqHist = {}, mapaPrev = {};
+const GRAF_HTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span><span class="small muted lv-st"></span></div>
+    <div class="lv-tabs"></div>
+    <div class="lv-erro" hidden></div>
+    <div class="box lv-graf"><div class="box-head" style="flex-wrap:wrap;gap:8px"><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div>
+      <div class="lv-gcam" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div><span style="flex:1"></span><button class="lv-grsi" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">ver no RSI Mestre ↗</button></div>
+      <p class="small lv-gleit"></p><div class="lv-grsil"></div><div class="lv-gplano small"></div><div class="lv-gsvg"></div><p class="small muted lv-gnota"></p></div>`;
+const CAMADAS = [['niv', 'Níveis'], ['est', 'Estrutura'], ['liq', 'Liquidez'], ['bol', 'Liquidações'], ['rsi', 'RSI'], ['plano', 'Meu plano']];
+
+/* ---------- uma instância por mercado (Cripto / Ações) e por vista (Liquidez ao vivo / Gráfico) ---------- */
+function criarApp(mercado, painel, raiz, vista = 'liq') {
   let lista = mercado === 'acoes' && Array.isArray(window.radarAcoes) && window.radarAcoes.length ? window.radarAcoes.slice(0, 12) : ATIVOS[mercado];
   const ls = (n, v) => { try { if (v === undefined) return localStorage.getItem('lv-' + mercado + '-' + n); localStorage.setItem('lv-' + mercado + '-' + n, v); } catch (e) { return null; } };
   let SEL = ls('sel') || lista[0], Z = +(ls('zoom') || 0.5), MODO = ls('modo') || 'full', GTF = ls('gtf') || '15m', hov = null, mx0 = 0, my0 = 0, gSig = '';
+  let CAM = Object.fromEntries(CAMADAS.map(([k]) => [k, true]));
+  try { Object.assign(CAM, JSON.parse(ls('gcam') || '{}')); } catch (e) {}
   const rOpen = new Set();
 
-  raiz.innerHTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span>
+  raiz.innerHTML = vista === 'graf' ? GRAF_HTML : `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span>
     <button class="chip lv-som" type="button"></button><div class="seg lv-mode"><button data-m="ess">Essencial</button><button data-m="full">Completo</button></div><span class="small muted lv-st"></span></div>
     <div class="lv-tabs"></div>
     <div class="lv-erro" hidden></div>
     <div class="lv-grid"><div class="lv-main">
       <div class="box lv-top"></div>
-      <div class="box"><div class="box-head"><h2>Mapa de liquidações</h2><div class="seg lv-zoom"><button data-z="1">±15%</button><button data-z="0.5">±7,5%</button><button data-z="0.2">±3%</button></div></div>
+      <div class="box"><div class="box-head"><h2>Mapa de liquidações</h2><button class="lv-irgraf" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">abrir no Gráfico ↗</button><div class="seg lv-zoom"><button data-z="1">±15%</button><button data-z="0.5">±7,5%</button><button data-z="0.2">±3%</button></div></div>
         <div class="lv-gat"></div>
         <div class="lv-chart"><div class="lv-svg"></div><div class="lv-tip"></div></div><p class="small muted lv-foot"></p></div>
-      <div class="box lv-graf"><div class="box-head"><h2>Gráfico · níveis do dia e estrutura</h2><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div><button class="lv-grsi small" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">ver no RSI Mestre ↗</button></div>
-        <p class="small lv-gleit"></p><div class="lv-grsil"></div><div class="lv-gsvg"></div><p class="small muted lv-gnota"></p></div>
       <div class="lv-cards"></div>
       <div class="box lv-full lv-liqr"></div>
     </div><div class="lv-side">
@@ -330,9 +340,10 @@ function criarApp(mercado, painel, raiz) {
   setModo(MODO); setZoom(Z);
 
   /* ---- aviso sonoro + notificação do navegador (ativo selecionado; só enquanto esta página estiver aberta) ---- */
-  let SOM = ls('som') === '1', actx = null; const avisados = {}, ultTrava = {};
+  let SOM = vista === 'graf' ? false : ls('som') === '1', actx = null; const avisados = {}, ultTrava = {};
   const visivel = () => !painel.hidden && !document.hidden;
   function setSom(on) {
+    if (vista === 'graf') return;   // o aviso sonoro fica só na Liquidez ao vivo
     SOM = on; ls('som', on ? '1' : '0'); const b = $('.lv-som'); b.textContent = on ? '🔔 Aviso ligado' : '🔕 Aviso desligado'; b.setAttribute('aria-pressed', String(on));
     b.title = 'Toca um bip e mostra uma notificação quando o preço chegar perto de uma zona, houver liquidações em curso ou a Trava mudar (ativo selecionado). Só funciona com esta página aberta.';
   }
@@ -571,7 +582,6 @@ function criarApp(mercado, painel, raiz) {
     $('.lv-como').innerHTML = `<div class="box-head"><h2>O que ficou de fora</h2></div><p class="small muted">"Qual lado é capturado primeiro" e "escada/possível cascata" não aparecem aqui: testados no radar em 11/11/2026, o primeiro é só a distância e o segundo aparecia em 99% das zonas, com resultado guiado pela queda do mês. As chances usam o mesmo método do Resumo (excursão histórica ÷ volatilidade), calculadas no seu navegador para este ativo.</p>`;
   }
   /* histórico local para o gráfico: liquidações reais (guardadas por 3 dias neste navegador) e a foto anterior do mapa */
-  const liqHist = {}, mapaPrev = {};
   function guardarLiqs(k) {
     const h = liqHist[k] || (liqHist[k] = (() => { try { return JSON.parse(localStorage.getItem('radar-liqhist-' + k) || '[]'); } catch (e) { return []; } })());
     const chave = e => e.t + '|' + (e.addr || '') + '|' + Math.round(e.usd), ja = new Set(h.map(chave)); let novo = false;
@@ -591,6 +601,13 @@ function criarApp(mercado, painel, raiz) {
     return { bw: d.bw, L: casa(d.L), S: casa(d.S),
       hora: new Date(m.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
   }
+  function planoDe() {
+    const A = analyze(); if (!A) return null;
+    const op = ['compra', 'venda'].map(l => ({ l, r: avaliar(SEL, A, 'day', l) })).filter(o => o.r.stop && o.r.alvo);
+    if (!op.length) return null;
+    op.sort((a, b) => (a.r.blocks.length - b.r.blocks.length) || (b.r.sc - a.r.sc));
+    const o = op[0]; return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, bloq: o.r.blocks[0] || '' };
+  }
   function renderGrafico() {
     const box = $('.lv-graf'); if (!box) return;
     const k = SEL, G = graf[k], cur = live[k];
@@ -598,7 +615,13 @@ function criarApp(mercado, painel, raiz) {
     if (!G || !cur) { if (gSig !== 'x') { $('.lv-gsvg').innerHTML = '<p class="muted small">Buscando as velas…</p>'; $('.lv-gleit').textContent = ''; gSig = 'x'; } return; }
     const ms = { '15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5 }[GTF] || 9e5, todas = { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] || G.c15, c = todas.slice(-({ '15m': 120, '1h': 96, '4h': 120, '1d': 120 }[GTF] || 120));
     const curto = ms < 144e5, bol = curto ? guardarLiqs(k) : null, perf = curto ? perfilDe(k) : null;
-    const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0].join('|'); if (sig === gSig) return; gSig = sig;
+    const pl = vista === 'graf' && CAM.plano ? planoDe() : null;
+    const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0, JSON.stringify(CAM), pl ? pl.stop + '/' + pl.alvo + '/' + pl.st : ''].join('|'); if (sig === gSig) return; gSig = sig;
+    const cam = $('.lv-gcam');
+    if (cam) cam.innerHTML = '<span class="small muted">Mostrar:</span>' + CAMADAS.map(([c, n]) => `<button type="button" class="chip" data-c="${c}" aria-pressed="${!!CAM[c]}" style="cursor:pointer;font:inherit;font-size:12px;border:1px solid ${CAM[c] ? 'var(--accent)' : 'var(--line)'};background:${CAM[c] ? 'var(--accent-soft)' : 'none'};color:var(--fg)">${CAM[c] ? '✓ ' : ''}${n}</button>`).join('');
+    const pe = $('.lv-gplano');
+    if (pe) pe.innerHTML = !CAM.plano ? '' : pl ? `<span style="color:${pl.cor};font-weight:700">Meu plano · day trade ${pl.lado} · ${pl.st} ${pl.sc}</span> <span class="muted">(da Trava do roteiro: entrada ~${fpx(pl.entrada)} · stop ${fpx(pl.stop)} · alvo ${fpx(pl.alvo)}${pl.rr != null ? ' · R:R ' + f1(pl.rr) : ''}${pl.bloq ? ' · ⛔ ' + pl.bloq : ''})</span>`
+      : '<span class="muted">Meu plano: sem plano agora (a Trava precisa do mapa da Coinversa para achar stop e alvo).</span>';
     const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
     if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
     // linha do RSI Mestre: os cinco tempos, com as mesmas cores e o mesmo regime da aba RSI Mestre
@@ -610,7 +633,8 @@ function criarApp(mercado, painel, raiz) {
     $('.lv-grsil').innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 4px"><span class="small muted">RSI 14</span>${[['15m', '15 min'], ['1h', '1H'], ['4h', '4H'], ['1d', 'Dia'], ['1w', 'Semana']].map(([k, n]) => chip(k, n)).join('')}` +
       `<span style="font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid ${corReg};color:${corReg}">${rg.t}</span><span class="small muted">${rr.txt}</span></div>`;
     const rs = rsiSerie(todas.map(x => x.c)).slice(-c.length), rd = G.c1d && G.c1d.length > 20 ? rsiSerie(G.c1d.map(x => x.c)).pop() : null;
-    const { svg, fora } = graficoSvg({ candles: c, niv, est, preco: cur, ms, perfil: perf, bolhas: bol, rsi: rs, regimeDia: rd != null ? { ...regimeRsi(rd), v: rd } : null });
+    const { svg, fora } = graficoSvg({ candles: c, niv: CAM.niv ? niv : null, est: CAM.est ? est : null, preco: cur, ms, perfil: CAM.liq ? perf : null, bolhas: CAM.bol ? bol : null,
+      rsi: CAM.rsi ? rs : null, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl });
     $('.lv-gsvg').innerHTML = svg;
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
     $('.lv-gnota').textContent = (curto ? `Bolhas = liquidações reais (laranja = long liquidado, azul = short liquidado; tamanho = valor; passe o mouse para ver), guardadas neste navegador desde que a página abre (${bol ? bol.length : 0} até agora; a fonte entrega só os últimos ~200 registros, então numa rajada cobre poucos segundos). Contorno cheio = preço e lado exatos; tracejado = estimados pelo movimento do minuto. Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ` + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') : '') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
@@ -619,7 +643,7 @@ function criarApp(mercado, painel, raiz) {
   }
   function render() {
     renderTabs();
-    renderGrafico();
+    if (vista === 'graf') { renderBar(analyze()); renderGrafico(); return; }
     const A = analyze();
     renderBar(A);
     const err = erros.senha ? 'Digite a senha do radar no topo da página para ver o mapa da Coinversa.' : erros['mapa' + SEL] ? `Sem mapa agora: ${erros['mapa' + SEL]}` : '';
@@ -637,9 +661,11 @@ function criarApp(mercado, painel, raiz) {
     const m = e.target.closest('.lv-mode button'); if (m) { setModo(m.dataset.m); return; }
     const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); return; }
     if (e.target.closest('.lv-grsi')) { if (typeof window.show === 'function') window.show('rsi'); window.scrollTo(0, 0); return; }
+    if (e.target.closest('.lv-irgraf')) { if (typeof window.show === 'function') window.show(mercado === 'acoes' ? 'a-grafico' : 'grafico'); window.scrollTo(0, 0); return; }
+    const cm = e.target.closest('.lv-gcam button'); if (cm) { CAM[cm.dataset.c] = !CAM[cm.dataset.c]; ls('gcam', JSON.stringify(CAM)); gSig = ''; renderGrafico(); return; }
     const g = e.target.closest('.lv-gtf button, .lv-grsil button[data-g]'); if (g) { GTF = g.dataset.g; ls('gtf', GTF); gSig = ''; renderGrafico(); }
   });
-  const svg = $('.lv-svg');
+  const svg = $('.lv-svg') || document.createElement('div');   // a aba Gráfico não tem o mapa
   svg.addEventListener('mousemove', e => { mx0 = e.clientX; my0 = e.clientY; const t = e.target.closest('[data-k]');
     if (!t) { if (hov) { hov = null; $('.lv-tip').style.display = 'none'; } return; } const k = t.getAttribute('data-k'); if (k !== hov) { hov = k; render(); } else tipFor(k); });
   svg.addEventListener('mouseleave', () => { hov = null; $('.lv-tip').style.display = 'none'; });
@@ -678,7 +704,8 @@ function criarApp(mercado, painel, raiz) {
     if (vis) render(); else vigiar();
   }, 1000);
   window.addEventListener('radar-acoes', ev => { if (mercado === 'acoes' && ev.detail && ev.detail.length) { lista = ev.detail.slice(0, 12); if (!lista.includes(SEL)) SEL = lista[0]; render(); } });
-  return { iniciar: trocar, ativo: () => visivel() || SOM };
+  function sincronizar() { const s = ls('sel'); if (s && s !== SEL) { if (!lista.includes(s)) lista = [s, ...lista].slice(0, 12); SEL = s; hov = null; trocar(); } else render(); }
+  return { iniciar: trocar, sincronizar, ativo: () => visivel() || SOM };
 }
 
 /* ---------- estilo (usa as cores do radar; claro e escuro) ---------- */
@@ -730,10 +757,10 @@ document.head.appendChild(css);
 
 /* ---------- montagem: cada painel monta quando é aberto pela primeira vez ---------- */
 const apps = {};
-for (const [mercado, id, raizId] of [['cripto', 'p-aovivo', 'lvCripto'], ['acoes', 'p-a-aovivo', 'lvAcoes']]) {
-  const painel = document.getElementById(id), raiz = document.getElementById(raizId);
+for (const [mercado, id, raizId, vista] of [['cripto', 'p-aovivo', 'lvCripto', 'liq'], ['acoes', 'p-a-aovivo', 'lvAcoes', 'liq'], ['cripto', 'p-grafico', 'gfCripto', 'graf'], ['acoes', 'p-a-grafico', 'gfAcoes', 'graf']]) {
+  const painel = document.getElementById(id), raiz = document.getElementById(raizId), chave = mercado + '-' + vista;
   if (!painel || !raiz) continue;
-  const montar = () => { if (painel.hidden) return; if (!apps[mercado]) { apps[mercado] = criarApp(mercado, painel, raiz); apps[mercado].iniciar(); } };
+  const montar = () => { if (painel.hidden) return; if (!apps[chave]) { apps[chave] = criarApp(mercado, painel, raiz, vista); apps[chave].iniciar(); } else apps[chave].sincronizar(); };
   montar();
   new MutationObserver(montar).observe(painel, { attributes: true, attributeFilter: ['hidden'] });
 }
