@@ -8,6 +8,7 @@ import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
 import { niveisDia, niveisPeriodo, estrutura as estruturaVelas, leitura as leituraGrafico, zonasSR } from '../grafico/calc.js';
 import { graficoSvg } from '../grafico/desenho.js';
+import { checklist as checklistRegras, REGRAS_PADRAO } from '../risco/regras.js';
 import { hlLink } from '../contexto/hl.js';
 const HL = 'https://api.hyperliquid.xyz/info';
 const ATIVOS = { cripto: ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'],
@@ -649,7 +650,10 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const op = ['compra', 'venda'].map(l => ({ l, r: avaliar(SEL, A, 'day', l) })).filter(o => o.r.stop && o.r.alvo);
     if (!op.length) return null;
     op.sort((a, b) => (a.r.blocks.length - b.r.blocks.length) || (b.r.sc - a.r.sc));
-    const o = op[0]; return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, bloq: o.r.blocks[0] || '' };
+    // as suas Regras do dia (janela de entrada, pregão de NY): o mesmo checklist da calculadora, sem a parte de tamanho
+    let regras = REGRAS_PADRAO; try { regras = { ...REGRAS_PADRAO, ...(JSON.parse(localStorage.getItem('radar-regras') || 'null') || {}) }; } catch (e) {}
+    const avisos = checklistRegras({ calc: null, trava: null, regras, mercado }).filter(x => x[0] !== 'ok').map(x => x[1]);
+    const o = op[0]; return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, bloq: o.r.blocks[0] || '', avisos };
   }
   function aoVivo(arr, ms, px) {
     if (!arr || !arr.length || !px) return arr;
@@ -671,7 +675,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const cam = $('.lv-gcam');
     if (cam) cam.innerHTML = '<span class="small muted">Mostrar:</span>' + CAMADAS.map(([c, n]) => `<button type="button" class="chip" data-c="${c}" aria-pressed="${!!CAM[c]}" style="cursor:pointer;font:inherit;font-size:12px;border:1px solid ${CAM[c] ? 'var(--accent)' : 'var(--line)'};background:${CAM[c] ? 'var(--accent-soft)' : 'none'};color:var(--fg)">${CAM[c] ? '✓ ' : ''}${n}</button>`).join('');
     const pe = $('.lv-gplano');
-    if (pe) pe.innerHTML = !CAM.plano ? '' : pl ? `<span style="color:${pl.cor};font-weight:700">Meu plano · day trade ${pl.lado} · ${pl.st} ${pl.sc}</span> <span class="muted">(da Trava do roteiro: entrada ~${fpx(pl.entrada)} · stop ${fpx(pl.stop)} · alvo ${fpx(pl.alvo)}${pl.rr != null ? ' · R:R ' + f1(pl.rr) : ''}${pl.bloq ? ' · ⛔ ' + pl.bloq : ''})</span>`
+    if (pe) pe.innerHTML = !CAM.plano ? '' : pl && pl.bloq ? `<span class="muted">Meu plano: nenhum day trade liberado agora. O melhor lado (${pl.lado}) está bloqueado: ${pl.bloq}.</span>${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}` : pl ? `<span style="color:${pl.cor};font-weight:700">Meu plano · day trade ${pl.lado} · ${pl.st} ${pl.sc}</span> <span class="muted">(da Trava do roteiro: entrada ~${fpx(pl.entrada)} · stop ${fpx(pl.stop)} · alvo ${fpx(pl.alvo)}${pl.rr != null ? ' · R:R ' + f1(pl.rr) : ''}${pl.bloq ? ' · ⛔ ' + pl.bloq : ''})</span>${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}`
       : '<span class="muted">Meu plano: sem plano agora (a Trava precisa do mapa da Coinversa para achar stop e alvo).</span>';
     const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
     if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
@@ -699,8 +703,9 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const rsNiv = [70, 50, 30].map(v => ({ v, p: precoParaRsi(fech, v) }));
     const rs = rsTodo.slice(-c.length), rd = G.c1d && G.c1d.length > 20 ? rsiSerie(G.c1d.map(x => x.c)).pop() : null;
     const { svg, fora } = graficoSvg({ candles: c, niv: CAM.niv ? niv : null, est: CAM.est ? est : null, preco: cur, ms, perfil: CAM.liq ? perf : null, bolhas: CAM.bol ? bol : null,
-      rsi: CAM.rsi ? rs : null, rsiMedia: CAM.rsi ? rsMed : null, rsiNiveis: rsNiv, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl, trades: tds, sr });
-    $('.lv-gsvg').innerHTML = svg;
+      rsi: CAM.rsi ? rs : null, rsiMedia: CAM.rsi ? rsMed : null, rsiNiveis: rsNiv, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl && !pl.bloq ? pl : null,   // plano bloqueado não é desenhado
+      trades: tds, sr });
+    const gb = $('.lv-gsvg'), noFim = gb.scrollLeft + gb.clientWidth >= gb.scrollWidth - 4; gb.innerHTML = svg; if (noFim) gb.scrollLeft = gb.scrollWidth;   // fica nas velas mais recentes
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
     const nF = f => bol ? bol.filter(e => (e.fonte || 'Hyperliquid') === f).length : 0;
     $('.lv-gnota').textContent = (curto ? `Liquidações por vela (faixa entre as velas e o RSI): para cima = shorts liquidados (empurraram o preço para cima), para baixo = longs liquidados; altura pela raiz do valor; ▲/▼ no pavio = rajada bem acima do normal da tela. Guardadas neste navegador por 3 dias, desde que a página abriu: ${mercado === 'cripto' ? `Binance ao vivo ${nF('Binance')}, OKX ${nF('OKX')}, ` : ''}Hyperliquid ${nF('Hyperliquid')} (Hyperliquid via Coinversa: só os ~200 registros mais recentes e, em geral, preço/lado estimados${mercado === 'cripto' ? '; Binance manda no máximo 1 por segundo por moeda' : ''}). ` : 'No Diário não há liquidações por vela (o histórico guardado é de só 3 dias). ') + 'Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ' + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
@@ -821,7 +826,8 @@ css.textContent = `
 .lv-gatf{color:var(--fg)}
 @media (max-width:600px){.lv-zcs{grid-template-columns:1fr}}
 .lv-som{cursor:pointer;font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg)}.lv-som[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
-.lv-ess .lv-full{display:none!important}`;
+.lv-ess .lv-full{display:none!important}
+.lv-gsvg{overflow-x:auto;-webkit-overflow-scrolling:touch}.lv-gsvg svg{display:block;min-width:720px}   /* no celular o gráfico rola de lado em vez de encolher o texto */`;
 document.head.appendChild(css);
 
 /* ---------- montagem: cada painel monta quando é aberto pela primeira vez ---------- */

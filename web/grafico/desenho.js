@@ -60,8 +60,9 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
       if (ant != null && Math.abs(ant - v) > 0.05 * mx) { const wa = ant / mx * PW; s += `<rect x="${(x1 - wa).toFixed(1)}" y="${(ya + 0.5).toFixed(1)}" width="${wa.toFixed(1)}" height="${h.toFixed(1)}" style="fill:none;stroke:${col};stroke-width:1;stroke-dasharray:2 2;opacity:.8"/>`; }
     });
     const tot = l => faixas.filter(a => a[4] === l).reduce((t, a) => t + a[1], 0);
-    s += `<text x="${x1 - 4}" y="${T + 10}" text-anchor="end" style="${HALO}fill:var(--muted);font-size:10.5px">liquidez em risco${perfil.hora ? ' · foto ' + perfil.hora : ''}</text>`
-      + `<text x="${x1 - 4}" y="${T + 22}" text-anchor="end" style="${HALO}font-size:10.5px;font-weight:700"><tspan x="${x1 - 4}" style="fill:var(--lv-short)">↑ acima US$ ${usdCurto(tot('S'))}</tspan><tspan x="${x1 - 4}" dy="12" style="fill:var(--lv-long)">↓ abaixo US$ ${usdCurto(tot('L'))}</tspan><title>Na faixa de preço visível: shorts a liquidar acima do preço e longs a liquidar abaixo (estimativa do mapa da Coinversa)</title></text>`;
+    liqRot.push(`<rect x="${x1 - 150}" y="${T}" width="150" height="40" rx="4" style="fill:var(--surface);opacity:.92"/>`
+      + `<text x="${x1 - 4}" y="${T + 10}" text-anchor="end" style="${HALO}fill:var(--muted);font-size:10.5px">liquidez em risco${perfil.hora ? ' · foto ' + perfil.hora : ''}</text>`
+      + `<text x="${x1 - 4}" y="${T + 22}" text-anchor="end" style="${HALO}font-size:10.5px;font-weight:700"><tspan x="${x1 - 4}" style="fill:var(--lv-short)">↑ acima US$ ${usdCurto(tot('S'))}</tspan><tspan x="${x1 - 4}" dy="12" style="fill:var(--lv-long)">↓ abaixo US$ ${usdCurto(tot('L'))}</tspan><title>Na faixa de preço visível: shorts a liquidar acima do preço e longs a liquidar abaixo (estimativa do mapa da Coinversa)</title></text>`);
   }
   // suporte e resistência mais próximos: faixa sombreada atrás das velas, com o que a compõe no rótulo e na dica
   const srRot = [];
