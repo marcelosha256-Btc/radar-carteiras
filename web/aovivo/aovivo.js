@@ -276,10 +276,9 @@ function criarApp(mercado, painel, raiz) {
   const ls = (n, v) => { try { if (v === undefined) return localStorage.getItem('lv-' + mercado + '-' + n); localStorage.setItem('lv-' + mercado + '-' + n, v); } catch (e) { return null; } };
   let SEL = ls('sel') || lista[0], Z = +(ls('zoom') || 0.5), MODO = ls('modo') || 'full', hov = null, mx0 = 0, my0 = 0;
   const rOpen = new Set();
-  const ativo = () => !painel.hidden && !document.hidden;
 
   raiz.innerHTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"></b><span class="lv-tr"></span><span class="lv-vd"></span><span style="flex:1"></span>
-    <div class="seg lv-mode"><button data-m="ess">Essencial</button><button data-m="full">Completo</button></div><span class="small muted lv-st"></span></div>
+    <button class="chip lv-som" type="button"></button><div class="seg lv-mode"><button data-m="ess">Essencial</button><button data-m="full">Completo</button></div><span class="small muted lv-st"></span></div>
     <div class="lv-tabs"></div>
     <div class="lv-erro" hidden></div>
     <div class="lv-grid"><div class="lv-main">
@@ -298,6 +297,24 @@ function criarApp(mercado, painel, raiz) {
   function setZoom(z) { Z = z; ls('zoom', z); raiz.querySelectorAll('.lv-zoom button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.z === z))); }
   setModo(MODO); setZoom(Z);
 
+  /* ---- aviso sonoro + notificação do navegador (ativo selecionado; só enquanto esta página estiver aberta) ---- */
+  let SOM = ls('som') === '1', actx = null; const avisados = {}, ultTrava = {};
+  const visivel = () => !painel.hidden && !document.hidden;
+  function setSom(on) {
+    SOM = on; ls('som', on ? '1' : '0'); const b = $('.lv-som'); b.textContent = on ? '🔔 Aviso ligado' : '🔕 Aviso desligado'; b.setAttribute('aria-pressed', String(on));
+    b.title = 'Toca um bip e mostra uma notificação quando o preço chegar perto de uma zona, houver liquidações em curso ou a Trava mudar (ativo selecionado). Só funciona com esta página aberta.';
+  }
+  function bip() {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume();
+      [0, 0.22].forEach(t => { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = 880; g.gain.value = 0.12; o.connect(g); g.connect(actx.destination); o.start(actx.currentTime + t); o.stop(actx.currentTime + t + 0.15); });
+    } catch (e) {}
+  }
+  function avisar(id, texto, rearme = 15 * 60e3) {
+    if (!SOM) return; const k = SEL + '|' + id, agora = Date.now();
+    if (avisados[k] && agora - avisados[k] < rearme) return; avisados[k] = agora;
+    bip(); try { if ('Notification' in window && Notification.permission === 'granted') new Notification('Liquidez ao vivo · ' + nome(SEL), { body: texto }); } catch (e) {}
+  }
   const sel = () => mapas[SEL] ? build(mapas[SEL]) : null;
   function analyze() {
     const d = sel(), cur = live[SEL] || (d && d.p) || null; if (!d || !cur) return null;
@@ -312,11 +329,31 @@ function criarApp(mercado, painel, raiz) {
     $('.lv-an').textContent = nome(k);
     const px = $('.lv-px'); px.textContent = cur ? fpx(cur) : '—'; px.style.color = flash[k] && flash[k].until > Date.now() ? flash[k].col : '';
     $('.lv-tr').innerHTML = A ? `<span class="chip" style="color:${A.tr.color}">${A.tr.arrow} ${A.tr.label}</span>` : '';
+    if (A) {
+      const est = ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda'); return (m === 'day' ? 'Day' : 'Swing') + ' ' + [!a.blocks.length ? 'compra livre' : '', !b.blocks.length ? 'venda livre' : ''].filter(Boolean).join(' e ') || 'bloqueado'; }).join(' · ');
+      if (ultTrava[k] != null && ultTrava[k] !== est) avisar('trava|' + est, 'A Trava do roteiro mudou: ' + est + '.', 60e3);
+      ultTrava[k] = est;
+    }
     $('.lv-vd').innerHTML = A ? ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda');
       const okA = !a.blocks.length, okB = !b.blocks.length, r = okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
       return `<span class="chip" style="color:${r.st[1]}">${m === 'day' ? 'Day' : 'Swing'}: ${r.st[0] === 'BLOQUEADO' ? '■ bloq' : r.st[0].toLowerCase()} ${r.sc} · ${r.l}</span>`; }).join(' ') : '';
     const age = (Date.now() - lastMsg) / 1000, M = mapas[k];
     $('.lv-st').innerHTML = `<span style="color:${lastMsg && age < 15 ? COR.up : COR.dn}">●</span> ${lastMsg && age < 15 ? 'preço ao vivo' : 'sem preço'}${M ? ` · barras de ${ago(M.ts)}` : ''}`;
+  }
+  function calcAlertas(A) {
+    const { cur, zn } = A, k = SEL;
+    const al = [];
+    const perto = (E, lab, amt, cls, id) => { if (E == null) return; const dd = Math.abs(E / cur - 1) * 100; if (dd < 0.6) al.push([cls, `Preço a ${f1(dd)}% do ${lab} (${fm(amt)} em liquidações).`, id]); };
+    if (zn.ap) perto(zn.ap.a[0] + zn.bw / 2, 'apoio', zn.ap.a[1], 'down', 'apoio'); if (zn.ve) perto(zn.ve.a[0] - zn.bw / 2, 'nível de venda', zn.ve.a[1], 'up', 'venda');
+    const rd = rsiAt(k, '1d', 864e5, cur), r4 = rsiAt(k, '4h', 144e5, cur);
+    if (rd && rd.v <= 30) al.push(['warn', `Dia em sobrevenda: RSI ${f1(rd.v)}. Sozinho não prevê direção.`]);
+    if (rd && rd.v >= 70) al.push(['warn', `Dia em sobrecompra: RSI ${f1(rd.v)}. Sozinho não prevê direção.`]);
+    if (r4 && (r4.v >= 70 || r4.v <= 30)) al.push(['warn', `4H em ${r4.v >= 70 ? 'sobrecompra' : 'sobrevenda'}: RSI ${f1(r4.v)}.`]);
+    const l5 = liqSum(realLiqs(k), 300e3), lim = Math.max(500e3, 0.25 * Math.max(zn.ap ? zn.ap.a[1] : 0, zn.ve ? zn.ve.a[1] : 0));
+    if (l5.long >= lim) al.unshift(['down', `⚡ Liquidações em curso: ${fm(l5.long)} de longs nos últimos 5 min (${l5.nl} eventos).`, 'liq-l']);
+    if (l5.short >= lim) al.unshift(['up', `⚡ Liquidações em curso: ${fm(l5.short)} de shorts nos últimos 5 min (${l5.ns} eventos).`, 'liq-s']);
+    al.forEach(([c, t, id]) => { if (id) avisar(id, t.replace('⚡ ', '')); });
+    return al;
   }
   function renderTop(A) {
     const { cur, zn, tr } = A, k = SEL;
@@ -326,18 +363,14 @@ function criarApp(mercado, painel, raiz) {
     let rs = ''; TF.forEach(([lb, tf, ms]) => { const r = rsiAt(k, tf, ms, cur);
       rs += `<div class="lv-rt"><span class="small muted">${lb}</span>` + (r ? `<b class="num" style="color:${rsiCol(r.v)}">${f1(r.v)}<small style="color:${r.v >= r.prev ? COR.up : COR.dn}"> ${r.v >= r.prev ? '▲' : '▼'}</small></b>
         <div class="lv-gauge"><i style="left:${Math.min(100, Math.max(0, r.v))}%"></i></div>` : `<b class="muted">—</b><div class="lv-gauge"></div>`) + `</div>`; });
-    const al = [];
-    const perto = (E, lab, amt, cls) => { if (E == null) return; const dd = Math.abs(E / cur - 1) * 100; if (dd < 0.6) al.push([cls, `Preço a ${f1(dd)}% do ${lab} (${fm(amt)} em liquidações).`]); };
-    if (zn.ap) perto(zn.ap.a[0] + zn.bw / 2, 'apoio', zn.ap.a[1], 'down'); if (zn.ve) perto(zn.ve.a[0] - zn.bw / 2, 'nível de venda', zn.ve.a[1], 'up');
-    const rd = rsiAt(k, '1d', 864e5, cur), r4 = rsiAt(k, '4h', 144e5, cur);
-    if (rd && rd.v <= 30) al.push(['warn', `Dia em sobrevenda: RSI ${f1(rd.v)}. Sozinho não prevê direção.`]);
-    if (rd && rd.v >= 70) al.push(['warn', `Dia em sobrecompra: RSI ${f1(rd.v)}. Sozinho não prevê direção.`]);
-    if (r4 && (r4.v >= 70 || r4.v <= 30)) al.push(['warn', `4H em ${r4.v >= 70 ? 'sobrecompra' : 'sobrevenda'}: RSI ${f1(r4.v)}.`]);
-    const l5 = liqSum(realLiqs(k), 300e3), lim = Math.max(500e3, 0.25 * Math.max(zn.ap ? zn.ap.a[1] : 0, zn.ve ? zn.ve.a[1] : 0));
-    if (l5.long >= lim) al.unshift(['down', `⚡ Liquidações em curso: ${fm(l5.long)} de longs nos últimos 5 min (${l5.nl} eventos).`]);
-    if (l5.short >= lim) al.unshift(['up', `⚡ Liquidações em curso: ${fm(l5.short)} de shorts nos últimos 5 min (${l5.ns} eventos).`]);
+    const al = calcAlertas(A);
     const q = squeeze(k, press[k]);
-    $('.lv-top').innerHTML = `<div class="lv-lados">${lado(zn.ap, true)}<br>${lado(zn.ve, false)}</div>
+    const vac = (runs, abaixo) => {
+      const r = runs[0]; if (!r) return '';
+      const d1 = (r.hi / cur - 1) * 100, d2 = (r.lo / cur - 1) * 100;
+      return `<br><span class="small" style="color:var(--warn)">Vácuo ${abaixo ? 'abaixo' : 'acima'}: ${fpx(r.lo)}–${fpx(r.hi)} (${pc(abaixo ? d1 : d2)} a ${pc(abaixo ? d2 : d1)}): ${abaixo ? 'perdendo o apoio' : 'rompendo a venda'}, o preço pode passar reto.</span>`;
+    };
+    $('.lv-top').innerHTML = `<div class="lv-lados">${lado(zn.ap, true)}<br>${lado(zn.ve, false)}${vac(zn.vL, true)}${vac(zn.vS, false)}</div>
       <p class="small muted" style="margin-top:4px">1m ${pc2(tr.c1)} · 5m ${pc2(tr.c5)} · 15m ${pc2(tr.c15)}${q ? ` · quem está apertado: <b style="color:${q.c}">${q.t}</b>` : ''}</p>
       <div class="lv-rsi">${rs}</div>
       ${al.length ? `<div class="lv-alerts">${al.slice(0, 3).map(([c, t]) => `<div class="chip ${c}">${t}</div>`).join('')}</div>` : ''}`;
@@ -366,7 +399,7 @@ function criarApp(mercado, painel, raiz) {
       s += `<text x="${xv.toFixed(1)}" y="${base + 18}" text-anchor="${v === -Rv ? 'start' : v === Rv ? 'end' : 'middle'}" style="fill:var(--muted);font-size:11.5px">${v > 0 ? '+' : ''}${String(+v.toFixed(2)).replace('.', ',')}% · ${fpx(d.p * (1 + v / 100))}</text>`; });
     [zn.vL, zn.vS].forEach(runs => runs.forEach((r, ri) => { if (r.hi < lo || r.lo > hi) return; const xa = XC(r.lo), xb = XC(r.hi); if (xb - xa < 3) return;
       s += `<rect x="${xa.toFixed(1)}" y="${top}" width="${(xb - xa).toFixed(1)}" height="${base - top}" rx="3" style="fill:url(#lvHatch-${mercado});stroke:var(--warn);stroke-opacity:.45;stroke-dasharray:4 4"/>`;
-      if (ri === 0 && xb - xa >= 44) s += `<text x="${((xa + xb) / 2).toFixed(1)}" y="${top + 16}" text-anchor="middle" style="fill:var(--warn);font-size:11px;font-weight:600">vácuo</text>`; }));
+      if (ri === 0 && xb - xa >= 44) s += `<text x="${((xa + xb) / 2).toFixed(1)}" y="${top + 16}" text-anchor="middle" style="fill:var(--warn);font-size:11px;font-weight:600">${xb - xa >= 150 ? 'vácuo · pode passar reto' : 'vácuo'}</text>`; }));
     s += `<line x1="${x0}" x2="${x1}" y1="${base}" y2="${base}" style="stroke:var(--faint)"/>`;
     let hits = '';
     const draw = (arr, c, isL) => arr.forEach((a, j) => { if (!vis(a)) return;
@@ -375,11 +408,15 @@ function criarApp(mercado, painel, raiz) {
       s += `<rect x="${(X(a[0]) - w / 2).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2.5" style="fill:${c};opacity:${crossed ? 0.2 : on ? 1 : 0.88}"/>`;
       hits += `<rect data-k="${key}" x="${(X(a[0]) - colw / 2).toFixed(1)}" y="${top}" width="${colw.toFixed(1)}" height="${base - top}" style="fill:transparent;cursor:crosshair"/>`; });
     draw(d.L, COR.long, true); draw(d.S, COR.short, false);
+    let rot = '';   // rótulos das zonas: desenhados por último, com contorno, para a linha do preço não os cobrir
     const box = (o, isL) => { if (!o || !vis(o.a)) return;
       const h = Math.max(1.5, Math.min(1, o.a[1] / mx) * hh), c = isL ? COR.long : COR.short, xa = X(o.a[0]) - colw / 2;
       s += `<rect x="${xa.toFixed(1)}" y="${(base - h - 4).toFixed(1)}" width="${colw.toFixed(1)}" height="${(h + 4).toFixed(1)}" rx="4" style="fill:${c};fill-opacity:.1;stroke:${c};stroke-width:2"/>`;
       const p24 = pTouch(k, isL ? o.a[0] + zn.bw / 2 : o.a[0] - zn.bw / 2, cur, 24), lx = Math.min(Math.max(X(o.a[0]), x0 + 60), x1 - 60);
-      s += `<text x="${lx.toFixed(1)}" y="${Math.max(top + 12, base - h - 12).toFixed(1)}" text-anchor="middle" style="fill:${c};font-size:12px;font-weight:700">${isL ? 'apoio' : 'venda'} · 24h ~${pp(p24)}</text>`; };
+      const yl = Math.max(top + 28, base - h - 24), dist = pc(((isL ? o.a[0] + zn.bw / 2 : o.a[0] - zn.bw / 2) / cur - 1) * 100);
+      const halo = 'paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round;';
+      rot += `<text x="${lx.toFixed(1)}" y="${yl.toFixed(1)}" text-anchor="middle" style="${halo}fill:${c};font-size:12px;font-weight:700">${isL ? 'apoio' : 'venda'} ${fm(o.a[1])}</text>`
+        + `<text x="${lx.toFixed(1)}" y="${(yl + 13).toFixed(1)}" text-anchor="middle" style="${halo}fill:${c};font-size:11px">${dist} · 24h ~${pp(p24)}</text>`; };
     box(zn.ap, true); box(zn.ve, false);
     const xs = X(d.p); if (xs > x0 && xs < x1) s += `<line x1="${xs.toFixed(1)}" x2="${xs.toFixed(1)}" y1="${top}" y2="${base}" style="stroke:var(--faint);stroke-dasharray:4 4"/>`;
     const cx = XC(cur), now = Date.now(), span = 900e3, yT = top - 6, yB = base;
@@ -393,7 +430,7 @@ function criarApp(mercado, painel, raiz) {
     if (tr.dir) { const ax = cx + tr.dir * 24, c = tr.dir > 0 ? COR.up : COR.dn;
       s += `<line x1="${cx.toFixed(1)}" y1="${yT}" x2="${(ax - tr.dir * 6).toFixed(1)}" y2="${yT}" style="stroke:${c};stroke-width:3"/><polygon points="${ax.toFixed(1)},${yT} ${(ax - tr.dir * 8).toFixed(1)},${yT - 6} ${(ax - tr.dir * 8).toFixed(1)},${yT + 6}" style="fill:${c}"/>`; }
     s += `<circle cx="${cx.toFixed(1)}" cy="${yT}" r="5" style="fill:${tr.color};stroke:var(--surface);stroke-width:2"/>`;
-    $('.lv-svg').innerHTML = s + hits + '</svg>';
+    $('.lv-svg').innerHTML = s + rot + hits + '</svg>';
     const sumL = d.L.reduce((t, a) => t + a[1], 0), sumS = d.S.reduce((t, a) => t + a[1], 0), C = chance[k];
     $('.lv-foot').innerHTML = `Na faixa lida: longs ${fm(sumL)} · shorts ${fm(sumS)} · Coinversa, ${ago(d.ts)}. Laranja: longs liquidados se cair; azul: shorts se subir. Bolinhas: liquidações reais dos últimos 15 min. Linha: preço ao vivo, rastro de 15 min (de cima = agora).` +
       (C && C.conf ? ` Chance de tocar conferida no histórico (70/30): ~25% → ${pp(C.conf[0].tocou)}, ~50% → ${pp(C.conf[1].tocou)}, ~75% → ${pp(C.conf[2].tocou)}.` : '');
@@ -485,6 +522,8 @@ function criarApp(mercado, painel, raiz) {
   raiz.addEventListener('click', e => {
     const t = e.target.closest('.lv-tab'); if (t) { SEL = t.dataset.k; ls('sel', SEL); hov = null; trocar(); return; }
     const r = e.target.closest('[data-r]'); if (r) { const k = r.dataset.r; rOpen.has(k) ? rOpen.delete(k) : rOpen.add(k); render(); return; }
+    const sm = e.target.closest('.lv-som');
+    if (sm) { const on = !SOM; setSom(on); if (on) { bip(); try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (er) {} } return; }
     const m = e.target.closest('.lv-mode button'); if (m) { setModo(m.dataset.m); return; }
     const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); }
   });
@@ -503,20 +542,22 @@ function criarApp(mercado, painel, raiz) {
     carregarCandles(k, ['15m', '4h']).then(() => { render(); carregarCandles(k, ['1d', '1w']).then(render); });
     if (live[k]) carregarLivro(k, live[k]).then(render);
   }
-  // laços: só trabalham com a aba aberta e a janela visível
+  setSom(SOM);
+  function vigiar() { const A = analyze(); if (!A) return; renderBar(A); calcAlertas(A); }   // sem desenhar nada: só confere os avisos
+  // laços: com a aba aberta e a janela visível desenham tudo; com o aviso ligado continuam em segundo plano só vigiando
   let n = 0;
   setInterval(() => {
-    if (!ativo()) return; n++;
+    const vis = visivel(); if (!vis && !SOM) return; n++;
     const k = SEL;
     if (n % 60 === 0) buscar('mapa', k, mapas).then(render);
     if (n % 30 === 0) buscar('liqs', k, liqs);
     if (n % 120 === 0) buscar('press', k, press);
     if (n % 180 === 0) carregarCandles(k, ['15m']);
     if (n % 3 === 0 && live[k]) carregarLivro(k, live[k]);
-    render();
+    if (vis) render(); else vigiar();
   }, 1000);
   window.addEventListener('radar-acoes', ev => { if (mercado === 'acoes' && ev.detail && ev.detail.length) { lista = ev.detail.slice(0, 12); if (!lista.includes(SEL)) SEL = lista[0]; render(); } });
-  return { iniciar: trocar, ativo };
+  return { iniciar: trocar, ativo: () => visivel() || SOM };
 }
 
 /* ---------- estilo (usa as cores do radar; claro e escuro) ---------- */
@@ -552,6 +593,7 @@ css.textContent = `
 .lv-cbar{position:relative;height:9px;background:var(--surface-2);border-radius:5px}
 .lv-cbar:before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--faint)}
 .lv-cbar i{position:absolute;top:0;bottom:0;border-radius:5px}
+.lv-som{cursor:pointer;font:inherit;font-size:12.5px;border:1px solid var(--line);background:var(--surface-2);color:var(--fg)}.lv-som[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
 .lv-ess .lv-full{display:none!important}`;
 document.head.appendChild(css);
 
