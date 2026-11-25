@@ -300,6 +300,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
       <div class="box lv-full lv-liqr"></div>
     </div><div class="lv-side">
       <div class="box lv-rot"></div>
+      <aside class="box lv-liqp"></aside>
       <div class="box lv-full lv-press"></div>
       <div class="box lv-full lv-como"></div>
     </div></div>`;
@@ -382,7 +383,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
   const mi = v => v >= 995e6 ? (v / 1e9).toFixed(1).replace('.', ',') + ' bi' : (v / 1e6).toFixed(1).replace('.', ',') + ' mi';
   const pc1 = v => v.toFixed(1).replace('.', ',') + '%';
   function renderPainelLiq(A) {
-    const el = $('.lv-liqp'), wrap = $('.lv-gwrap'); if (!el || !wrap) return;
+    const el = $('.lv-liqp'), wrap = $('.lv-gwrap') || document.createElement('div'); if (!el) return;   // na Liquidez ao vivo não há .lv-gwrap
     if (mercado !== 'cripto') { el.hidden = true; wrap.classList.add('sem'); return; }
     el.hidden = false;
     let h;
@@ -658,7 +659,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     return histLiq(k);
   }
   const largoGTF = () => GTF === '4h' || GTF === '1d';
-  const painelAberto = () => vista === 'graf' && mercado === 'cripto' && ls('liqp') !== '0';
+  const painelAberto = () => mercado === 'cripto' && ls('liqp') !== '0';   // o mesmo painel no Gráfico e na Liquidez ao vivo
   let HZ = ls('hz') || '720', lpSig = '';   // prazo da "chance de tocar" do painel (horas)
   function carregarMapaL(k) {
     if (!(largoGTF() || painelAberto()) || Date.now() - (mapaLT[k] || 0) < 300e3) return;
@@ -722,7 +723,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
     if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
     // linha do RSI Mestre: os cinco tempos, com as mesmas cores e o mesmo regime da aba RSI Mestre
-    const fc = a => (a || []).map(x => x.c), rv = { '15m': rsiWilder(fc(G.c15)), '1h': rsiWilder(fc(G.c1h)), '4h': rsiWilder(fc(G.c4h)), '1d': rsiWilder(fc(G.c1d)), '1w': rsiWilder(fc(agrupar(G.c1d || [], 7 * 864e5))) };
+    const fc = a => (a || []).map(x => x.c), rv = { '15m': rsiWilder(fc(G.c15)), '1h': rsiWilder(fc(G.c1h)), '4h': rsiWilder(fc(G.c4h)), '1d': rsiWilder(fc(G.c1d)), '1w': rsiWilder(fc(cand[k] && cand[k]['1w'] ? aoVivo(cand[k]['1w'], 6048e5, cur) : agrupar(G.c1d || [], 7 * 864e5))) };   // semanal: as velas semanais da Hyperliquid (iguais às do RSI Mestre), não dias agrupados
     const rg = regimeRsi(rv['1d']), rr = resumoRsi(Object.values(rv));
     const chip = (k, nome) => { const v = rv[k], f = faixaRsi(v), bg = f.lado < 0 ? 'var(--warn-soft)' : f.lado > 0 ? 'var(--down-soft)' : 'transparent', cor = f.lado < 0 ? 'var(--warn)' : f.lado > 0 ? 'var(--down)' : 'var(--fg)';
       return `<button type="button" ${k !== '1w' ? `data-g="${k}"` : 'disabled'} title="${f.txt}" style="font:inherit;font-size:12.5px;padding:3px 9px;border-radius:6px;cursor:${k !== '1w' ? 'pointer' : 'default'};background:${bg};color:${cor};border:1px solid ${k === GTF ? 'var(--fg)' : 'var(--line)'};${f.nivel === 2 ? 'font-weight:800' : ''}"><span class="muted" style="font-weight:400">${nome}</span> <b class="num">${v == null ? '—' : v.toFixed(1).replace('.', ',')}</b></button>`; };
@@ -764,7 +765,8 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const err = erros.senha ? 'Digite a senha do radar no topo da página para ver o mapa da Coinversa.' : erros['mapa' + SEL] ? `Sem mapa agora: ${erros['mapa' + SEL]}` : '';
     $('.lv-erro').hidden = !err; $('.lv-erro').textContent = err;
     if (!A) { $('.lv-top').innerHTML = `<p class="muted">${err || 'carregando o mapa…'}</p>`; return; }
-    renderTop(A); renderChart(A); renderCards(A); renderLiqs(); renderRot(A); renderPress(); renderComo();
+    renderTop(A); renderChart(A); renderCards(A); renderLiqs(); renderRot(A); renderPainelLiq(A); renderPress(); renderComo();
+    if (painelAberto()) carregarMapaL(SEL);
   }
 
   // eventos
