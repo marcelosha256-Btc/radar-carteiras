@@ -6,6 +6,7 @@
 import { fraseRsi, rsiSerie, regime as regimeRsi, rsiWilder, agrupar, faixa as faixaRsi, resumo as resumoRsi, precoParaRsi } from '../rsi/calc.js';
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
+import { estavel } from './estavel.js';
 import { niveisDia, niveisPeriodo, estrutura as estruturaVelas, leitura as leituraGrafico, zonasSR } from '../grafico/calc.js';
 import { graficoSvg } from '../grafico/desenho.js';
 import { checklist as checklistRegras, REGRAS_PADRAO } from '../risco/regras.js';
@@ -19,6 +20,8 @@ const ROTEIRO = {               // regras do roteiro do Marcelo (ajuste aqui)
   // as regras do Connors RSI (veto de venda no swing, ETH sem edge, bônus de RSI diário em sobrevenda) saíram em 25/11/2026:
   // o estudo do CRSI não achou vantagem clara contra entrar em qualquer dia do mesmo regime
   liberado: 70, cuidado: 50,
+  confirmaMs: 120e3,            // nota estável: só vira LIBERADO depois de 2 min seguidos acima de 'liberado'...
+  folga: 5,                     // ...e só sai de LIBERADO se cair abaixo de 'liberado' − folga (ou se algo bloquear)
 };
 const TF = [['Semana', '1w', 7 * 864e5], ['Dia', '1d', 864e5], ['4H', '4h', 144e5], ['15 min', '15m', 9e5]];
 const TIER = [['money_printer', 'Top lucro (Apex)'], ['smart_money', 'Lucrativos (Sharps)'], ['grinder', 'Consistentes'], ['humble_earner', 'Pequeno lucro'],
@@ -246,6 +249,7 @@ function estrutura(k, tf, cur, n) {
   if (p.lo != null && cur < p.lo) return { s: -1, t: `${n} perdeu o último fundo (${fpx(p.lo)})` };
   return null;
 }
+const ESTAVEL = {};   // estado comum a todas as telas (ver aovivo/estavel.js)
 function avaliar(k, A, modo, lado) {
   const { cur, zn } = A, isBuy = lado === 'compra', bw = zn.bw, H = modo === 'day' ? 4 : 24;
   const blocks = [], pros = [], cons = [], faltam = []; let sc = 50;
@@ -296,9 +300,10 @@ function avaliar(k, A, modo, lado) {
   if (isBuy && l5.long >= lim) blocks.push(`cascata de longs em curso (${fm(l5.long)} em 5 min) — não pegue faca caindo`);
   if (!isBuy && l5.short >= lim) blocks.push(`cascata de shorts em curso (${fm(l5.short)} em 5 min)`);
   sc = Math.max(0, Math.min(100, Math.round(sc)));
-  const st = blocks.length ? ['BLOQUEADO', COR.dn] : sc >= ROTEIRO.liberado ? ['LIBERADO', COR.up] : sc >= ROTEIRO.cuidado ? ['CUIDADO', COR.am] : ['FRACO', COR.mu];
+  const E = estavel(ESTAVEL, k + '|' + modo + '|' + lado, sc, blocks.length > 0, Date.now(), ROTEIRO);
+  const st = blocks.length ? ['BLOQUEADO', COR.dn] : E.lib ? ['LIBERADO', COR.up] : E.espera ? ['CONFIRMANDO', COR.am] : sc >= ROTEIRO.cuidado ? ['CUIDADO', COR.am] : ['FRACO', COR.mu];
   faltam.sort((x, y) => y[0] - x[0]);
-  return { sc, st, blocks, pros, cons, stop, alvo, rr, faltam };
+  return { sc, st, blocks, pros, cons, stop, alvo, rr, faltam, espera: E.espera };
 }
 
 /* histórico local para o gráfico (compartilhado entre as abas): liquidações reais vistas e a foto anterior do mapa */
@@ -564,11 +569,12 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const a = avaliar(SEL, A, 'day', 'compra'), b = avaliar(SEL, A, 'day', 'venda');
     const okA = !a.blocks.length, okB = !b.blocks.length;
     const r = okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
-    const est = r.st[0], acao = est === 'BLOQUEADO' ? 'Não entrar' : est === 'LIBERADO' ? 'Liberado pelo roteiro' : 'Aguardar gatilho';
+    const est = r.st[0], acao = est === 'BLOQUEADO' ? 'Não entrar' : est === 'LIBERADO' ? 'Liberado pelo roteiro' : est === 'CONFIRMANDO' ? 'Confirmando' : 'Aguardar gatilho';
     const precisa = Math.max(0, ROTEIRO.liberado - r.sc);
     let lista = [], soma = 0; for (const [v, t] of r.faltam) { if (soma >= precisa) break; lista.push(`${t} (+${v})`); soma += v; }
     const oQueFalta = !precisa ? '' : soma >= precisa ? `faltam ${precisa} pontos: ${lista.join(' · ')}` : `faltam ${precisa} pontos e nem tudo a favor chega lá hoje: espere outro setup`;
     const falta = r.blocks.length ? r.blocks[0] + (oQueFalta ? `. Depois disso, ${oQueFalta}` : '')
+      : est === 'CONFIRMANDO' ? `a nota passou de ${ROTEIRO.liberado}; libera se continuar por mais ${Math.ceil(r.espera / 1000)} s sem cair abaixo de ${ROTEIRO.liberado - ROTEIRO.folga} (evita liberar num pico de segundos)`
       : est === 'LIBERADO' ? (r.stop && r.alvo ? `stop ${fpx(r.stop)} · alvo ${fpx(r.alvo)} · R:R ${r.rr != null ? f1(r.rr) : '—'}` : '')
       : oQueFalta;
     el.innerHTML = `<div class="lv-gatb" style="border-color:${r.st[1]};color:${r.st[1]}"><b>${acao}</b> · day trade · ${r.l} · <span class="lv-gatf">${falta}</span><span style="flex:1"></span><b class="num">${r.sc}/100</b> <span class="small muted">nota do roteiro</span></div>
@@ -662,7 +668,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const vel = G ? { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] : null, eT = vel && vel.length > 30 ? estruturaVelas(vel.slice(-200)) : null;
     if (eT && ((o.l === 'venda' && eT.tendencia === 'alta') || (o.l === 'compra' && eT.tendencia === 'baixa')))
       avisos.push(`Contra a estrutura do ${{ '15m': '15 min', '1h': '1H', '4h': '4H', '1d': 'diário' }[GTF] || GTF} (topos e fundos ${eT.tendencia === 'alta' ? 'mais altos' : 'mais baixos'})`);
-    return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, bloq: o.r.blocks[0] || '', avisos };
+    return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, espera: o.r.espera, bloq: o.r.blocks[0] || '', avisos };
   }
   function aoVivo(arr, ms, px) {
     if (!arr || !arr.length || !px) return arr;
@@ -684,7 +690,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const cam = $('.lv-gcam');
     if (cam) cam.innerHTML = '<span class="small muted">Mostrar:</span>' + CAMADAS.map(([c, n]) => `<button type="button" class="chip" data-c="${c}" aria-pressed="${!!CAM[c]}" style="cursor:pointer;font:inherit;font-size:12px;border:1px solid ${CAM[c] ? 'var(--accent)' : 'var(--line)'};background:${CAM[c] ? 'var(--accent-soft)' : 'none'};color:var(--fg)">${CAM[c] ? '✓ ' : ''}${n}</button>`).join('');
     const pe = $('.lv-gplano');
-    if (pe) pe.innerHTML = !CAM.plano ? '' : pl && pl.bloq ? `<span class="muted">Meu plano: nenhum day trade liberado agora. O melhor lado (${pl.lado}) está bloqueado: ${pl.bloq}.</span>${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}` : pl ? `<span style="color:${pl.cor};font-weight:700">Meu plano · day trade ${pl.lado} · ${pl.st} ${pl.sc}</span> <span class="muted">(da Trava do roteiro: entrada ~${fpx(pl.entrada)} · stop ${fpx(pl.stop)} · alvo ${fpx(pl.alvo)}${pl.rr != null ? ' · R:R ' + f1(pl.rr) : ''}${pl.bloq ? ' · ⛔ ' + pl.bloq : ''})</span>${pl.st === 'LIBERADO' ? ' <button type="button" class="lv-gdiario hj-link" style="font-size:12px">guardar plano e ir ao passo 5 (hora de entrar?) →</button>' : ` <b style="color:var(--warn)">· aguardar gatilho</b> <span class="muted">(nota ${pl.sc}: ainda não chegou em LIBERADO; o mesmo que a Liquidez ao vivo mostra)</span>`}${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}`
+    if (pe) pe.innerHTML = !CAM.plano ? '' : pl && pl.bloq ? `<span class="muted">Meu plano: nenhum day trade liberado agora. O melhor lado (${pl.lado}) está bloqueado: ${pl.bloq}.</span>${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}` : pl ? `<span style="color:${pl.cor};font-weight:700">Meu plano · day trade ${pl.lado} · ${pl.st} ${pl.sc}</span> <span class="muted">(da Trava do roteiro: entrada ~${fpx(pl.entrada)} · stop ${fpx(pl.stop)} · alvo ${fpx(pl.alvo)}${pl.rr != null ? ' · R:R ' + f1(pl.rr) : ''}${pl.bloq ? ' · ⛔ ' + pl.bloq : ''})</span>${pl.st === 'LIBERADO' ? ' <button type="button" class="lv-gdiario hj-link" style="font-size:12px">guardar plano e ir ao passo 5 (hora de entrar?) →</button>' : pl.st === 'CONFIRMANDO' ? ` <b style="color:var(--warn)">· confirmando</b> <span class="muted">(a nota passou do limite; libera se continuar por mais ${Math.ceil(pl.espera / 1000)} s)</span>` : ` <b style="color:var(--warn)">· aguardar gatilho</b> <span class="muted">(nota ${pl.sc}: ainda não chegou em LIBERADO; o mesmo que a Liquidez ao vivo mostra)</span>`}${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}`
       : '<span class="muted">Meu plano: sem plano agora (a Trava precisa do mapa da Coinversa para achar stop e alvo).</span>';
     const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
     if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
