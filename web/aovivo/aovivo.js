@@ -354,11 +354,21 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     return `<span class="lv-dirs" title="Para que lado o preço ESTÁ andando em cada tempo: topos e fundos subindo e preço acima da média de 20 = ▲; os dois descendo = ▼; mistura = ▬. É o que já aconteceu, não previsão.">`
       + `<span class="lv-dseg">${cels}</span><span class="lv-dres" style="color:${cor};border-color:${tint(cor, 45)};background:${tint(cor, 10)}">${txt}</span></span>`;
   }
+  /* "Em aberto": quanto seria liquidado acima (shorts) e abaixo (longs) do preço, na faixa do mapa que a tela usa */
+  function cartaoAberto(k) {
+    const m = vista === 'graf' && largoGTF() && mapasL[k] ? mapasL[k] : mapas[k]; if (!m) return '';
+    const S = m.S.reduce((t, v) => t + v, 0) * 1e6, Lg = m.L.reduce((t, v) => t + v, 0) * 1e6, tot = S + Lg; if (!(tot > 0)) return '';
+    const pS = Math.round(S / tot * 100), pL = 100 - pS, usd = v => v >= 995e6 ? 'US$ ' + (v / 1e9).toFixed(1).replace('.', ',') + ' bi' : fm(v);
+    const dica = `Dinheiro em posições alavancadas da Hyperliquid que seria liquidado se o preço chegasse lá (mapa da Coinversa, ±${m.R}% do preço). Acima ficam os shorts, abaixo os longs. Mostra o posicionamento, não a direção: depois de uma queda é normal sobrar mais acima.`;
+    return `<span class="lv-ab" title="${dica}"><span class="lv-abc" style="color:${COR.short}"><span class="lv-abt">▲ Acima · shorts</span><b>${usd(S)}</b><span class="lv-abp">${pS}%</span></span>`
+      + `<span class="lv-abc" style="color:${COR.long}"><span class="lv-abt">▼ Abaixo · longs</span><b>${usd(Lg)}</b><span class="lv-abp">${pL}%</span></span>`
+      + `<span class="lv-abbar"><i style="width:${pS}%;background:${COR.short}"></i><i style="width:${pL}%;background:${COR.long}"></i></span><span class="lv-abr">em aberto · faixa ±${m.R}%</span></span>`;
+  }
   function renderBar(A) {
     const k = SEL, cur = A ? A.cur : live[k];
     const an = $('.lv-an'); if (an.dataset.k !== k) { an.dataset.k = k; an.innerHTML = nome(k) + hlLink(k); }   // só refaz ao trocar de ativo, para o link aceitar o clique
     const px = $('.lv-px'); px.textContent = cur ? fpx(cur) : '—'; px.style.color = flash[k] && flash[k].until > Date.now() ? flash[k].col : '';
-    $('.lv-tr').innerHTML = A ? faixaDirecao(k, A) : '';
+    $('.lv-tr').innerHTML = A ? faixaDirecao(k, A) + cartaoAberto(k) : '';
     if (A) {
       const est = ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda'); if (a.carregando || b.carregando) return null; return (m === 'day' ? 'Day' : 'Swing') + ' ' + [!a.blocks.length ? 'compra livre' : '', !b.blocks.length ? 'venda livre' : ''].filter(Boolean).join(' e ') || 'bloqueado'; }), pronto = est.every(x => x != null);
       if (pronto) {
@@ -764,6 +774,11 @@ css.textContent = `
 .lv-bar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 12px;margin-bottom:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 .lv-an{font:800 18px var(--f-display)}.lv-px{font-size:19px;font-weight:700;transition:color .2s}
 .lv-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.lv-ab{display:inline-grid;grid-template-columns:auto auto;gap:3px 6px;align-items:center}
+.lv-abc{display:inline-flex;align-items:baseline;gap:6px;padding:3px 10px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);background:color-mix(in srgb,currentColor 9%,transparent);border-radius:8px;white-space:nowrap}
+.lv-abt{font-size:11.5px;font-weight:600}.lv-abc b{font-size:14px;color:var(--fg)}.lv-abp{font-size:11.5px;opacity:.85}
+.lv-abbar{grid-column:1/-1;display:flex;height:4px;border-radius:2px;overflow:hidden;gap:2px}.lv-abbar i{display:block;height:100%;border-radius:2px}
+.lv-abr{grid-column:1/-1;font-size:10.5px;color:var(--muted);text-align:right;margin-top:-2px}
 .lv-dirs{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .lv-dseg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
 .lv-dc{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;font-size:14px;line-height:1.3;white-space:nowrap}
