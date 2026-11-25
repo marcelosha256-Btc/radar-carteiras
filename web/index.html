@@ -1327,7 +1327,7 @@ Take profits: long ${usd(f.tp_long || 0)} · short ${usd(f.tp_short || 0)}`);
         const fortes = M.filter(e => e.impacto === 'alto'), semana = futuros.filter(l => diasAte(l.p.data) <= 7);
         const quandoRel = ms => ms <= 0 ? 'andamento' : ms < 36e5 ? Math.round(ms / 60000) + ' min' : Math.round(ms / 36e5) + ' h';
         const hm = t => new Date(t).toLocaleDateString('pt-BR', { weekday: 'short' }) + ' ' + new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        const ver = fortes.length ? `<span class="chip down" style="white-space:normal;border-radius:8px">Notícia forte em ${quandoRel(fortes[0].t - agora)} (${fortes[0].nome}, ${hm(fortes[0].t)}): não entre de 15 min antes até 30 min depois — em ações <b>e em cripto</b>.</span>`
+        const ver = fortes.length ? `<span class="chip down" style="white-space:normal;border-radius:8px">Notícia forte em ${quandoRel(fortes[0].t - agora)} (${fortes[0].nome}, ${hm(fortes[0].t)}): não entre de 15 min antes até 30 min depois — em ações e em cripto.</span>`
           : `<span class="chip up">Nenhum dado de alto impacto nas próximas 36 h</span>`;
         $('#aEvHoje').hidden = false;
         $('#aEvHoje').innerHTML = `<div class="box-head"><h2>Antes de operar · ações e cripto</h2></div><p style="margin:0 0 8px">${ver}</p>
