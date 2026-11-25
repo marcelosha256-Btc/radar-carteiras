@@ -118,15 +118,20 @@ test('níveis da semana e do mês passados (velas diárias)', () => {
   assert.deepEqual(niveisPeriodo([]), []);
 });
 
-test('gráfico: bolhas de liquidação e perfil da liquidez em risco', () => {
+test('gráfico: liquidações por vela (histograma), rajada no pavio e perfil da liquidez em risco', () => {
   const c = Array.from({ length: 30 }, (_, i) => vela(i * M15, 100, 102, 98, 101));
   const perfil = { bw: 1, L: [[99.5, 2e6, 4e6], [97.5, 1e6, 1e6]], S: [[101.5, 3e6, null], [150, 9e6, null]], hora: '12:00' };
-  const bolhas = [{ t: 5 * M15 + 1000, px: 99, usd: 50000, side: 'long' }, { t: 6 * M15, px: 101, usd: 5000, side: 'short' }, { t: -M15, px: 100, usd: 1e6, side: 'long' }];
+  const bolhas = [{ t: 5 * M15 + 1000, px: 99, usd: 600000, side: 'long', fonte: 'Binance' }, { t: 5 * M15 + 9000, px: 99, usd: 400000, side: 'long', fonte: 'OKX' },
+    { t: 6 * M15, px: 101, usd: 5000, side: 'short' }, { t: 7 * M15, px: 101, usd: 6000, side: 'short' }, { t: 8 * M15, px: 101, usd: 4000, side: 'long' },
+    { t: -M15, px: 100, usd: 1e6, side: 'long' }];
   const { svg } = graficoSvg({ candles: c, niv: null, est: null, preco: 100.5, ms: M15, perfil, bolhas });
-  assert.equal((svg.match(/<circle/g) || []).length, 2);              // a bolha anterior às velas fica de fora
-  assert.match(svg, /Longs liquidados · US\$ 50\.000 em 1 evento \(0 com preço e lado exatos\)/);
+  assert.ok(!svg.includes('<circle'));                                   // sem bolhas sobre as velas
+  assert.match(svg, /viewBox="0 0 960 514"/);                            // 440 + 74 da faixa
+  assert.match(svg, /longs liquidados US\$ 1,00 mi \(2\) · Binance 1, OKX 1/);   // soma por vela, com as fontes
+  assert.match(svg, /Rajada de longs liquidados: US\$ 1,00 mi/);          // marca no pavio só na vela fora do normal
+  assert.equal((svg.match(/Rajada/g) || []).length, 1);
   assert.match(svg, /liquidez em risco · foto 12:00/);
-  assert.equal((svg.match(/stroke-dasharray:2 2/g) || []).length, 1);  // contorno só onde a faixa mudou (99,5: 4 mi → 2 mi)
+  assert.equal((svg.match(/stroke-dasharray:2 2/g) || []).length, 1);   // contorno só onde a faixa mudou (99,5: 4 mi → 2 mi)
   assert.ok(!graficoSvg({ candles: c, ms: M15 }).svg.includes('liquidez em risco'));
 });
 

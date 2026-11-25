@@ -301,6 +301,44 @@ function avaliar(k, A, modo, lado) {
 
 /* histórico local para o gráfico (compartilhado entre as abas): liquidações reais vistas e a foto anterior do mapa */
 const liqHist = {}, mapaPrev = {};
+/* liquidações guardadas por moeda (3 dias, neste navegador), de três fontes:
+ *  Hyperliquid (via Coinversa; muitas com preço/lado estimados), Binance (WebSocket ao vivo, exatas, no máx. 1 por segundo por moeda)
+ *  e OKX (as últimas 100, exatas, relidas a cada 60 s). Só cripto nas duas últimas. */
+const liqSujo = {};
+function histLiq(k) {
+  if (!liqHist[k]) { try { liqHist[k] = JSON.parse(localStorage.getItem('radar-liqhist-' + k) || '[]'); } catch (e) { liqHist[k] = []; } liqHist[k].ch = new Set(liqHist[k].map(chLiq)); }
+  return liqHist[k];
+}
+const chLiq = e => (e.fonte || 'Hyperliquid') + '|' + e.t + '|' + Math.round(e.usd);
+function addLiq(k, e) {
+  const h = histLiq(k), c = chLiq(e); if (h.ch.has(c)) return; h.ch.add(c); h.push(e); liqSujo[k] = true;
+}
+setInterval(() => {   // poda e grava a cada 10 s (não a cada evento)
+  for (const k of Object.keys(liqSujo)) { if (!liqSujo[k]) continue; liqSujo[k] = false;
+    const lim = Date.now() - 3 * 864e5, h = liqHist[k].filter(e => e.t >= lim).sort((a, b) => a.t - b.t).slice(-6000); h.ch = new Set(h.map(chLiq)); liqHist[k] = h;
+    try { localStorage.setItem('radar-liqhist-' + k, JSON.stringify(h)); } catch (e) {} }
+}, 10000);
+const CRIPTO_LIQ = ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'];
+const binLiq = { sock: null, quer: false };
+function ligarBinanceLiq() {
+  binLiq.quer = true; if (binLiq.sock && binLiq.sock.readyState <= 1) return;
+  try { binLiq.sock = new WebSocket('wss://fstream.binance.com/market/ws/!forceOrder@arr'); } catch (e) { return; }
+  binLiq.sock.onmessage = m => { let o; try { o = JSON.parse(m.data).o; } catch (e) { return; } if (!o || !/USDT$/.test(o.s)) return;
+    const k = o.s.replace(/USDT$/, ''); if (!CRIPTO_LIQ.includes(k)) return; const px = +o.ap || +o.p;
+    addLiq(k, { t: o.T, px, usd: px * +o.z, side: o.S === 'SELL' ? 'long' : 'short', ex: true, fonte: 'Binance' }); };   // venda forçada = long liquidado
+  binLiq.sock.onclose = () => setTimeout(() => { if (binLiq.quer && !document.hidden) ligarBinanceLiq(); }, 5000);
+}
+const okxLiq = { ct: {}, t: {} };
+async function buscarOkxLiq(k) {
+  if (!CRIPTO_LIQ.includes(k) || Date.now() - (okxLiq.t[k] || 0) < 60e3) return; okxLiq.t[k] = Date.now();
+  try {
+    if (!okxLiq.ct[k]) { const j = await fetch(`https://www.okx.com/api/v5/public/instruments?instType=SWAP&instId=${k}-USDT-SWAP`).then(r => r.json()); okxLiq.ct[k] = +((j.data || [])[0] || {}).ctVal || 0; }
+    if (!okxLiq.ct[k]) return;
+    const j = await fetch(`https://www.okx.com/api/v5/public/liquidation-orders?instType=SWAP&uly=${k}-USDT&state=filled&limit=100`).then(r => r.json());
+    for (const d of (((j.data || [])[0]) || {}).details || []) addLiq(k, { t: +d.ts, px: +d.bkPx, usd: +d.sz * okxLiq.ct[k] * +d.bkPx, ex: true, fonte: 'OKX',
+      side: d.posSide === 'long' || (d.posSide === 'net' && d.side === 'sell') ? 'long' : 'short' });
+  } catch (e) {}
+}
 /* trades do Meu diário (mesma senha), para marcar no gráfico; relidos no máximo a cada 60 s */
 const diario = { t: 0, trades: [] };
 async function carregarDiario() {
@@ -590,12 +628,9 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
   }
   /* histórico local para o gráfico: liquidações reais (guardadas por 3 dias neste navegador) e a foto anterior do mapa */
   function guardarLiqs(k) {
-    const h = liqHist[k] || (liqHist[k] = (() => { try { return JSON.parse(localStorage.getItem('radar-liqhist-' + k) || '[]'); } catch (e) { return []; } })());
-    const chave = e => e.t + '|' + (e.addr || '') + '|' + Math.round(e.usd), ja = new Set(h.map(chave)); let novo = false;
-    for (const e of realLiqs(k)) if (e.px != null && e.usd > 0 && !ja.has(chave(e))) { h.push({ t: e.t, px: e.px, usd: e.usd, side: e.side, addr: e.addr, ex: !!e.exact }); novo = true; }
-    if (novo) { const lim = Date.now() - 3 * 864e5; liqHist[k] = h.filter(e => e.t >= lim).sort((a, b) => a.t - b.t).slice(-3000);
-      try { localStorage.setItem('radar-liqhist-' + k, JSON.stringify(liqHist[k])); } catch (e) {} }
-    return liqHist[k];
+    for (const e of realLiqs(k)) if (e.px != null && e.usd > 0) addLiq(k, { t: e.t, px: e.px, usd: e.usd, side: e.side, ex: !!e.exact, fonte: 'Hyperliquid' });
+    if (mercado === 'cripto') buscarOkxLiq(k);
+    return histLiq(k);
   }
   function perfilDe(k) {
     const m = mapas[k]; if (!m) return null;
@@ -631,7 +666,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const ms = { '15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5 }[GTF] || 9e5, todas = { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] || G.c15, c = todas.slice(-({ '15m': 120, '1h': 96, '4h': 120, '1d': 120 }[GTF] || 120));
     const curto = ms < 864e5, bol = curto ? guardarLiqs(k) : null, perf = perfilDe(k);   // barras em todos os tempos; bolhas até 4 h (o histórico guardado é de 3 dias)
     const pl = vista === 'graf' && CAM.plano ? planoDe() : null, tds = vista === 'graf' && CAM.trades ? diario.trades.filter(t => mesmoAtivo(k, t.ativo) && t.abertura && t.entrada) : null;
-    const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0, JSON.stringify(CAM), pl ? pl.stop + '/' + pl.alvo + '/' + pl.st : '', diario.t, tds ? tds.length : 0].join('|'); if (sig === gSig) return; gSig = sig;
+    const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0, JSON.stringify(CAM), pl ? pl.stop + '/' + pl.alvo + '/' + pl.st : '', diario.t, tds ? tds.length : 0, bol ? bol.length : 0].join('|'); if (sig === gSig) return; gSig = sig;
     const cam = $('.lv-gcam');
     if (cam) cam.innerHTML = '<span class="small muted">Mostrar:</span>' + CAMADAS.map(([c, n]) => `<button type="button" class="chip" data-c="${c}" aria-pressed="${!!CAM[c]}" style="cursor:pointer;font:inherit;font-size:12px;border:1px solid ${CAM[c] ? 'var(--accent)' : 'var(--line)'};background:${CAM[c] ? 'var(--accent-soft)' : 'none'};color:var(--fg)">${CAM[c] ? '✓ ' : ''}${n}</button>`).join('');
     const pe = $('.lv-gplano');
@@ -666,7 +701,8 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
       rsi: CAM.rsi ? rs : null, rsiMedia: CAM.rsi ? rsMed : null, rsiNiveis: rsNiv, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl, trades: tds, sr });
     $('.lv-gsvg').innerHTML = svg;
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
-    $('.lv-gnota').textContent = (curto ? '' : 'No Diário não há bolhas (o histórico guardado é de só 3 dias). ') + (curto ? `Bolhas = liquidações reais (laranja = long liquidado, azul = short liquidado; tamanho = valor; passe o mouse para ver), guardadas neste navegador desde que a página abre (${bol ? bol.length : 0} até agora; a fonte entrega só os últimos ~200 registros, então numa rajada cobre poucos segundos). Contorno cheio = preço e lado exatos; tracejado = estimados pelo movimento do minuto. ` : '') + 'Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ' + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
+    const nF = f => bol ? bol.filter(e => (e.fonte || 'Hyperliquid') === f).length : 0;
+    $('.lv-gnota').textContent = (curto ? `Liquidações por vela (faixa entre as velas e o RSI): para cima = shorts liquidados (empurraram o preço para cima), para baixo = longs liquidados; altura pela raiz do valor; ▲/▼ no pavio = rajada bem acima do normal da tela. Guardadas neste navegador por 3 dias, desde que a página abriu: ${mercado === 'cripto' ? `Binance ao vivo ${nF('Binance')}, OKX ${nF('OKX')}, ` : ''}Hyperliquid ${nF('Hyperliquid')} (Hyperliquid via Coinversa: só os ~200 registros mais recentes e, em geral, preço/lado estimados${mercado === 'cripto' ? '; Binance manda no máximo 1 por segundo por moeda' : ''}). ` : 'No Diário não há liquidações por vela (o histórico guardado é de só 3 dias). ') + 'Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ' + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
       (fora.length ? `Fora da vista: ${fora.map(n => n.rot + ' ' + fpx(n.preco)).join(', ')}. ` : '') +
       'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Medido em BTC, ETH e SOL (15 min, 1 h, 4 h e diário) e em ações (diário): nenhum desses sinais deu ganho firme depois dos custos, e vários foram piores que entrar sem sinal. Uma pista no diário de cripto (fechar abaixo da mínima do mês passado) não se repetiu em 30 ações dos EUA (15 anos). É mapa de contexto, não gatilho (estudo em estudos/niveis_estrutura).';
   }
@@ -735,6 +771,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     if (vis) render(); else vigiar();
   }, 1000);
   window.addEventListener('radar-acoes', ev => { if (mercado === 'acoes' && ev.detail && ev.detail.length) { lista = ev.detail.slice(0, 12); if (!lista.includes(SEL)) SEL = lista[0]; render(); } });
+  if (vista === 'graf' && mercado === 'cripto') ligarBinanceLiq();
   function sincronizar() { const s = ls('sel'); if (s && s !== SEL) { if (!lista.includes(s)) lista = [s, ...lista].slice(0, 12); SEL = s; hov = null; trocar(); } else render(); }
   return { iniciar: trocar, sincronizar, ativo: () => visivel() || SOM };
 }

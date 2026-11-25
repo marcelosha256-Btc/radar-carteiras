@@ -8,6 +8,7 @@ export function fmtPreco(n) {
   if (n >= 1000) return n.toLocaleString('pt-BR', { maximumFractionDigits: n >= 10000 ? 0 : 1 });
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: n < 10 ? 4 : 2 });
 }
+const usdTxt = v => v >= 1e6 ? 'US$ ' + (v / 1e6).toFixed(2).replace('.', ',') + ' mi' : 'US$ ' + Math.round(v / 1e3).toLocaleString('pt-BR') + ' mil';
 const hora = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 const soDia = t => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 const diaHora = t => new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -27,8 +28,8 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   if (plano) for (const p of [plano.stop, plano.alvo]) if (p >= lo - 0.5 * r0 && p <= hi + 0.5 * r0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }   // o plano sempre à vista
   const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
   const Y = p => T + (hi - p) / (hi - lo) * (y1 - T), xc = perfil && perfil.bw ? x1 - 128 : x1, step = (xc - L) / c.length, X = i => L + (i + 0.5) * step, bw = Math.max(1.5, Math.min(12, step * 0.64));
-  const HR = rsi ? 124 : 0;
-  let s = `<svg viewBox="0 0 ${W} ${H + HR}" width="100%" role="img" aria-label="Gráfico de velas com níveis do dia e estrutura${rsi ? ' e RSI' : ''}">`;
+  const HR = rsi ? 124 : 0, HB = bolhas ? 74 : 0;   // HB = faixa das liquidações por vela
+  let s = `<svg viewBox="0 0 ${W} ${H + HB + HR}" width="100%" role="img" aria-label="Gráfico de velas com níveis do dia e estrutura${rsi ? ' e RSI' : ''}">`;
   // grade e escala de preço
   for (let g = 0; g <= 5; g++) { const p = lo + (hi - lo) * g / 5, y = Y(p);
     s += `<line x1="${L}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:var(--line)"/><text x="${x1 + 6}" y="${(y + 4).toFixed(1)}" style="fill:var(--muted);font-size:11px">${fmtPreco(p)}</text>`; }
@@ -102,18 +103,17 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
       }
     }
   }
-  // bolhas: liquidações reais no preço e na hora em que aconteceram (área proporcional ao valor)
+  // liquidações por vela: soma de longs e de shorts em cada vela (histograma abaixo) e marca no pavio quando é rajada
+  let porVela = null;
   if (bolhas && bolhas.length) {
-    const t0 = c[0].t, tf = c[c.length - 1].t + ms, vis = bolhas.filter(b => b.px != null && b.t >= t0 && b.t < tf && b.px >= lo && b.px <= hi);
-    // uma bolha por vela e por lado: soma dos valores, no preço médio ponderado (evita dezenas de círculos empilhados)
-    const g = new Map();
-    for (const b of vis) { const i = Math.min(c.length - 1, Math.floor((b.t - t0) / ms)), k = i + '|' + b.side, o = g.get(k) || { i, side: b.side, usd: 0, pu: 0, n: 0, nx: 0, t0: b.t, t1: b.t };
-      o.usd += b.usd; o.pu += b.px * b.usd; o.n++; if (b.ex) o.nx++; o.t0 = Math.min(o.t0, b.t); o.t1 = Math.max(o.t1, b.t); g.set(k, o); }
-    const gs = [...g.values()], mb = Math.max(1, ...gs.map(o => o.usd));
-    gs.sort((a, b) => a.usd - b.usd).forEach(o => {
-      const px = o.pu / o.usd, r = 2.5 + Math.sqrt(o.usd / mb) * 13, col = o.side === 'long' ? 'var(--lv-long)' : o.side === 'short' ? 'var(--lv-short)' : 'var(--muted)';
-      const nome = o.side === 'long' ? 'Longs liquidados' : o.side === 'short' ? 'Shorts liquidados' : 'Liquidações (lado incerto)';
-      s += `<circle cx="${X(o.i).toFixed(1)}" cy="${Y(px).toFixed(1)}" r="${r.toFixed(1)}" style="fill:${col};fill-opacity:.35;stroke:${col};stroke-width:1.2${o.nx * 2 < o.n ? ';stroke-dasharray:3 2' : ''}"><title>${nome} · US$ ${Math.round(o.usd).toLocaleString('pt-BR')} em ${o.n} ${o.n > 1 ? 'eventos' : 'evento'} (${o.nx} com preço e lado exatos) · perto de ${fmtPreco(px)} · ${hora(o.t0)}${o.t1 - o.t0 > 6e4 ? '–' + hora(o.t1) : ''}</title></circle>`;
+    const t0 = c[0].t, tf = c[c.length - 1].t + ms; porVela = c.map(() => ({ L: 0, S: 0, nL: 0, nS: 0, f: {} }));
+    for (const b of bolhas) { if (b.t < t0 || b.t >= tf || !(b.usd > 0)) continue; const i = Math.min(c.length - 1, Math.floor((b.t - t0) / ms)), o = porVela[i];
+      if (b.side === 'long') { o.L += b.usd; o.nL++; } else if (b.side === 'short') { o.S += b.usd; o.nS++; } else continue; const f = b.fonte || 'Hyperliquid'; o.f[f] = (o.f[f] || 0) + 1; }
+    const vals = porVela.flatMap(o => [o.L, o.S]).filter(v => v > 0).sort((a, b) => a - b), med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+    const corte = Math.max(med * 3, vals.length ? vals[Math.floor(vals.length * 0.9)] : 0);
+    if (vals.length >= 3) porVela.forEach((o, i) => {
+      if (o.L > 0 && o.L >= corte) { const y = Math.min(y1 - 2, Y(c[i].l) + 4); s += `<polygon points="${X(i) - 5},${y + 8} ${X(i) + 5},${y + 8} ${X(i)},${y}" style="fill:var(--down)"><title>Rajada de longs liquidados: ${usdTxt(o.L)} (${o.nL})</title></polygon>`; }
+      if (o.S > 0 && o.S >= corte) { const y = Math.max(T + 2, Y(c[i].h) - 4); s += `<polygon points="${X(i) - 5},${y - 8} ${X(i) + 5},${y - 8} ${X(i)},${y}" style="fill:var(--up)"><title>Rajada de shorts liquidados: ${usdTxt(o.S)} (${o.nS})</title></polygon>`; }
     });
   }
   // meu plano: faixa de risco (entrada → stop) e de alvo (entrada → alvo), com rótulos à direita das velas
@@ -149,9 +149,20 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   if (preco) { const y = Y(preco);
     s += `<line x1="${L}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:var(--fg);stroke-opacity:.55;stroke-dasharray:3 3"/>`
       + `<rect x="${x1 + 1}" y="${(y - 9).toFixed(1)}" width="${R - 3}" height="18" rx="3" style="fill:var(--fg)"/><text x="${x1 + 5}" y="${(y + 4).toFixed(1)}" style="fill:var(--surface);font-size:11px;font-weight:700">${fmtPreco(preco)}</text>`; }
+  // faixa das liquidações por vela: para cima = shorts liquidados, para baixo = longs (altura pela raiz do valor)
+  if (HB) {
+    const b0 = H + 4, b1 = H + HB - 4, meio = (b0 + b1) / 2, mx = porVela ? Math.max(1, ...porVela.map(o => Math.max(o.L, o.S))) : 1, hh = (b1 - b0) / 2 - 2, bw2 = Math.max(1.5, Math.min(10, step * 0.6));
+    s += `<line x1="${L}" x2="${xc}" y1="${meio}" y2="${meio}" style="stroke:var(--line)"/>`;
+    s += `<text x="${L + 4}" y="${b0 + 10}" style="${HALO}fill:var(--muted);font-size:10.5px">liquidações por vela · ↑ shorts · ↓ longs${porVela && mx > 1 ? ' · máx. ' + usdTxt(mx) : ' · nenhuma nesta janela ainda'}</text>`;
+    if (porVela) porVela.forEach((o, i) => {
+      const fontes = Object.entries(o.f).map(([f, n]) => f + ' ' + n).join(', ');
+      if (o.S > 0) { const h = Math.max(1.5, Math.sqrt(o.S / mx) * hh); s += `<rect x="${(X(i) - bw2 / 2).toFixed(1)}" y="${(meio - h).toFixed(1)}" width="${bw2.toFixed(1)}" height="${h.toFixed(1)}" style="fill:var(--up);opacity:.85"><title>${hora(c[i].t)} · shorts liquidados ${usdTxt(o.S)} (${o.nS}) · ${fontes}</title></rect>`; }
+      if (o.L > 0) { const h = Math.max(1.5, Math.sqrt(o.L / mx) * hh); s += `<rect x="${(X(i) - bw2 / 2).toFixed(1)}" y="${meio.toFixed(1)}" width="${bw2.toFixed(1)}" height="${h.toFixed(1)}" style="fill:var(--down);opacity:.85"><title>${hora(c[i].t)} · longs liquidados ${usdTxt(o.L)} (${o.nL}) · ${fontes}</title></rect>`; }
+    });
+  }
   // painel do RSI(14), alinhado vela a vela com o gráfico de cima
   if (rsi) {
-    const r0 = H + 8, r1 = H + HR - 6, YR = v => r1 - v / 100 * (r1 - r0), xe = xc;
+    const r0 = H + HB + 8, r1 = H + HB + HR - 6, YR = v => r1 - v / 100 * (r1 - r0), xe = xc;
     s += `<rect x="${L}" y="${YR(100).toFixed(1)}" width="${(xe - L).toFixed(1)}" height="${(YR(70) - YR(100)).toFixed(1)}" style="fill:var(--down);opacity:.07"/>`
       + `<rect x="${L}" y="${YR(30).toFixed(1)}" width="${(xe - L).toFixed(1)}" height="${(YR(0) - YR(30)).toFixed(1)}" style="fill:var(--up);opacity:.07"/>`;
     // linhas 30/50/70 e, na borda, o preço em que o RSI chegaria a cada uma (conta inversa, muda a cada segundo)
