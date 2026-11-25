@@ -584,7 +584,7 @@ function criarApp(mercado, painel, raiz) {
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
     $('.lv-gnota').textContent = `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
       (fora.length ? `Fora da vista: ${fora.map(n => n.rot + ' ' + fpx(n.preco)).join(', ')}. ` : '') +
-      'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Medido em BTC, ETH e SOL (15 min, 1 h, 4 h e diário, até 2020): nenhum desses sinais deu ganho firme depois dos custos, e vários foram piores que entrar sem sinal. Única pista: no diário, fechar abaixo da mínima do mês passado (poucos casos, ainda não confirmada). É mapa de contexto, não gatilho (estudo em estudos/niveis_estrutura).';
+      'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Medido em BTC, ETH e SOL (15 min, 1 h, 4 h e diário) e em ações (diário): nenhum desses sinais deu ganho firme depois dos custos, e vários foram piores que entrar sem sinal. Uma pista no diário de cripto (fechar abaixo da mínima do mês passado) não se repetiu em 30 ações dos EUA (15 anos). É mapa de contexto, não gatilho (estudo em estudos/niveis_estrutura).';
   }
   function render() {
     renderTabs();

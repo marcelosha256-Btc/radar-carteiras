@@ -10,14 +10,24 @@ import { estrutura } from '../../web/grafico/calc.js';
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const TF = process.argv[2] || '1h';
 const MS = { '1h': 36e5, '4h': 144e5, '1d': 864e5 }[TF];
-const ATIVOS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'], CUSTO = 0.001;
-const INICIO = Date.UTC(2020, 8, 1);   // SOL só existe na Binance desde 08/2020
+const ACOES = process.argv[3] === 'acoes';   // node medir_tf.mjs 1d acoes  -> ações dos EUA (Yahoo), diário
+const ATIVOS = ACOES ? ['SPY','QQQ','AAPL','MSFT','NVDA','AMZN','GOOGL','META','TSLA','JPM','V','JNJ','WMT','XOM','PG','HD','KO','PEP','COST','AVGO','NFLX','AMD','ORCL','BAC','CVX','MRK','ABBV','CSCO','ADBE','CRM'] : ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'], CUSTO = 0.001;
+const INICIO = ACOES ? Date.UTC(2011, 0, 1) : Date.UTC(2020, 8, 1);   // SOL só existe na Binance desde 08/2020
 const CONF = { '1h': [['A) stop 1 ATR, alvo 1,5, até 48 h', 1, 1.5, 48], ['B) stop 2 ATR, alvo 3, até 96 h', 2, 3, 96]],
   '4h': [['A) stop 1 ATR, alvo 1,5, até 8 dias', 1, 1.5, 48], ['B) stop 2 ATR, alvo 3, até 20 dias', 2, 3, 120]],
   '1d': [['A) stop 1 ATR, alvo 1,5, até 20 dias', 1, 1.5, 20], ['B) stop 2 ATR, alvo 3, até 60 dias', 2, 3, 60]] }[TF];
 let STOP = 1, ALVO = 1.5, MAXB = 24;
 
+async function baixarYahoo(sim) {
+  const f = `${DIR}/${TF}_acao_${sim}.json`;
+  if (fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, 'utf8'));
+  const j = await (await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sim}?range=15y&interval=1d`, { headers: { 'User-Agent': 'Mozilla/5.0' } })).json();
+  const r = j.chart.result[0], q = r.indicators.quote[0], out = [];
+  r.timestamp.forEach((t, i) => { if (q.close[i] != null && q.open[i] != null) out.push({ t: t * 1000, o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i], v: q.volume[i] || 0 }); });
+  const v = out.filter(x => x.t >= INICIO && x.t + 864e5 <= Date.now()); fs.writeFileSync(f, JSON.stringify(v)); return v;
+}
 async function baixar(sim) {
+  if (ACOES) return baixarYahoo(sim);
   const f = `${DIR}/${TF}_${sim}.json`;
   if (fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, 'utf8'));
   const out = []; let t = INICIO;
@@ -111,7 +121,7 @@ function rodar(rot, stop, alvo, maxb) {
   for (const [sig, all] of Object.entries(todos)) {
     const s2 = stat(all); if (s2.n < 40) continue; const d = curta(sig), b = B[d], diff = s2.m - b.m, t = diff / Math.sqrt(s2.se ** 2 + b.se ** 2 || 1);
     const half = f => { const x = stat(all.filter(f)), y = stat(base[d].filter(f)); return x.n ? x.m - y.m : 0; };
-    const pa = ATIVOS.map(a => { const x = stat(all.filter(z => z.a === a)); return `${a.slice(0, 3)} ${x.n ? f2(x.m) : '—'}(${x.n})`; }).join(' ');
+    const pa = (ACOES ? [] : ATIVOS).map(a => { const x = stat(all.filter(z => z.a === a)); return `${a.slice(0, 3)} ${x.n ? f2(x.m) : '—'}(${x.n})`; }).join(' ');
     L.push({ sig, n: s2.n, w: s2.w, m: s2.m, diff, t, h1: half(x => x.t < meio), h2: half(x => x.t >= meio), pa });
   }
   L.sort((x, y) => y.diff - x.diff);

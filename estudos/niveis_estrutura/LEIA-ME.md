@@ -16,3 +16,6 @@ BTC, ETH e SOL desde 09/2020, mesmo método (entrada na abertura seguinte, stop/
 Resultados em `resultado_1h_*.txt`, `resultado_4h_*.txt`, `resultado_1d_*.txt`.
 - 1 h e 4 h: nenhum sinal com vantagem firme; os retestes confirmados ficaram piores que a base.
 - Diário: só "fechou abaixo da mínima do mês passado" (venda) se destacou: +0,41R sobre a base (t=2,6; ~69 casos; positivo nas duas metades e nos 3 ativos). Com 32 sinais testados, um t de 2,6 pode ser acaso, e os casos se concentram em poucas quedas. Não é confirmação. Para confirmar, precisa de mais ativos (ações) ou de um período novo.
+
+### Ações dos EUA, diário (`node medir_tf.mjs 1d acoes`, 30 ações e ETFs, 15 anos, Yahoo)
+A pista do diário em cripto NÃO se repetiu: "fechou abaixo da mínima do mês passado" deu +0,005R sobre a base (n=1585, t=0,2). Na ação, o melhor sinal (BOS p/ baixo) deu +0,07R sobre a base e ainda -0,11R líquido. Nenhum sinal tem ganho líquido. Viés: ações atuais são as que subiram (a base de compra já embute isso). Resultado em `resultado_1d_acoes_*.txt`.
