@@ -665,7 +665,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     box.querySelectorAll('.lv-gtf button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.g === GTF)));
     if (!G || !cur) { if (gSig !== 'x') { $('.lv-gsvg').innerHTML = '<p class="muted small">Buscando as velas…</p>'; $('.lv-gleit').textContent = ''; gSig = 'x'; } return; }
     const ms = { '15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5 }[GTF] || 9e5, todas = { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] || G.c15, c = todas.slice(-({ '15m': 120, '1h': 96, '4h': 120, '1d': 120 }[GTF] || 120));
-    const curto = ms < 864e5, bol = curto ? guardarLiqs(k) : null, perf = perfilDe(k);   // barras em todos os tempos; bolhas até 4 h (o histórico guardado é de 3 dias)
+    const curto = ms < 864e5, bol = curto ? guardarLiqs(k) : null, perf = perfilDe(k);   // barras em todos os tempos; liquidações por vela até 4 h (o histórico guardado é de 3 dias)
     const pl = vista === 'graf' && CAM.plano ? planoDe() : null, tds = vista === 'graf' && CAM.trades ? diario.trades.filter(t => mesmoAtivo(k, t.ativo) && t.abertura && t.entrada) : null;
     const sig = [k, GTF, G.t, cur, c.length, bol ? bol.length : 0, mapas[k] ? mapas[k].ts : 0, JSON.stringify(CAM), pl ? pl.stop + '/' + pl.alvo + '/' + pl.st : '', diario.t, tds ? tds.length : 0, bol ? bol.length : 0].join('|'); if (sig === gSig) return; gSig = sig;
     const cam = $('.lv-gcam');
@@ -742,8 +742,8 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const k = SEL;
     await Promise.all([buscar('mapa', k, mapas), carregarMinuto(k), carregarChance(k).catch(() => {})]);
     render();
-    buscar('liqs', k, liqs).then(render); buscar('press', k, press).then(render);
-    carregarGrafico(k).then(render);
+    buscar('liqs', k, liqs).then(render); if (vista !== 'graf') buscar('press', k, press).then(render);
+    if (vista === 'graf') carregarGrafico(k).then(render);   // as velas do gráfico só na aba Gráfico
     if (vista === 'graf') carregarDiario().then(render);
     carregarCandles(k, ['15m', '4h']).then(() => { render(); carregarCandles(k, ['1d', '1w']).then(render); });
     if (live[k]) carregarLivro(k, live[k]).then(render);
@@ -764,9 +764,9 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const k = SEL;
     if (n % 60 === 0) buscar('mapa', k, mapas).then(render);
     if (n % 30 === 0) buscar('liqs', k, liqs);
-    if (n % 120 === 0) buscar('press', k, press);
+    if (n % 120 === 0 && vista !== 'graf') buscar('press', k, press);
     if (n % 180 === 0) carregarCandles(k, ['15m']);
-    if (n % 60 === 0) carregarGrafico(k);
+    if (n % 60 === 0 && vista === 'graf') carregarGrafico(k);
     if (vista === 'graf' && n % 60 === 0) carregarDiario();
     if (n % 3 === 0 && live[k]) carregarLivro(k, live[k]);
     if (vis) render(); else vigiar();
