@@ -19,3 +19,11 @@ Resultados em `resultado_1h_*.txt`, `resultado_4h_*.txt`, `resultado_1d_*.txt`.
 
 ### Ações dos EUA, diário (`node medir_tf.mjs 1d acoes`, 30 ações e ETFs, 15 anos, Yahoo)
 A pista do diário em cripto NÃO se repetiu: "fechou abaixo da mínima do mês passado" deu +0,005R sobre a base (n=1585, t=0,2). Na ação, o melhor sinal (BOS p/ baixo) deu +0,07R sobre a base e ainda -0,11R líquido. Nenhum sinal tem ganho líquido. Viés: ações atuais são as que subiram (a base de compra já embute isso). Resultado em `resultado_1d_acoes_*.txt`.
+
+## Suporte/resistência por confluência (25/11/2026): `medir_sr.mjs 1h|4h` (rodado com SEM_FILTRO=1)
+Fontes só de preço: máx./mín. de ontem, semana e mês passados + pivôs de 2 velas. Evento: o preço vem de cima (>0,5 ATR) e encosta na faixa.
+"Segurou" = afasta 1,5 ATR antes de fechar 0,5 ATR além, em até 24 velas. Controle = faixa falsa deslocada 0,7–1,5 ATR.
+- Na soma, os níveis verdadeiros pareciam segurar MENOS (47% vs 58–60%), mas era viés de distância: o controle tende a ser tocado por movimentos maiores.
+- Comparando na MESMA distância percorrida até o toque, nível verdadeiro ≈ preço qualquer (1 h: 45,0% vs 47,0% a 0,5–1 ATR; 57,5% vs 57,3% a 1–1,5 ATR; 4 h igual).
+- Confluência (2–3 ou 4+ níveis juntos) não melhora; no grupo mais comum, 4+ ficou até um pouco pior.
+Conclusão: a camada S/R do gráfico é referência visual (onde estão os níveis), sem "força" e sem uso como gatilho.

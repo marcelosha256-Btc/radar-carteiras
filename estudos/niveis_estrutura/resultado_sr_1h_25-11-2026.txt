@@ -1,0 +1,41 @@
+S/R POR CONFLUÊNCIA · 1h · BTC, ETH, SOL · segurou = ir 1.5 ATR para longe antes de fechar 0.5 ATR além (até 24 velas)
+GRUPO                                               n  segurou  vs controle      z | 1ª metade  2ª metade
+CONTROLE (preço qualquer) · resistência          6649    57.0%       -0.8 pts   -1.0 | 57.0%      57.0%
+CONTROLE (preço qualquer) · suporte              7342    58.4% +       0.7 pts    1.0 | 59.9%      57.1%
+DIST a 0,5-1 ATR · controle                      4679    47.0%      -10.7 pts  -12.8 | 46.8%      47.2%
+DIST a 0,5-1 ATR · real                         16324    45.0%      -12.7 pts  -22.4 | 44.8%      45.1%
+DIST a 0,5-1 ATR · real · 1 nível(is)            7154    45.3%      -12.4 pts  -17.3 | 45.6%      45.0%
+DIST a 0,5-1 ATR · real · 2-3 nível(is)          7860    44.9%      -12.8 pts  -18.3 | 44.7%      45.1%
+DIST a 0,5-1 ATR · real · 4+ nível(is)           1310    43.6%      -14.1 pts   -9.9 | 41.7%      45.6%
+DIST b 1-1,5 ATR · controle                      7018    57.3%       -0.4 pts   -0.5 | 58.7%      56.1%
+DIST b 1-1,5 ATR · real                          1664    57.5%       -0.3 pts   -0.2 | 61.5%      53.9%
+DIST b 1-1,5 ATR · real · 1 nível(is)             816    56.5%       -1.2 pts   -0.7 | 59.3%      54.1%
+DIST b 1-1,5 ATR · real · 2-3 nível(is)           765    57.8% +       0.1 pts    0.0 | 63.3%      53.0%
+DIST b 1-1,5 ATR · real · 4+ nível(is)             83    63.9% +       6.1 pts    1.1 | 66.7%      60.5%
+DIST c 1,5-2,5 ATR · controle                    2231    80.6% +      22.9 pts   20.4 | 81.9%      79.5%
+DIST c 1,5-2,5 ATR · real                         274    84.3% +      26.6 pts    8.8 | 83.3%      85.3%
+DIST c 1,5-2,5 ATR · real · 1 nível(is)           146    87.7% +      30.0 pts    7.3 | 87.3%      88.0%
+DIST c 1,5-2,5 ATR · real · 2-3 nível(is)         120    80.8% +      23.1 pts    5.1 | 81.0%      80.7%
+DIST c 1,5-2,5 ATR · real · 4+ nível(is)            8    75.0% +      17.3 pts    1.0 | 50.0%      100.0%
+DIST d 2,5+ ATR · controle                         63    82.5% +      24.8 pts    4.0 | 93.1%      73.5%
+DIST d 2,5+ ATR · real                             29    79.3% +      21.6 pts    2.4 | 78.6%      80.0%
+DIST d 2,5+ ATR · real · 1 nível(is)               24    83.3% +      25.6 pts    2.5 | 83.3%      83.3%
+DIST d 2,5+ ATR · real · 2-3 nível(is)              5    60.0% +       2.3 pts    0.1 | 50.0%      66.7%
+ativo BTC · confluência (2+)                     3293    47.5%      -10.2 pts  -10.6 | 48.9%      46.3%
+ativo BTC · nível único                          2743    47.9%       -9.8 pts   -9.5 | 50.5%      46.0%
+ativo ETH · confluência (2+)                     3150    45.2%      -12.5 pts  -12.9 | 44.6%      45.7%
+ativo ETH · nível único                          2666    46.9%      -10.8 pts  -10.3 | 46.5%      47.3%
+ativo SOL · confluência (2+)                     3708    46.3%      -11.4 pts  -12.5 | 45.5%      46.9%
+ativo SOL · nível único                          2731    47.0%      -10.7 pts  -10.3 | 46.8%      47.2%
+resistência · 1 nível(is)                        3937    46.2%      -11.5 pts  -12.9 | 47.1%      45.4%
+resistência · 2 nível(is)                        2898    47.6%      -10.1 pts  -10.0 | 47.9%      47.4%
+resistência · 3 nível(is)                        1355    45.8%      -11.9 pts   -8.5 | 43.8%      47.6%
+resistência · 4+ nível(is)                        647    45.3%      -12.4 pts   -6.3 | 46.2%      44.2%
+suporte · 1 nível(is)                            4203    48.3%       -9.4 pts  -10.9 | 48.5%      48.1%
+suporte · 2 nível(is)                            2989    47.0%      -10.7 pts  -10.7 | 48.4%      45.8%
+suporte · 3 nível(is)                            1508    44.3%      -13.4 pts  -10.0 | 44.6%      44.0%
+suporte · 4+ nível(is)                            754    44.7%      -13.0 pts   -7.0 | 40.5%      48.8%
+todos · 1                                        8140    47.3%      -10.4 pts  -15.2 | 47.8%      46.8%
+todos · 2-3                                      8750    46.6%      -11.1 pts  -16.6 | 46.8%      46.3%
+todos · 4+                                       1401    45.0%      -12.7 pts   -9.2 | 43.3%      46.8%
+todos · CONTROLE                                13991    57.7% +       0.0 pts    0.0 | 58.5%      57.0%
