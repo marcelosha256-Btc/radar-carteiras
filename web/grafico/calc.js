@@ -63,6 +63,18 @@ export function niveisDia(c15, mercado, agora = Date.now()) {
   return { niveis, vwap: hoje ? hoje.vwap : [], ontem, hoje };
 }
 
+/** Níveis de semana e mês passados (UTC, semana começa na segunda) a partir de velas diárias. */
+export function niveisPeriodo(c1d, agora = Date.now()) {
+  if (!c1d || !c1d.length) return [];
+  const sem = t => Math.floor((t - 4 * 864e5) / (7 * 864e5)), mes = t => { const d = new Date(t); return d.getUTCFullYear() * 12 + d.getUTCMonth(); };
+  const out = [];
+  for (const [id, k, nome] of [['PW', sem, 'semana'], ['PM', mes, 'mês']]) {
+    const atual = k(agora), ant = c1d.filter(x => k(x.t) === atual - 1); if (!ant.length) continue;
+    out.push({ id: id + 'H', rot: `máx. ${nome} passada`, preco: Math.max(...ant.map(x => x.h)) }, { id: id + 'L', rot: `mín. ${nome} passada`, preco: Math.min(...ant.map(x => x.l)) });
+  }
+  return out;
+}
+
 /** Pivôs (fractais): topo/fundo confirmado quando `n` velas de cada lado são menores/maiores. */
 export function pivos(c, n = 2) {
   const out = [];

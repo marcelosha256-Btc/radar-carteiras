@@ -1,0 +1,41 @@
+TEMPO GRÁFICO 1h · velas: {
+  BTC: '54620 (2020-09-01 a 2026-11-25)',
+  ETH: '54620 (2020-09-01 a 2026-11-25)',
+  SOL: '54620 (2020-09-01 a 2026-11-25)'
+}
+
+=== 1h A) stop 1 ATR, alvo 1,5, até 48 h · custo 0.1% ida e volta (≈ 0.115R por operação) ===
+base sem sinal: compra n=15306 líq. -0.123R · venda n=15373 líq. -0.117R
+SINAL                                                      n  acerto   líq.R  vs base     t | 1ªmet   2ªmet     | por ativo (líq.R)
+Estrutura nova de baixa (entra a favor)                 7051     41%  -0.096   +0.021   1.2 | +0.002   +0.039   | BTC -0.177(2317) ETH -0.097(2360) SOL -0.017(2374)
+Varreu máx. da ontem e voltou (vende)                   1650     41%  -0.101   +0.016   0.5 | +0.074   -0.037   | BTC -0.150(566) ETH -0.108(571) SOL -0.039(513)
+Rompeu mín. da ontem (fechou abaixo)                    2349     40%  -0.108   +0.009   0.3 | -0.025   +0.043   | BTC -0.159(763) ETH -0.087(762) SOL -0.079(824)
+Rompeu máx. da ontem (fechou acima)                     2548     40%  -0.118   +0.005   0.2 | +0.030   -0.020   | BTC -0.198(850) ETH -0.045(842) SOL -0.110(856)
+Estrutura nova de alta (entra a favor)                  7226     40%  -0.121   +0.001   0.1 | -0.003   +0.005   | BTC -0.153(2382) ETH -0.119(2427) SOL -0.092(2417)
+BOS p/ baixo                                            5143     40%  -0.116   +0.001   0.0 | -0.021   +0.022   | BTC -0.204(1690) ETH -0.112(1695) SOL -0.037(1758)
+CHoCH p/ cima                                           2340     40%  -0.139   -0.016  -0.6 | -0.002   -0.030   | BTC -0.210(800) ETH -0.135(781) SOL -0.067(759)
+CHoCH p/ baixo                                          2399     40%  -0.140   -0.023  -0.9 | -0.076   +0.028   | BTC -0.227(800) ETH -0.092(821) SOL -0.103(778)
+Reteste confirmado depois de CHoCH p/ cima               820     40%  -0.149   -0.026  -0.6 | -0.011   -0.041   | BTC -0.232(283) ETH -0.174(254) SOL -0.043(283)
+BOS p/ cima                                             5239     39%  -0.149   -0.026  -1.3 | -0.002   -0.049   | BTC -0.241(1734) ETH -0.110(1787) SOL -0.096(1718)
+Reteste confirmado depois de BOS p/ cima                2128     39%  -0.156   -0.034  -1.2 | -0.045   -0.025   | BTC -0.193(707) ETH -0.161(684) SOL -0.116(737)
+Reteste confirmado depois de CHoCH p/ baixo              809     39%  -0.159   -0.042  -0.9 | -0.067   -0.017   | BTC -0.218(272) ETH -0.180(265) SOL -0.079(272)
+Varreu mín. da ontem e voltou (compra)                  1644     38%  -0.171   -0.049  -1.5 | +0.009   -0.107   | BTC -0.203(560) ETH -0.106(535) SOL -0.203(549)
+Reteste confirmado depois de BOS p/ baixo               2023     37%  -0.195   -0.078  -2.7 | -0.087   -0.069   | BTC -0.292(649) ETH -0.248(616) SOL -0.069(758)
+
+=== 1h B) stop 2 ATR, alvo 3, até 96 h · custo 0.1% ida e volta (≈ 0.052R por operação) ===
+base sem sinal: compra n=4342 líq. -0.325R · venda n=4327 líq. -0.361R
+SINAL                                                      n  acerto   líq.R  vs base     t | 1ªmet   2ªmet     | por ativo (líq.R)
+Rompeu máx. da ontem (fechou acima)                     1858     30%  -0.319   +0.006   0.2 | +0.009   +0.002   | BTC -0.346(633) ETH -0.312(606) SOL -0.299(619)
+Estrutura nova de baixa (entra a favor)                 3099     29%  -0.362   -0.001  -0.1 | +0.007   -0.010   | BTC -0.422(1064) ETH -0.381(1046) SOL -0.278(989)
+CHoCH p/ baixo                                          1901     28%  -0.374   -0.013  -0.4 | -0.012   -0.014   | BTC -0.402(646) ETH -0.392(640) SOL -0.325(615)
+Estrutura nova de alta (entra a favor)                  3230     30%  -0.339   -0.014  -0.6 | -0.032   +0.003   | BTC -0.383(1055) ETH -0.323(1111) SOL -0.313(1064)
+BOS p/ baixo                                            2748     28%  -0.377   -0.016  -0.6 | -0.007   -0.025   | BTC -0.436(943) ETH -0.405(937) SOL -0.281(868)
+CHoCH p/ cima                                           1810     29%  -0.345   -0.020  -0.6 | -0.004   -0.036   | BTC -0.412(632) ETH -0.321(598) SOL -0.297(580)
+Rompeu mín. da ontem (fechou abaixo)                    1759     28%  -0.382   -0.022  -0.7 | -0.052   +0.007   | BTC -0.442(585) ETH -0.411(593) SOL -0.294(581)
+Reteste confirmado depois de BOS p/ baixo               1444     28%  -0.385   -0.024  -0.7 | +0.019   -0.065   | BTC -0.462(483) ETH -0.429(456) SOL -0.271(505)
+Varreu mín. da ontem e voltou (compra)                  1264     29%  -0.350   -0.025  -0.7 | -0.019   -0.031   | BTC -0.377(434) ETH -0.280(397) SOL -0.387(433)
+BOS p/ cima                                             2846     28%  -0.373   -0.048  -1.8 | -0.049   -0.048   | BTC -0.411(943) ETH -0.363(972) SOL -0.346(931)
+Reteste confirmado depois de CHoCH p/ cima               749     28%  -0.376   -0.051  -1.2 | -0.050   -0.052   | BTC -0.439(262) ETH -0.362(235) SOL -0.323(252)
+Varreu máx. da ontem e voltou (vende)                   1254     26%  -0.413   -0.052  -1.5 | +0.005   -0.105   | BTC -0.434(424) ETH -0.440(429) SOL -0.363(401)
+Reteste confirmado depois de CHoCH p/ baixo              723     27%  -0.414   -0.053  -1.2 | -0.023   -0.082   | BTC -0.498(242) ETH -0.406(241) SOL -0.336(240)
+Reteste confirmado depois de BOS p/ cima                1588     28%  -0.385   -0.060  -1.9 | -0.070   -0.051   | BTC -0.383(534) ETH -0.371(510) SOL -0.400(544)

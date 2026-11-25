@@ -1,7 +1,7 @@
 /* Gráfico de velas em SVG com os níveis do dia, VWAP e a estrutura (pivôs HH/HL/LH/LL, rompimento e reteste).
  * Só desenha o que grafico/calc.js calculou. Cores de alta/baixa vêm das variáveis do tema. */
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const COR_NIVEL = { PDH: '#d4a72c', PDL: '#d4a72c', PDC: '#9a9a9a', AB: '#378add', ABNY: '#7f77dd', VWAP: '#e67e22', MXD: '#9a9a9a', MND: '#9a9a9a' };
+const COR_NIVEL = { PDH: '#d4a72c', PDL: '#d4a72c', PDC: '#9a9a9a', AB: '#378add', ABNY: '#7f77dd', VWAP: '#e67e22', MXD: '#9a9a9a', MND: '#9a9a9a', PWH: '#c0568f', PWL: '#c0568f', PMH: '#1d9e75', PML: '#1d9e75' };
 const HALO = 'paint-order:stroke;stroke:var(--surface);stroke-width:3.5px;stroke-linejoin:round;';
 
 export function fmtPreco(n) {
@@ -9,6 +9,7 @@ export function fmtPreco(n) {
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: n < 10 ? 4 : 2 });
 }
 const hora = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const soDia = t => new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 const diaHora = t => new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 /** opts: { candles, niv (niveisDia), est (estrutura), preco, ms, W, H } → { svg, fora } */
@@ -28,7 +29,7 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 380 }) {
     s += `<line x1="${L}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:var(--line)"/><text x="${x1 + 6}" y="${(y + 4).toFixed(1)}" style="fill:var(--muted);font-size:11px">${fmtPreco(p)}</text>`; }
   // horas no eixo
   const cada = Math.max(1, Math.round(c.length / 6));
-  for (let i = 0; i < c.length; i += cada) s += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" style="fill:var(--muted);font-size:10.5px">${ms >= 36e5 ? diaHora(c[i].t) : hora(c[i].t)}</text>`;
+  for (let i = 0; i < c.length; i += cada) s += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" style="fill:var(--muted);font-size:10.5px">${ms >= 864e5 ? soDia(c[i].t) : ms >= 36e5 ? diaHora(c[i].t) : hora(c[i].t)}</text>`;
   // velas
   c.forEach((v, i) => { const up = v.c >= v.o, col = up ? 'var(--up)' : 'var(--down)', yo = Y(v.o), yc = Y(v.c);
     s += `<line x1="${X(i).toFixed(1)}" x2="${X(i).toFixed(1)}" y1="${Y(v.h).toFixed(1)}" y2="${Y(v.l).toFixed(1)}" style="stroke:${col}"/>`

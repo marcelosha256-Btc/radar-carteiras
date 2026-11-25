@@ -6,7 +6,7 @@
 import { fraseRsi } from '../rsi/calc.js';
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
-import { niveisDia, estrutura as estruturaVelas, leitura as leituraGrafico } from '../grafico/calc.js';
+import { niveisDia, niveisPeriodo, estrutura as estruturaVelas, leitura as leituraGrafico } from '../grafico/calc.js';
 import { graficoSvg } from '../grafico/desenho.js';
 const HL = 'https://api.hyperliquid.xyz/info';
 const ATIVOS = { cripto: ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'],
@@ -148,10 +148,12 @@ const graf = {};
 async function carregarGrafico(k) {
   const now = Date.now(), conv = c => c.map(x => ({ t: x.t, o: +x.o, h: +x.h, l: +x.l, c: +x.c, v: +x.v }));
   try {
-    const [a, b] = await Promise.all([
+    const [a, b, d4, d1] = await Promise.all([
       hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '15m', startTime: now - 4 * 864e5, endTime: now } }),
-      hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '1h', startTime: now - 14 * 864e5, endTime: now } })]);
-    graf[k] = { t: now, c15: conv(a), c1h: conv(b) };
+      hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '1h', startTime: now - 14 * 864e5, endTime: now } }),
+      hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '4h', startTime: now - 70 * 864e5, endTime: now } }),
+      hlApi({ type: 'candleSnapshot', req: { coin: k, interval: '1d', startTime: now - 400 * 864e5, endTime: now } })]);
+    graf[k] = { t: now, c15: conv(a), c1h: conv(b), c4h: conv(d4), c1d: conv(d1) };
   } catch (e) {}
 }
 async function carregarMinuto(k) {
@@ -313,7 +315,7 @@ function criarApp(mercado, painel, raiz) {
       <div class="box"><div class="box-head"><h2>Mapa de liquidações</h2><div class="seg lv-zoom"><button data-z="1">±15%</button><button data-z="0.5">±7,5%</button><button data-z="0.2">±3%</button></div></div>
         <div class="lv-gat"></div>
         <div class="lv-chart"><div class="lv-svg"></div><div class="lv-tip"></div></div><p class="small muted lv-foot"></p></div>
-      <div class="box lv-graf"><div class="box-head"><h2>Gráfico · níveis do dia e estrutura</h2><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button></div></div>
+      <div class="box lv-graf"><div class="box-head"><h2>Gráfico · níveis do dia e estrutura</h2><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div></div>
         <p class="small lv-gleit"></p><div class="lv-gsvg"></div><p class="small muted lv-gnota"></p></div>
       <div class="lv-cards"></div>
       <div class="box lv-full lv-liqr"></div>
@@ -573,15 +575,16 @@ function criarApp(mercado, painel, raiz) {
     const k = SEL, G = graf[k], cur = live[k];
     box.querySelectorAll('.lv-gtf button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.g === GTF)));
     if (!G || !cur) { if (gSig !== 'x') { $('.lv-gsvg').innerHTML = '<p class="muted small">Buscando as velas…</p>'; $('.lv-gleit').textContent = ''; gSig = 'x'; } return; }
-    const ms = GTF === '1h' ? 36e5 : 9e5, todas = GTF === '1h' ? G.c1h : G.c15, c = todas.slice(-(GTF === '1h' ? 96 : 120));
+    const ms = { '15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5 }[GTF] || 9e5, todas = { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] || G.c15, c = todas.slice(-({ '15m': 120, '1h': 96, '4h': 120, '1d': 120 }[GTF] || 120));
     const sig = [k, GTF, G.t, cur, c.length].join('|'); if (sig === gSig) return; gSig = sig;
     const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
+    if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
     const { svg, fora } = graficoSvg({ candles: c, niv, est, preco: cur, ms });
     $('.lv-gsvg').innerHTML = svg;
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
     $('.lv-gnota').textContent = `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +
       (fora.length ? `Fora da vista: ${fora.map(n => n.rot + ' ' + fpx(n.preco)).join(', ')}. ` : '') +
-      'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Medido em 15 min de BTC, ETH e SOL (2024 a 2026, 300 mil velas): nenhum desses sinais deu ganho depois dos custos, e vários foram piores que entrar sem sinal. É mapa de contexto, não gatilho (estudo em estudos/niveis_estrutura).';
+      'Estrutura: pivôs de 2 velas (HH/HL = topo/fundo mais alto, LH/LL = mais baixo); BOS = continuação, CHoCH = quebra contra a tendência. Medido em BTC, ETH e SOL (15 min, 1 h, 4 h e diário, até 2020): nenhum desses sinais deu ganho firme depois dos custos, e vários foram piores que entrar sem sinal. Única pista: no diário, fechar abaixo da mínima do mês passado (poucos casos, ainda não confirmada). É mapa de contexto, não gatilho (estudo em estudos/niveis_estrutura).';
   }
   function render() {
     renderTabs();

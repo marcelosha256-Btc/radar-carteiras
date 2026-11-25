@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { grupos, niveisDia, pivos, rotular, estrutura, leitura, atrAbs, diaUTC, nyHora } from '../web/grafico/calc.js';
+import { grupos, niveisDia, niveisPeriodo, pivos, rotular, estrutura, leitura, atrAbs, diaUTC, nyHora } from '../web/grafico/calc.js';
 
 const M15 = 9e5;
 const vela = (t, o, h, l, c, v = 10) => ({ t, o, h, l, c, v });
@@ -105,4 +105,14 @@ test('reteste: aguardando, em curso, confirmado e falhou', () => {
 test('leitura: primeira letra maiúscula mesmo sem VWAP', () => {
   const niv = { niveis: [{ id: 'PDH', rot: 'máx. ontem', preco: 105 }, { id: 'PDL', rot: 'mín. ontem', preco: 90 }] };
   assert.match(leitura(null, niv, 100), /^Dentro da faixa de ontem\./);
+});
+
+test('níveis da semana e do mês passados (velas diárias)', () => {
+  const D = 864e5, dia = (y, m, d) => Date.UTC(y, m, d), v = (t, h, l) => ({ t, o: l, h, l, c: h, v: 1 });
+  // semana de seg 16/11 a dom 22/11/2026; hoje é qui 26/11 (semana atual: 23/11 em diante); mês passado = outubro
+  const c = [v(dia(2026, 9, 10), 200, 150), v(dia(2026, 10, 16), 130, 110), v(dia(2026, 10, 18), 140, 105), v(dia(2026, 10, 22), 125, 100), v(dia(2026, 10, 24), 160, 120)];
+  const n = Object.fromEntries(niveisPeriodo(c, dia(2026, 10, 26) + 3600e3).map(x => [x.id, x.preco]));
+  assert.equal(n.PWH, 140); assert.equal(n.PWL, 100);   // 16 a 22/11
+  assert.equal(n.PMH, 200); assert.equal(n.PML, 150);   // outubro
+  assert.deepEqual(niveisPeriodo([]), []);
 });
