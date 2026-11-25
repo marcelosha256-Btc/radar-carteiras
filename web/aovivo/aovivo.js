@@ -5,6 +5,7 @@
  * Fora de propósito: "qual lado é capturado primeiro" e "escada/cascata" — testados no radar em 11/11/2026 e rejeitados. */
 import { fraseRsi } from '../rsi/calc.js';
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
+import { vix, fraseVix } from '../contexto/vix.js';
 const HL = 'https://api.hyperliquid.xyz/info';
 const ATIVOS = { cripto: ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'],
   acoes: ['xyz:SP500', 'xyz:XYZ100', 'xyz:NVDA', 'xyz:TSLA', 'xyz:MU', 'xyz:SKHX', 'xyz:GOOGL', 'xyz:GOLD'] };
@@ -377,7 +378,7 @@ function criarApp(mercado, painel, raiz) {
       const E = isL ? o.a[0] + zn.bw / 2 : o.a[0] - zn.bw / 2;
       return `<span style="color:${isL ? COR.long : COR.short}"><b>${isL ? 'Apoio' : 'Venda'}</b> ${fpx(E)} (${pc((E / cur - 1) * 100)}) · ${fm(o.a[1])}</span> <span class="muted">→ tocar em 24 h</span> <b>${pp(pTouch(k, E, cur, 24))}</b>`; };
     const cd = cand[k] && cand[k]['1d'], fraseD = cd && cd.length > 20 ? fraseRsi([...cd.map(x => x.c).slice(0, cd[cd.length - 1].t + 864e5 > Date.now() ? -1 : undefined), cur], 'do dia') : '';
-    const ctxMedo = mercado === 'cripto' && MEDO ? fraseMedo(MEDO) : '';
+    const ctxMedo = mercado === 'cripto' ? (MEDO ? fraseMedo(MEDO) : '') : (VIX ? fraseVix(VIX) : '');
     let rs = ''; TF.forEach(([lb, tf, ms]) => { const r = rsiAt(k, tf, ms, cur);
       rs += `<div class="lv-rt"><span class="small muted">${lb}</span>` + (r ? `<b class="num" style="color:${rsiCol(r.v)}">${f1(r.v)}<small style="color:${r.v >= r.prev ? COR.up : COR.dn}"> ${r.v >= r.prev ? '▲' : '▼'}</small></b>
         <div class="lv-gauge"><i style="left:${Math.min(100, Math.max(0, r.v))}%"></i></div>` : `<b class="muted">—</b><div class="lv-gauge"></div>`) + `</div>`; });
@@ -587,7 +588,9 @@ function criarApp(mercado, painel, raiz) {
     if (live[k]) carregarLivro(k, live[k]).then(render);
   }
   setSom(SOM);
-  let MEDO = null; medo().then(m => { MEDO = m; }); setInterval(() => medo().then(m => { MEDO = m; }), 3600e3);
+  let MEDO = null, VIX = null;
+  const ctx = () => (mercado === 'cripto' ? medo().then(m => { MEDO = m; }) : vix().then(m => { VIX = m; }));
+  ctx(); setInterval(ctx, 900e3);
   // a tela RSI Mestre abre o ativo clicado aqui
   window.addEventListener('radar-abrir-ativo', ev => { const d = ev.detail || {}; if (d.mercado !== mercado || !d.coin) return;
     if (!lista.includes(d.coin)) lista = [d.coin, ...lista].slice(0, 12);

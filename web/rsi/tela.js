@@ -3,6 +3,7 @@
  * em lotes pequenos para não levar 429. Guarda 10 min no navegador. */
 import { rsiWilder, agrupar, faixa, resumo, mediaSimples, regime } from './calc.js';
 import { medo, frase } from '../contexto/medo.js';
+import { vix, fraseVix } from '../contexto/vix.js';
 
 const HL = 'https://api.hyperliquid.xyz/info';
 const CRIPTO = ['BTC', 'ETH', 'SOL', 'XRP', 'HYPE', 'NEAR'];
@@ -45,7 +46,7 @@ function ativosAcoes() {
   } catch (e) { return []; }
 }
 
-const S = { medo: null, linhas: ler(CACHE, { t: 0, d: {} }), carregando: false, erro: '', filtro: ler('radar-rsi-filtro', 'tudo') };
+const S = { medo: null, vix: null, linhas: ler(CACHE, { t: 0, d: {} }), carregando: false, erro: '', filtro: ler('radar-rsi-filtro', 'tudo') };
 
 const reg = l => { const g = regime(l.r['1d']), cor = g.lado < 0 ? 'var(--warn)' : g.lado > 0 ? 'var(--down)' : 'var(--muted)';
   return `<span class="chip" style="color:${cor};border-color:${cor};font-weight:${g.nivel === 3 ? 800 : 600}">${g.t}</span>`; };
@@ -68,7 +69,8 @@ function desenhar() {
   root.innerHTML = `<div class="box-head"><h2>RSI Mestre</h2><p>RSI 14 (Wilder) em cinco tempos gráficos, das velas da Hyperliquid. Laranja = sobrevenda (≤30), vermelho = sobrecompra (≥70), negrito = extremo (≤20 ou ≥80). Regime pelo RSI do dia (≤30 capitulação, ≤35 queda forte, ≤45 queda; espelho em cima). Clique numa linha para abrir o ativo na Liquidez ao vivo.</p></div>
     <p class="small" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span class="facts">${filtro}</span><span style="flex:1"></span>
       <span class="muted">${S.carregando ? 'atualizando…' : 'atualizado às ' + quando}</span> <button class="hj-link" data-act="rsi-atualizar">atualizar</button></p>
-    ${S.medo ? `<p class="small" style="margin:6px 0">${esc(frase(S.medo))}</p>` : ''}
+    ${S.medo && S.filtro !== 'acoes' ? `<p class="small" style="margin:6px 0">${esc(frase(S.medo))}</p>` : ''}
+    ${S.vix && S.filtro !== 'cripto' ? `<p class="small" style="margin:6px 0">${esc(fraseVix(S.vix))}</p>` : ''}
     ${S.erro ? `<p class="small" style="color:var(--warn)">${esc(S.erro)}</p>` : ''}
     <div class="tbl-wrap"><table><thead><tr><th>Ativo</th><th>Preço · 24 h</th><th>Regime</th>${TFS.map(([, n]) => `<th style="text-align:center">${n}</th>`).join('')}<th>Leitura</th></tr></thead><tbody>
     ${comRes.length ? comRes.map(l => `<tr class="rsi-lin" data-coin="${esc(l.coin)}" title="Abrir na Liquidez ao vivo" style="cursor:pointer"><td><b>${esc(l.coin.replace('xyz:', ''))}</b>${l.coin.startsWith('xyz:') ? ' <span class="small muted">ação</span>' : ''}</td>
@@ -83,6 +85,7 @@ function desenhar() {
 async function carregar(forcar) {
   if (S.carregando) return;
   medo().then(m => { if (m) { S.medo = m; desenhar(); } });
+  vix().then(m => { if (m) { S.vix = m; desenhar(); } });
   if (!forcar && Date.now() - S.linhas.t < VALIDADE && Object.keys(S.linhas.d).length) return desenhar();
   const lista = [...CRIPTO, ...ativosAcoes()];
   S.carregando = true; S.erro = ''; desenhar();

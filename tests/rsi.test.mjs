@@ -57,3 +57,10 @@ test('medo e ganância: faixa e frase', () => {
   assert.match(fraseMedo({ v: 8, sem: 8 }), /contexto, não gatilho/);
   assert.equal(fraseMedo(null), '');
 });
+
+import { faixaVix, fraseVix } from '../web/contexto/vix.js';
+test('VIX: faixas e frase', () => {
+  assert.equal(faixaVix(12).txt, 'calmo (<15)'); assert.equal(faixaVix(26.4).txt, 'estresse (25 a 35)'); assert.equal(faixaVix(40).txt, 'pânico (≥35)');
+  assert.match(fraseVix({ v: 26.4, ont: 26.6, sem: 20 }), /26,4 · estresse.*-0,2 no dia.*era 20,0 há 5 pregões.*não gatilho/);
+  assert.equal(fraseVix(null), '');
+});
