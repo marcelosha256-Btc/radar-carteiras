@@ -420,7 +420,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const k = SEL, cur = A ? A.cur : live[k];
     const an = $('.lv-an'); if (an.dataset.k !== k) { an.dataset.k = k; an.innerHTML = nome(k) + hlLink(k); }   // só refaz ao trocar de ativo, para o link aceitar o clique
     const px = $('.lv-px'); px.textContent = cur ? fpx(cur) : '—'; px.style.color = flash[k] && flash[k].until > Date.now() ? flash[k].col : '';
-    $('.lv-tr').innerHTML = A ? `<span class="chip" style="color:${A.tr.color}">${A.tr.arrow} ${A.tr.label}</span>` : '';
+    $('.lv-tr').innerHTML = A ? `<span class="chip" style="color:${A.tr.color}" title="Variação do preço nos últimos 1 a 5 minutos. Não é a tendência do dia nem o lado do plano.">${A.tr.arrow} impulso curto: ${A.tr.label.toLowerCase()}</span>` : '';
     if (A) {
       const est = ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda'); return (m === 'day' ? 'Day' : 'Swing') + ' ' + [!a.blocks.length ? 'compra livre' : '', !b.blocks.length ? 'venda livre' : ''].filter(Boolean).join(' e ') || 'bloqueado'; }).join(' · ');
       if (ultTrava[k] != null && ultTrava[k] !== est) avisar('trava|' + est, 'A Trava do roteiro mudou: ' + est + '.', 60e3);
@@ -653,7 +653,16 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     // as suas Regras do dia (janela de entrada, pregão de NY): o mesmo checklist da calculadora, sem a parte de tamanho
     let regras = REGRAS_PADRAO; try { regras = { ...REGRAS_PADRAO, ...(JSON.parse(localStorage.getItem('radar-regras') || 'null') || {}) }; } catch (e) {}
     const avisos = checklistRegras({ calc: null, trava: null, regras, mercado }).filter(x => x[0] !== 'ok').map(x => x[1]);
-    const o = op[0]; return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, bloq: o.r.blocks[0] || '', avisos };
+    const o = op[0];
+    // contexto que a Trava não pesa: vender com o diário esticado para baixo (ou comprar esticado para cima) e operar contra a estrutura do tempo que você está vendo.
+    // Só avisa (não bloqueia): ainda não foi medido se isso melhora o resultado.
+    const G = graf[SEL], fc = a => (a || []).map(x => x.c), rd = G ? rsiWilder(fc(G.c1d)) : null;
+    if (rd != null && o.l === 'venda' && rd <= 30) avisos.push(`Vendendo com o RSI diário em sobrevenda (${f1(rd)}): risco de vender no fundo`);
+    if (rd != null && o.l === 'compra' && rd >= 70) avisos.push(`Comprando com o RSI diário em sobrecompra (${f1(rd)}): risco de comprar no topo`);
+    const vel = G ? { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] : null, eT = vel && vel.length > 30 ? estruturaVelas(vel.slice(-200)) : null;
+    if (eT && ((o.l === 'venda' && eT.tendencia === 'alta') || (o.l === 'compra' && eT.tendencia === 'baixa')))
+      avisos.push(`Contra a estrutura do ${{ '15m': '15 min', '1h': '1H', '4h': '4H', '1d': 'diário' }[GTF] || GTF} (topos e fundos ${eT.tendencia === 'alta' ? 'mais altos' : 'mais baixos'})`);
+    return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, bloq: o.r.blocks[0] || '', avisos };
   }
   function aoVivo(arr, ms, px) {
     if (!arr || !arr.length || !px) return arr;
@@ -675,7 +684,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const cam = $('.lv-gcam');
     if (cam) cam.innerHTML = '<span class="small muted">Mostrar:</span>' + CAMADAS.map(([c, n]) => `<button type="button" class="chip" data-c="${c}" aria-pressed="${!!CAM[c]}" style="cursor:pointer;font:inherit;font-size:12px;border:1px solid ${CAM[c] ? 'var(--accent)' : 'var(--line)'};background:${CAM[c] ? 'var(--accent-soft)' : 'none'};color:var(--fg)">${CAM[c] ? '✓ ' : ''}${n}</button>`).join('');
     const pe = $('.lv-gplano');
-    if (pe) pe.innerHTML = !CAM.plano ? '' : pl && pl.bloq ? `<span class="muted">Meu plano: nenhum day trade liberado agora. O melhor lado (${pl.lado}) está bloqueado: ${pl.bloq}.</span>${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}` : pl ? `<span style="color:${pl.cor};font-weight:700">Meu plano · day trade ${pl.lado} · ${pl.st} ${pl.sc}</span> <span class="muted">(da Trava do roteiro: entrada ~${fpx(pl.entrada)} · stop ${fpx(pl.stop)} · alvo ${fpx(pl.alvo)}${pl.rr != null ? ' · R:R ' + f1(pl.rr) : ''}${pl.bloq ? ' · ⛔ ' + pl.bloq : ''})</span>${pl.st === 'LIBERADO' ? ' <button type="button" class="lv-gdiario hj-link" style="font-size:12px">levar este plano ao diário →</button>' : ` <b style="color:var(--warn)">· aguardar gatilho</b> <span class="muted">(nota ${pl.sc}: ainda não chegou em LIBERADO; o mesmo que a Liquidez ao vivo mostra)</span>`}${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}`
+    if (pe) pe.innerHTML = !CAM.plano ? '' : pl && pl.bloq ? `<span class="muted">Meu plano: nenhum day trade liberado agora. O melhor lado (${pl.lado}) está bloqueado: ${pl.bloq}.</span>${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}` : pl ? `<span style="color:${pl.cor};font-weight:700">Meu plano · day trade ${pl.lado} · ${pl.st} ${pl.sc}</span> <span class="muted">(da Trava do roteiro: entrada ~${fpx(pl.entrada)} · stop ${fpx(pl.stop)} · alvo ${fpx(pl.alvo)}${pl.rr != null ? ' · R:R ' + f1(pl.rr) : ''}${pl.bloq ? ' · ⛔ ' + pl.bloq : ''})</span>${pl.st === 'LIBERADO' ? ' <button type="button" class="lv-gdiario hj-link" style="font-size:12px">guardar plano e ir ao passo 5 (hora de entrar?) →</button>' : ` <b style="color:var(--warn)">· aguardar gatilho</b> <span class="muted">(nota ${pl.sc}: ainda não chegou em LIBERADO; o mesmo que a Liquidez ao vivo mostra)</span>`}${pl.avisos && pl.avisos.length ? `<br><span style="color:var(--warn)">⚠ ${pl.avisos.join(' · ')}</span>` : ''}`
       : '<span class="muted">Meu plano: sem plano agora (a Trava precisa do mapa da Coinversa para achar stop e alvo).</span>';
     const niv = niveisDia(G.c15, mercado), est = estruturaVelas(todas.slice(-200));
     if (GTF === '4h' || GTF === '1d') niv.niveis = niv.niveis.concat(niveisPeriodo(G.c1d));
@@ -733,10 +742,11 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     if (sm) { const on = !SOM; setSom(on); if (on) { bip(); try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (er) {} } return; }
     const m = e.target.closest('.lv-mode button'); if (m) { setModo(m.dataset.m); return; }
     const z = e.target.closest('.lv-zoom button'); if (z) { setZoom(+z.dataset.z); render(); return; }
-    if (e.target.closest('.lv-gdiario')) {   // passo 4 → 6 do roteiro: o plano vai pronto para o formulário do Meu diário
+    if (e.target.closest('.lv-gdiario')) {   // passo 4 → 5: o plano fica guardado; no passo 5 você decide se entra e só então ele vai para o diário
       const pl = planoDe(); if (!pl || pl.bloq || pl.st !== 'LIBERADO') return;
-      window.dispatchEvent(new CustomEvent('radar-levar-diario', { detail: { ativo: nome(SEL), mercado, lado: pl.lado, tf: GTF, entrada: pl.entrada, stop: pl.stop, alvo1: pl.alvo, setup: 'Plano da Trava (Gráfico)' } }));
-      if (typeof window.show === 'function') window.show('trades'); window.scrollTo(0, 0); return;
+      try { sessionStorage.setItem('radar-plano-pendente', JSON.stringify({ ativo: nome(SEL), coin: SEL, mercado, lado: pl.lado, tf: GTF, entrada: pl.entrada, stop: pl.stop, alvo1: pl.alvo, setup: 'Plano da Trava (Gráfico)', ts: Date.now() })); } catch (x) {}
+      window.dispatchEvent(new CustomEvent('radar-abrir-ativo', { detail: { coin: SEL, mercado } }));
+      if (typeof window.show === 'function') window.show(mercado === 'acoes' ? 'a-aovivo' : 'aovivo'); window.scrollTo(0, 0); return;
     }
     if (e.target.closest('.lv-grsi')) { if (typeof window.show === 'function') window.show('rsi'); window.scrollTo(0, 0); return; }
     if (e.target.closest('.lv-irgraf')) { if (typeof window.show === 'function') window.show(mercado === 'acoes' ? 'a-grafico' : 'grafico'); window.scrollTo(0, 0); return; }
