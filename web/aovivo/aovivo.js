@@ -3,7 +3,7 @@
  * Chance de tocar = método do coletor/chance.py (excursão das próximas 4 h/24 h ÷ amplitude média das 24 velas de 1 h
  * anteriores, 5.000 velas da Hyperliquid), calculada aqui no navegador para qualquer ativo, com conferência 70/30.
  * Fora de propósito: "qual lado é capturado primeiro" e "escada/cascata" — testados no radar em 11/11/2026 e rejeitados. */
-import { fraseRsi, rsiSerie, regime as regimeRsi, rsiWilder, agrupar, faixa as faixaRsi, resumo as resumoRsi } from '../rsi/calc.js';
+import { fraseRsi, rsiSerie, regime as regimeRsi, rsiWilder, agrupar, faixa as faixaRsi, resumo as resumoRsi, precoParaRsi } from '../rsi/calc.js';
 import { medo, frase as fraseMedo } from '../contexto/medo.js';
 import { vix, fraseVix } from '../contexto/vix.js';
 import { niveisDia, niveisPeriodo, estrutura as estruturaVelas, leitura as leituraGrafico } from '../grafico/calc.js';
@@ -314,14 +314,14 @@ const GRAF_HTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"
     <div class="box lv-graf"><div class="box-head" style="flex-wrap:wrap;gap:8px"><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div>
       <div class="lv-gcam" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div><span style="flex:1"></span><button class="lv-grsi" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">ver no RSI Mestre ↗</button></div>
       <p class="small lv-gleit"></p><div class="lv-grsil"></div><div class="lv-gplano small"></div><div class="lv-gsvg"></div><p class="small muted lv-gnota"></p></div>`;
-const CAMADAS = [['niv', 'Níveis'], ['est', 'Estrutura'], ['liq', 'Liquidez'], ['bol', 'Liquidações'], ['rsi', 'RSI'], ['plano', 'Meu plano'], ['trades', 'Meus trades']];
+const CAMADAS = [['niv', 'Níveis'], ['est', 'Estrutura'], ['liq', 'Liquidez'], ['bol', 'Liquidações'], ['rsi', 'RSI'], ['plano', 'Meu plano'], ['trades', 'Meus trades'], ['rsima', 'Média do RSI']];
 
 /* ---------- uma instância por mercado (Cripto / Ações) e por vista (Liquidez ao vivo / Gráfico) ---------- */
 function criarApp(mercado, painel, raiz, vista = 'liq') {
   let lista = mercado === 'acoes' && Array.isArray(window.radarAcoes) && window.radarAcoes.length ? window.radarAcoes.slice(0, 12) : ATIVOS[mercado];
   const ls = (n, v) => { try { if (v === undefined) return localStorage.getItem('lv-' + mercado + '-' + n); localStorage.setItem('lv-' + mercado + '-' + n, v); } catch (e) { return null; } };
   let SEL = ls('sel') || lista[0], Z = +(ls('zoom') || 0.5), MODO = ls('modo') || 'full', GTF = ls('gtf') || '15m', hov = null, mx0 = 0, my0 = 0, gSig = '';
-  let CAM = Object.fromEntries(CAMADAS.map(([k]) => [k, true]));
+  let CAM = Object.fromEntries(CAMADAS.map(([k]) => [k, k !== 'rsima']));   // a média do RSI começa desligada
   try { Object.assign(CAM, JSON.parse(ls('gcam') || '{}')); } catch (e) {}
   const rOpen = new Set();
 
@@ -615,9 +615,17 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     op.sort((a, b) => (a.r.blocks.length - b.r.blocks.length) || (b.r.sc - a.r.sc));
     const o = op[0]; return { lado: o.l, entrada: A.cur, stop: o.r.stop, alvo: o.r.alvo, rr: o.r.rr, st: o.r.st[0], cor: o.r.st[1], sc: o.r.sc, bloq: o.r.blocks[0] || '' };
   }
+  function aoVivo(arr, ms, px) {
+    if (!arr || !arr.length || !px) return arr;
+    const u = arr[arr.length - 1], agora = Date.now();
+    if (agora < u.t + ms) return arr.slice(0, -1).concat({ ...u, c: px, h: Math.max(u.h, px), l: Math.min(u.l, px) });
+    const t = u.t + Math.floor((agora - u.t) / ms) * ms;
+    return arr.concat({ t, o: u.c, h: Math.max(u.c, px), l: Math.min(u.c, px), c: px, v: 0 });
+  }
   function renderGrafico() {
     const box = $('.lv-graf'); if (!box) return;
-    const k = SEL, G = graf[k], cur = live[k];
+    const k = SEL, G0 = graf[k], cur = live[k];
+    const G = G0 && cur ? { ...G0, c15: aoVivo(G0.c15, 9e5, cur), c1h: aoVivo(G0.c1h, 36e5, cur), c4h: aoVivo(G0.c4h, 144e5, cur), c1d: aoVivo(G0.c1d, 864e5, cur) } : G0;
     box.querySelectorAll('.lv-gtf button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.g === GTF)));
     if (!G || !cur) { if (gSig !== 'x') { $('.lv-gsvg').innerHTML = '<p class="muted small">Buscando as velas…</p>'; $('.lv-gleit').textContent = ''; gSig = 'x'; } return; }
     const ms = { '15m': 9e5, '1h': 36e5, '4h': 144e5, '1d': 864e5 }[GTF] || 9e5, todas = { '15m': G.c15, '1h': G.c1h, '4h': G.c4h, '1d': G.c1d }[GTF] || G.c15, c = todas.slice(-({ '15m': 120, '1h': 96, '4h': 120, '1d': 120 }[GTF] || 120));
@@ -639,9 +647,12 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const corReg = rg.lado > 0 ? 'var(--up)' : rg.lado < 0 ? 'var(--warn)' : 'var(--muted)';
     $('.lv-grsil').innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 4px"><span class="small muted">RSI 14</span>${[['15m', '15 min'], ['1h', '1H'], ['4h', '4H'], ['1d', 'Dia'], ['1w', 'Semana']].map(([k, n]) => chip(k, n)).join('')}` +
       `<span style="font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid ${corReg};color:${corReg}">${rg.t}</span><span class="small muted">${rr.txt}</span></div>`;
-    const rs = rsiSerie(todas.map(x => x.c)).slice(-c.length), rd = G.c1d && G.c1d.length > 20 ? rsiSerie(G.c1d.map(x => x.c)).pop() : null;
+    const fech = todas.map(x => x.c), rsTodo = rsiSerie(fech);
+    const rsMed = CAM.rsima ? rsTodo.map((v, i) => { if (i < 13) return null; const j = rsTodo.slice(i - 13, i + 1); return j.some(x => x == null) ? null : j.reduce((a, b) => a + b, 0) / 14; }).slice(-c.length) : null;
+    const rsNiv = [70, 50, 30].map(v => ({ v, p: precoParaRsi(fech, v) }));
+    const rs = rsTodo.slice(-c.length), rd = G.c1d && G.c1d.length > 20 ? rsiSerie(G.c1d.map(x => x.c)).pop() : null;
     const { svg, fora } = graficoSvg({ candles: c, niv: CAM.niv ? niv : null, est: CAM.est ? est : null, preco: cur, ms, perfil: CAM.liq ? perf : null, bolhas: CAM.bol ? bol : null,
-      rsi: CAM.rsi ? rs : null, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl, trades: tds });
+      rsi: CAM.rsi ? rs : null, rsiMedia: CAM.rsi ? rsMed : null, rsiNiveis: rsNiv, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl, trades: tds });
     $('.lv-gsvg').innerHTML = svg;
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);
     $('.lv-gnota').textContent = (curto ? `Bolhas = liquidações reais (laranja = long liquidado, azul = short liquidado; tamanho = valor; passe o mouse para ver), guardadas neste navegador desde que a página abre (${bol ? bol.length : 0} até agora; a fonte entrega só os últimos ~200 registros, então numa rajada cobre poucos segundos). Contorno cheio = preço e lado exatos; tracejado = estimados pelo movimento do minuto. Barras à direita = liquidez em risco por preço (Coinversa, a cada 60 s); o contorno tracejado é a foto anterior: barra menor que o contorno = liquidez consumida. ` + (mapas[k] ? '' : 'Sem bolhas e sem barras agora: falta a senha do radar no topo da página (o mapa e as liquidações vêm da Coinversa). ') : '') + `Níveis: ${mercado === 'acoes' ? 'sessão de NY (9:30–16:00)' : 'dia em UTC'}. VWAP e abertura contam desde o início da sessão. ` +

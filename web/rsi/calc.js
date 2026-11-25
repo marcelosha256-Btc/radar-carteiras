@@ -98,3 +98,18 @@ export function fraseRsi(closes, nome = 'do dia', janela = 10, corte = 30) {
   }
   return '';
 }
+
+/** Conta inversa do RSI de Wilder: a que fechamento da vela atual (a última de `closes`, ainda em formação)
+ *  o RSI ficaria exatamente em `alvo`. Usa as médias até a vela anterior. null se faltar histórico. */
+export function precoParaRsi(closes, alvo, n = 14) {
+  const m = closes ? closes.length - 1 : 0; if (m < n + 1 || !(alvo > 0 && alvo < 100)) return null;
+  let g = 0, p = 0;
+  for (let i = 1; i <= n; i++) { const d = closes[i] - closes[i - 1]; if (d >= 0) g += d; else p -= d; }
+  g /= n; p /= n;
+  for (let i = n + 1; i < m; i++) { const d = closes[i] - closes[i - 1]; g = (g * (n - 1) + Math.max(d, 0)) / n; p = (p * (n - 1) + Math.max(-d, 0)) / n; }
+  const ant = closes[m - 1], k = alvo / (100 - alvo);
+  const sobe = k * p * (n - 1) - g * (n - 1);              // alta necessária (se a vela fechar acima da anterior)
+  if (sobe >= 0) return ant + sobe;
+  const desce = g * (n - 1) / k - p * (n - 1);             // queda necessária
+  return desce >= 0 ? ant - desce : ant;
+}

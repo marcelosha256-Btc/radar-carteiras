@@ -76,3 +76,14 @@ test('medidor: ângulo, faixa e HTML', () => {
   assert.match(h, /Medo extremo/); assert.match(h, /1 mês atrás/); assert.match(h, />50</); assert.match(h, /<svg/);
   assert.match(medidor(medidorVix({ v: 26.4, ont: 26.6, sem: 25.5, mes: null, ano: null })), /Estresse/);
 });
+
+test('precoParaRsi: a conta inversa devolve o preço que leva o RSI ao alvo', async () => {
+  const { precoParaRsi, rsiSerie } = await import('../web/rsi/calc.js');
+  const closes = Array.from({ length: 60 }, (_, i) => 100 + Math.sin(i / 3) * 4 + i * 0.05);
+  for (const alvo of [30, 50, 70]) {
+    const p = precoParaRsi(closes, alvo), c2 = closes.slice(0, -1).concat(p);
+    assert.ok(Math.abs(rsiSerie(c2).pop() - alvo) < 1e-6, `alvo ${alvo}: ${rsiSerie(c2).pop()}`);
+  }
+  assert.ok(precoParaRsi(closes, 70) > precoParaRsi(closes, 30));
+  assert.equal(precoParaRsi(closes.slice(0, 10), 70), null);
+});
