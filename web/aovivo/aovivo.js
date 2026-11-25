@@ -275,7 +275,7 @@ const GRAF_HTML = `<div class="lv-bar"><b class="lv-an"></b><b class="lv-px num"
     <div class="box lv-graf"><div class="box-head" style="flex-wrap:wrap;gap:8px"><div class="seg lv-gtf"><button data-g="15m">15 min</button><button data-g="1h">1 hora</button><button data-g="4h">4 horas</button><button data-g="1d">Diário</button></div>
       <div class="lv-gcam" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div><span style="flex:1"></span><button class="lv-grsi" type="button" style="font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer">ver no RSI Mestre ↗</button></div>
       <p class="small lv-gleit lm-nao"></p><div class="lv-gplano small"></div><div class="lv-gsvg"></div><div class="lv-grsil"></div><p class="small muted lv-gresumo" style="margin:6px 0 2px"></p><details class="small muted lv-gmais"><summary style="cursor:pointer;color:var(--fg)">Como ler este gráfico</summary><p class="lv-gnota" style="margin:6px 0 0"></p></details></div>`;
-const CAMADAS = [['sr', 'Suporte/resistência'], ['niv', 'Níveis'], ['est', 'Estrutura'], ['liq', 'Liquidez'], ['bol', 'Liquidações'], ['rsi', 'RSI'], ['plano', 'Meu plano'], ['trades', 'Meus trades'], ['rsima', 'Média do RSI']];
+const CAMADAS = [['sr', 'Suporte/resistência'], ['niv', 'Níveis'], ['est', 'Estrutura'], ['liq', 'Liquidez'], ['bol', 'Liquidações'], ['rsi', 'RSI'], ['rsip', 'RSI no preço'], ['plano', 'Meu plano'], ['trades', 'Meus trades'], ['rsima', 'Média do RSI']];
 
 /* ---------- uma instância por mercado (Cripto / Ações) e por vista (Liquidez ao vivo / Gráfico) ---------- */
 function criarApp(mercado, painel, raiz, vista = 'liq') {
@@ -658,7 +658,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const rsNiv = [70, 50, 30].map(v => ({ v, p: precoParaRsi(fech, v) }));
     const rs = rsTodo.slice(-c.length), rd = G.c1d && G.c1d.length > 20 ? rsiSerie(G.c1d.map(x => x.c)).pop() : null;
     const { svg, fora } = graficoSvg({ candles: c, niv: CAM.niv ? niv : null, est: CAM.est ? est : null, preco: cur, ms, perfil: CAM.liq ? perf : null, bolhas: CAM.bol ? bol : null,
-      rsi: CAM.rsi ? rs : null, rsiMedia: CAM.rsi ? rsMed : null, rsiNiveis: rsNiv, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl && !pl.bloq ? pl : null,   // plano bloqueado não é desenhado
+      rsi: CAM.rsi ? rs : null, rsiMedia: CAM.rsi ? rsMed : null, rsiNiveis: rsNiv, rsiPreco: CAM.rsip ? rsNiv.filter(x => x.p) : null, regimeDia: CAM.rsi && rd != null ? { ...regimeRsi(rd), v: rd } : null, plano: pl && !pl.bloq ? pl : null,   // plano bloqueado não é desenhado
       trades: tds, sr });
     const gb = $('.lv-gsvg'), noFim = gb.scrollLeft + gb.clientWidth >= gb.scrollWidth - 4; gb.innerHTML = svg; if (noFim) gb.scrollLeft = gb.scrollWidth;   // fica nas velas mais recentes
     $('.lv-gleit').textContent = leituraGrafico(est, niv, cur, fpx);

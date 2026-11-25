@@ -17,7 +17,7 @@ const diaHora = t => new Date(t).toLocaleString('pt-BR', { day: '2-digit', month
 /** opts: { candles, niv (niveisDia), est (estrutura), preco, ms, W, H, perfil, bolhas } → { svg, fora }
  *  perfil = { bw, L: [[preço, US$, US$ da foto anterior]], S: [...], hora } (liquidez em risco por faixa de preço, Coinversa)
  *  bolhas = [{ t, px, usd, side }] (liquidações reais) */
-export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null, rsi = null, regimeDia = null, plano = null, trades = null, rsiMedia = null, rsiNiveis = null, sr = null }) {
+export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, perfil = null, bolhas = null, rsi = null, regimeDia = null, plano = null, trades = null, rsiMedia = null, rsiNiveis = null, rsiPreco = null, sr = null }) {
   const c = candles; if (!c || c.length < 5) return { svg: '', fora: [] };
   const L = 8, R = 74, T = 14, B = 26, x1 = W - R, y1 = H - B;
   let lo = Math.min(...c.map(x => x.l)), hi = Math.max(...c.map(x => x.h)); const r0 = hi - lo || 1;
@@ -27,6 +27,7 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
   dentro.forEach(n => { lo = Math.min(lo, n.preco); hi = Math.max(hi, n.preco); });
   if (sr) for (const z of [sr.sup, sr.res]) if (z && z.lo >= lo - 0.6 * r0 && z.hi <= hi + 0.6 * r0) { lo = Math.min(lo, z.lo); hi = Math.max(hi, z.hi); }   // suporte e resistência à vista
   if (plano) for (const p of [plano.stop, plano.alvo]) if (p >= lo - 0.5 * r0 && p <= hi + 0.5 * r0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }   // o plano sempre à vista
+  if (rsiPreco) for (const { p } of rsiPreco) if (p >= lo - 0.15 * r0 && p <= hi + 0.15 * r0) { lo = Math.min(lo, p); hi = Math.max(hi, p); }   // RSI 70/30 perto da tela: alarga um pouco para caber
   const pad = (hi - lo) * 0.05; lo -= pad; hi += pad;
   const Y = p => T + (hi - p) / (hi - lo) * (y1 - T), xc = perfil && perfil.bw ? x1 - 128 : x1, step = (xc - L) / c.length, X = i => L + (i + 0.5) * step, bw = Math.max(1.5, Math.min(12, step * 0.64));
   const HR = rsi ? 124 : 0, HB = bolhas ? 74 : 0;   // HB = faixa das liquidações por vela
@@ -72,6 +73,14 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
     const txt = `${nome} ${z.lo === z.hi ? fmtPreco(z.lo) : fmtPreco(z.lo) + '–' + fmtPreco(z.hi)} (${dist}) · ${z.itens.length} ${z.itens.length > 1 ? 'fontes' : 'fonte'}`;
     s += `<rect x="${L}" y="${y0.toFixed(1)}" width="${(xc - L).toFixed(1)}" height="${h.toFixed(1)}" style="fill:${col};opacity:.13"><title>${esc(txt + ': ' + z.itens.map(i => i.nome + ' ' + fmtPreco(i.p)).join(', '))}</title></rect>`;
     srRot.push(`<text x="${(L + (xc - L) * 0.42).toFixed(1)}" y="${(nome === 'Suporte' ? Math.min(y1 - 3, y0 + h + 12) : Math.max(T + 10, y0 - 4)).toFixed(1)}" style="${HALO}fill:${col};font-size:11px;font-weight:800">${esc(txt)}</text>`);
+  }
+  // preço em que o RSI(14) chegaria a 70 / 50 / 30 se a vela atual fechar ali: linhas finas no próprio gráfico de preço
+  const rsiRot = [];
+  if (rsiPreco) for (const { v, p } of rsiPreco) {
+    if (!(p > lo && p < hi)) continue;
+    const y = Y(p), col = v === 70 ? 'var(--down)' : v === 30 ? 'var(--up)' : 'var(--muted)', dica = `Se a vela atual fechar em ${fmtPreco(p)}, o RSI 14 fica em ${v}`;
+    s += `<line x1="${L}" x2="${xc}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" style="stroke:${col};stroke-width:1;stroke-dasharray:1 4;opacity:${v === 50 ? .45 : .75}"><title>${esc(dica)}</title></line>`;
+    rsiRot.push(`<text x="${(xc - 4).toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="end" style="${HALO}fill:${col};font-size:10.5px;font-weight:700;opacity:${v === 50 ? .8 : 1}">RSI ${v} · ${fmtPreco(p)}<title>${esc(dica)}</title></text>`);
   }
   // velas
   c.forEach((v, i) => { const up = v.c >= v.o, col = up ? 'var(--up)' : 'var(--down)', yo = Y(v.o), yc = Y(v.c);
@@ -192,5 +201,5 @@ export function graficoSvg({ candles, niv, est, preco, ms, W = 960, H = 440, per
     s += `<text x="${L + 4}" y="${r0 + 11}" style="${HALO}fill:var(--fg);font-size:11px;font-weight:700">RSI 14${ult != null ? ' · ' + ult.toFixed(1).replace('.', ',') : ''}${pm.length > 1 ? ' <tspan style="fill:#d4a72c">· média 14</tspan>' : ''}</text>`;
     if (regimeDia) s += `<text x="${xe - 4}" y="${r0 + 11}" text-anchor="end" style="${HALO}fill:${regimeDia.lado > 0 ? 'var(--up)' : regimeDia.lado < 0 ? 'var(--down)' : 'var(--muted)'};font-size:11px;font-weight:700">Diário: ${esc(regimeDia.t)}${regimeDia.v != null ? ' (RSI ' + regimeDia.v.toFixed(0) + ')' : ''}</text>`;
   }
-  return { svg: s + rot.join('') + srRot.join('') + liqRot.join('') + '</svg>', fora };
+  return { svg: s + rsiRot.join('') + rot.join('') + srRot.join('') + liqRot.join('') + '</svg>', fora };
 }
