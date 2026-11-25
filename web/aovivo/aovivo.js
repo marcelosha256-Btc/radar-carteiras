@@ -127,6 +127,13 @@ const mapas = {}, liqs = {}, press = {}, erros = {};
 async function buscar(q, k, alvo, transf = x => x) {
   try { alvo[k] = transf(await meuApi(q, k)); delete erros[q + k]; } catch (e) { erros[q + k] = e.message; if (e.message === 'senha') erros.senha = true; }
 }
+/* "quem está apertado" (Coinversa, paga): a nota da Trava precisa dela nas duas telas; uma busca por moeda a cada ~2 min, dividida entre o Gráfico e a Liquidez ao vivo */
+const pressT = {};
+function buscarPress(k) {
+  if (Date.now() - (pressT[k] || 0) < 110e3) return Promise.resolve();
+  pressT[k] = Date.now();
+  return buscar('press', k, press);
+}
 
 /* ---------- análise ---------- */
 function realLiqs(k) {
@@ -157,6 +164,9 @@ function registrarNota(k, modo, lado, S) {   // histórico das notas de fechamen
     localStorage.setItem('radar-notas', JSON.stringify(L.slice(-4000)));
   } catch (e) {}
 }
+// até 20 s depois de abrir a moeda, nota com dados faltando (mapa, pressão, chance ou velas) aparece como "carregando" em vez de um número provisório;
+// passado isso (fonte fora do ar), mostra a nota do que chegou, como antes
+const ESPERA_DADOS = 20e3, vistoEm = {};
 // 2) GATILHO e 3) RISCO, ao vivo sobre o setup guardado
 function avaliar(k, A, modo, lado) {
   const agora = Date.now(), vela = velaDe(agora), key = k + '|' + modo + '|' + lado;
@@ -166,14 +176,16 @@ function avaliar(k, A, modo, lado) {
     S = SETUP[key] = { vela, t: agora, cur: A.cur, completo, r: setupDe(k, A, modo, lado) };
     if (completo) registrarNota(k, modo, lado, S);
   }
+  if (!vistoEm[k]) vistoEm[k] = agora;
+  const carregando = !S.completo && agora - vistoEm[k] < ESPERA_DADOS && !erros['press' + k];
   const r = S.r, isBuy = lado === 'compra', sL = isBuy ? 1 : -1, cur = A.cur, zn = A.zn, prox = proximoFechamento(agora);
-  const blocks = [...r.blocks], faltam = [...r.faltam];
+  const blocks = carregando ? [] : [...r.blocks], faltam = [...r.faltam];
   // risco ao vivo: cascata de liquidações contra o lado
   const l5 = liqSum(realLiqs(k), 300e3), lim = Math.max(500e3, 0.25 * Math.max(zn.ap ? zn.ap.a[1] : 0, zn.ve ? zn.ve.a[1] : 0));
   if (isBuy && l5.long >= lim) blocks.push(`cascata de longs em curso (${fm(l5.long)} em 5 min) — não pegue faca caindo`);
   if (!isBuy && l5.short >= lim) blocks.push(`cascata de shorts em curso (${fm(l5.short)} em 5 min)`);
   let st, gat = null;
-  if (!blocks.length && r.sc >= ROTEIRO.liberado && r.stop && r.alvo) {
+  if (!carregando && !blocks.length && r.sc >= ROTEIRO.liberado && r.stop && r.alvo) {
     const bk = book[k]; let livro = null;
     if (bk && agora - bk.t < 30000) { const near = arr => arr.filter(o => Math.abs(o.px / cur - 1) < 0.005).reduce((t, o) => t + o.usd, 0), b = near(bk.bids), a = near(bk.asks); livro = b + a > 0 ? (b - a) / (b + a) : null; }
     gat = gatilhoDe({ lado, cur, stop: r.stop, alvo: r.alvo, rrMin: ROTEIRO.rrMin, dir: A.tr.dir, livro });
@@ -181,12 +193,13 @@ function avaliar(k, A, modo, lado) {
     else if (gat.estado === 'alvo') blocks.push(`o preço já chegou ao alvo (${fpx(r.alvo)}): não persiga`);
   }
   if (blocks.length) st = ['BLOQUEADO', COR.dn];
+  else if (carregando) st = ['CARREGANDO', COR.mu];
   else if (gat && gat.estado === 'ok') st = ['LIBERADO', COR.up];
   else if (gat) st = ['ARMADO', COR.am];
   else st = r.sc >= ROTEIRO.cuidado ? ['CUIDADO', COR.am] : ['FRACO', COR.mu];
   const gFalta = !gat ? '' : gat.estado === 'fora' ? `preço ${isBuy ? 'recuar até' : 'subir até'} ${fpx(gat.eLim)} ou ${isBuy ? 'abaixo' : 'acima'} (${pc(gat.distPct)}) para o R:R chegar a ${ROTEIRO.rrMin}:1`
     : gat.estado === 'espera' ? `confirmação: último minuto ${isBuy ? 'subindo' : 'caindo'} ou livro com mais ${isBuy ? 'compra' : 'venda'}` : '';
-  return { sc: r.sc, st, blocks, pros: r.pros, cons: r.cons, stop: r.stop, alvo: r.alvo, rr: r.rr, faltam, gat, gFalta, notaT: S.t, notaCur: S.cur, meioVela: S.t - S.vela * 9e5 > 90e3, prox, armado: !!gat && !blocks.length };
+  return { sc: r.sc, st, blocks, pros: r.pros, cons: r.cons, stop: r.stop, alvo: r.alvo, rr: r.rr, faltam, gat, gFalta, notaT: S.t, notaCur: S.cur, meioVela: S.t - S.vela * 9e5 > 90e3, prox, armado: !!gat && !blocks.length, carregando };
 }
 
 /* histórico local para o gráfico (compartilhado entre as abas): liquidações reais vistas e a foto anterior do mapa */
@@ -310,12 +323,16 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const px = $('.lv-px'); px.textContent = cur ? fpx(cur) : '—'; px.style.color = flash[k] && flash[k].until > Date.now() ? flash[k].col : '';
     $('.lv-tr').innerHTML = A ? `<span class="chip" style="color:${A.tr.color}" title="Variação do preço nos últimos 1 a 5 minutos. Não é a tendência do dia nem o lado do plano.">${A.tr.arrow} impulso curto: ${A.tr.label.toLowerCase()}</span>` : '';
     if (A) {
-      const est = ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda'); return (m === 'day' ? 'Day' : 'Swing') + ' ' + [!a.blocks.length ? 'compra livre' : '', !b.blocks.length ? 'venda livre' : ''].filter(Boolean).join(' e ') || 'bloqueado'; }).join(' · ');
-      if (ultTrava[k] != null && ultTrava[k] !== est) avisar('trava|' + est, 'A Trava do roteiro mudou: ' + est + '.', 60e3);
-      ultTrava[k] = est;
+      const est = ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda'); if (a.carregando || b.carregando) return null; return (m === 'day' ? 'Day' : 'Swing') + ' ' + [!a.blocks.length ? 'compra livre' : '', !b.blocks.length ? 'venda livre' : ''].filter(Boolean).join(' e ') || 'bloqueado'; }), pronto = est.every(x => x != null);
+      if (pronto) {
+        const txt = est.join(' · ');
+        if (ultTrava[k] != null && ultTrava[k] !== txt) avisar('trava|' + txt, 'A Trava do roteiro mudou: ' + txt + '.', 60e3);
+        ultTrava[k] = txt;
+      }
     }
     $('.lv-vd').innerHTML = A ? ['day', 'swing'].map(m => { const a = avaliar(k, A, m, 'compra'), b = avaliar(k, A, m, 'venda');
       const okA = !a.blocks.length, okB = !b.blocks.length, r = okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
+      if (r.carregando) return `<span class="chip" style="color:${COR.mu}" title="Esperando o mapa de liquidações, quem está apertado e as velas para dar a nota">${m === 'day' ? 'Day' : 'Swing'}: carregando…</span>`;
       return `<span class="chip" style="color:${r.st[1]}">${m === 'day' ? 'Day' : 'Swing'}: ${r.st[0] === 'BLOQUEADO' ? '■ bloq' : r.st[0].toLowerCase()} ${r.sc} · ${r.l}</span>`; }).join(' ') : '';
     const age = (Date.now() - lastMsg) / 1000, M = mapas[k];
     $('.lv-st').innerHTML = `<span style="color:${lastMsg && age < 15 ? COR.up : COR.dn}">●</span> ${lastMsg && age < 15 ? 'preço ao vivo' : 'sem preço'}${M ? ` · barras de ${ago(M.ts)}` : ''}`;
@@ -452,6 +469,10 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const a = avaliar(SEL, A, 'day', 'compra'), b = avaliar(SEL, A, 'day', 'venda');
     const okA = !a.blocks.length, okB = !b.blocks.length;
     const r = okA && (!okB || a.sc >= b.sc) ? { ...a, l: 'compra' } : okB ? { ...b, l: 'venda' } : (a.sc >= b.sc ? { ...a, l: 'compra' } : { ...b, l: 'venda' });
+    if (a.carregando || b.carregando) {
+      el.innerHTML = `<div class="lv-gatb" style="border-color:${COR.mu};color:${COR.mu}"><b>Carregando a Trava…</b> · day trade · <span class="lv-gatf">esperando o mapa de liquidações, quem está apertado e as velas para dar a nota (até ${ESPERA_DADOS / 1e3} s)</span></div>`;
+      return;
+    }
     const est = r.st[0], acao = est === 'BLOQUEADO' ? 'Não entrar' : est === 'LIBERADO' ? 'Liberado: gatilho confirmado' : est === 'ARMADO' ? 'Armado: esperando o gatilho' : 'Aguardar setup';
     const precisa = Math.max(0, ROTEIRO.liberado - r.sc);
     let lista = [], soma = 0; for (const [v, t] of r.faltam) { if (soma >= precisa) break; lista.push(`${t} (+${v})`); soma += v; }
@@ -485,6 +506,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
   }
   function renderRot(A) {
     const row = (m, l) => { const r = avaliar(SEL, A, m, l), key = m + '-' + l, open = rOpen.has(key);
+      if (r.carregando) return `<div class="lv-rrow" style="border-color:${COR.mu}"><span><b>${m === 'day' ? 'Day trade' : 'Swing'} · ${l}</b></span><b class="num" style="color:${COR.mu}">…</b><b class="small" style="color:${COR.mu}">CARREGANDO</b></div>`;
       const hint = r.blocks.length ? r.blocks[0] : (r.alvo && r.stop ? `stop ${fpx(r.stop)} · alvo ${fpx(r.alvo)} · R:R ${r.rr != null ? f1(r.rr) : '—'}` : 'sem plano pelo mapa');
       return `<div class="lv-rrow" data-r="${key}" style="border-color:${r.st[1]}"><span><b>${m === 'day' ? 'Day trade' : 'Swing'} · ${l}</b></span><b class="num" style="color:${r.st[1]}">${r.sc}</b><b class="small" style="color:${r.st[1]}">${r.st[0] === 'BLOQUEADO' ? '■ ' : ''}${r.st[0]}</b>
         <span class="small" style="grid-column:1/-1;color:${r.blocks.length ? COR.dn : COR.mu}">${r.blocks.length ? '⛔ ' : ''}${hint}</span>
@@ -536,6 +558,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
   function planoDe() {
     const A = analyze(); if (!A) return null;
     const op = ['compra', 'venda'].map(l => ({ l, r: avaliar(SEL, A, 'day', l) })).filter(o => o.r.stop && o.r.alvo);
+    if (op.some(o => o.r.carregando)) return null;
     if (!op.length) return null;
     op.sort((a, b) => (a.r.blocks.length - b.r.blocks.length) || (b.r.sc - a.r.sc));
     // as suas Regras do dia (janela de entrada, pregão de NY): o mesmo checklist da calculadora, sem a parte de tamanho
@@ -653,7 +676,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const k = SEL;
     await Promise.all([buscar('mapa', k, mapas), carregarMinuto(k), carregarChance(k).catch(() => {})]);
     render();
-    buscar('liqs', k, liqs).then(render); if (vista !== 'graf') buscar('press', k, press).then(render);
+    buscar('liqs', k, liqs).then(render); buscarPress(k).then(render);
     if (vista === 'graf') carregarGrafico(k).then(render);   // as velas do gráfico só na aba Gráfico
     if (vista === 'graf') carregarDiario().then(render);
     carregarCandles(k, ['15m', '4h']).then(() => { render(); carregarCandles(k, ['1d', '1w']).then(render); });
@@ -675,7 +698,7 @@ function criarApp(mercado, painel, raiz, vista = 'liq') {
     const k = SEL;
     if (n % 60 === 0) buscar('mapa', k, mapas).then(render);
     if (n % 30 === 0) buscar('liqs', k, liqs);
-    if (n % 120 === 0 && vista !== 'graf') buscar('press', k, press);
+    if (n % 120 === 0) buscarPress(k);
     if (n % 180 === 0) carregarCandles(k, ['15m']);
     if (n % 60 === 0 && vista === 'graf') carregarGrafico(k);
     if (vista === 'graf' && n % 60 === 0) carregarDiario();
