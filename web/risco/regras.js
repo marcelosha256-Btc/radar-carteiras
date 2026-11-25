@@ -130,14 +130,15 @@ export function checklist({ calc, trava, eventos = [], heatAberto = 0, regras = 
     const compra = calc.side > 0, rm = regras.rrMin;
     const st = metas.map(x => x[2].stop).filter(v => v > 0), stop = compra ? Math.min(calc.s, ...st) : Math.max(calc.s, ...st);
     const ent = metas.filter(x => x[2].ref > 0).map(x => (x[2].ref + rm * stop) / (1 + rm)), e2 = compra ? Math.min(...ent) : Math.max(...ent);
-    const ok = ent.length > 0 && (compra ? e2 > stop : e2 < stop);
+    const ok = ent.length > 0 && (compra ? e2 > stop : e2 < stop) && (!(calc.atr > 0) || Math.abs(e2 - stop) / e2 >= 0.5 * calc.atr);
     return ok
       ? `Com o stop em ${fpx(calc.s)} nenhuma entrada passa. Plano de espera: ${compra ? 'comprar num recuo' : 'vender num repique'} até ${fpx(e2)} ou ${compra ? 'abaixo' : 'acima'}, com stop em ${fpx(stop)} (além da zona de liquidação); refaça o plano lá.`
       : `Nenhum preço de entrada passa nas regras acima com o stop em ${fpx(calc.s)}: espere outro setup.`;
   };
   if (metas.length && calc.s > 0) {
     const compra = calc.side > 0, eMin = compra ? Math.min(...metas.map(x => x[2].eMin)) : Math.max(...metas.map(x => x[2].eMin));
-    const valido = compra ? eMin > calc.s : eMin < calc.s;
+    const longeDoStop = (e, st) => !(calc.atr > 0) || Math.abs(e - st) / e >= 0.5 * calc.atr;   // stop colado (< 0,5 ATR) fica no ruído: não serve
+    const valido = (compra ? eMin > calc.s : eMin < calc.s) && longeDoStop(eMin, calc.s);
     if (metas.length > 1 || !valido) {
       const ultimo = it.indexOf(metas[metas.length - 1]);
       metas.forEach(x => { x[1] = x[2].base; });

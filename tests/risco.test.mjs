@@ -177,3 +177,16 @@ test('checklist: uma entrada mínima só; sem entrada válida quando passa do st
   assert.ok(n.some(([k, t]) => k === 'aviso' && t.startsWith('Alvo 2') && t.includes('passa da mínima')));
   assert.ok(n.some(([k, t]) => k === 'aviso' && t.includes('Stop largo') && t.includes('swing')));
 });
+
+test('checklist: entrada válida colada no stop (< 0,5 ATR) vira plano de espera com o stop além da zona', () => {
+  const agora = Date.UTC(2026, 10, 24, 14, 0);
+  // ETH vendido: entrada 1.686, stop 1.712, mínima 1.663,2; mapa: zona 1.571–1.587, stop do mapa 1.772; ATR 1H 1,1%
+  const calc = { rr: 2.24, risco: 5, notional: 303, custoStop: 0.001, cap: 1000, carrega: 0, e: 1686, s: 1712, side: -1, oposto: 1663.2, alvos: [{ p: 1643 }, { p: 1600 }], atr: 0.011 };
+  const mapa = [['bloqueia', 'mapa', { eMin: 1709.5, ref: 1587, stop: 1772, base: 'Pelo mapa de liquidações, R:R 1,2, abaixo do seu mínimo.' }]];
+  const bl = checklist({ calc, agora, extras: mapa }).filter(([n]) => n === 'bloqueia');
+  assert.ok(!bl.some(([, t]) => t.startsWith('Espere um repique')));
+  assert.ok(bl.some(([, t]) => t.includes('Plano de espera') && t.includes('1.772')));
+  // sem ATR conhecido, mantém o comportamento anterior (entrada com o mesmo stop)
+  const sem = checklist({ calc: { ...calc, atr: null }, agora, extras: mapa }).filter(([n]) => n === 'bloqueia');
+  assert.ok(sem.some(([, t]) => t.startsWith('Espere um repique')));
+});
