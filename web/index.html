@@ -43,7 +43,8 @@
 [hidden] { display: none !important; }
 body { margin: 0; }
 body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.5; }
-.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 16px; }
+/* 26/11/2026: mais larga para telas de PC (era 1180px, sobrava muito vazio nas laterais) */
+.wrap { max-width: 1600px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 48px; display: grid; gap: 16px; }
 .num, td.n, .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
 h1 { font-size: 26px; font-weight: 800; }
