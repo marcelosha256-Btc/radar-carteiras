@@ -53,7 +53,8 @@ async function buscar() {
       // última execução que abriu/aumentou esta posição (não uma redução): "quando foi a entrada"
       const entEm = fills.find(f => f.coin === p.coin && f.dir === (compra ? 'Open Long' : 'Open Short'));
       pos.push({ coin: p.coin, lado: compra ? 'compra' : 'venda', valor: +p.positionValue, pnl: +p.unrealizedPnl, roe: +p.returnOnEquity,
-        entrada: +p.entryPx, entradaEm: entEm ? entEm.time : null, stops, alvos, mark, liq, dist: liq ? Math.abs(mark - liq) / mark : null });
+        entrada: +p.entryPx, entradaEm: entEm ? entEm.time : null, stops, alvos, mark, liq, dist: liq ? Math.abs(mark - liq) / mark : null,
+        alav: p.leverage ? +p.leverage.value : null, alavCruzada: p.leverage && p.leverage.type === 'cross', alavMax: p.maxLeverage ? +p.maxLeverage : null });
     }
     const perp = (+a.marginSummary.accountValue) + (b ? +b.marginSummary.accountValue : 0);
     const margem = (+a.marginSummary.totalMarginUsed) + (b ? +b.marginSummary.totalMarginUsed : 0);
@@ -87,7 +88,7 @@ function desenhar() {
       return `<tr><td><b>${esc(p.coin.replace('xyz:', ''))}</b> <span class="${p.lado === 'compra' ? 'pos' : 'neg'}">${p.lado}</span></td>
         <td>${px(p.entrada)}${p.entradaEm ? `<br><span class="muted small">${quando(p.entradaEm)}</span>` : '<br><span class="muted small" title="Fora das execuções recentes lidas, ou a posição foi aberta aos poucos">sem data recente</span>'}</td>
         <td>stop ${fecha(p.stops, p.lado === 'compra' ? 'down' : 'up')}${p.alvos.length ? `<br><span class="small">alvo ${fecha(p.alvos, p.lado === 'compra' ? 'up' : 'down')}</span>` : ''}</td>
-        <td>US$ ${num(p.valor)}</td><td class="${p.pnl >= 0 ? 'pos' : 'neg'}">${sinal(p.pnl)} <span class="muted small">(${sinal(p.roe * 100, 1)}%)</span></td>
+        <td>US$ ${num(p.valor)}${p.alav != null ? `<br><span class="muted small" title="${p.alavCruzada ? 'Margem cruzada' : 'Margem isolada'}${p.alavMax != null && p.alavMax !== p.alav ? ' · máx. permitida ' + p.alavMax + 'x neste ativo' : ''}">${p.alav}x ${p.alavCruzada ? 'cruzada' : 'isolada'}</span>` : ''}</td><td class="${p.pnl >= 0 ? 'pos' : 'neg'}">${sinal(p.pnl)} <span class="muted small">(${sinal(p.roe * 100, 1)}%)</span></td>
         <td>${p.liq ? `<span ${perigo ? 'class="neg"' : atencao ? 'style="color:var(--warn)"' : ''}>${p.dist > 1 ? 'longe' : num(p.dist * 100, 1) + '%'}</span> <span class="muted small">${px(p.liq)}</span>` : '<span class="muted small">sem risco de liquidação</span>'}</td></tr>`;
     }).join('');
     el.innerHTML = `<div class="box"><div class="box-head"><h2>Minhas posições</h2>
